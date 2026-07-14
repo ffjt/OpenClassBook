@@ -1,0 +1,26 @@
+import type { ImageWrap } from "@/types/article";
+
+export interface MockArticle {
+  number: string;
+  title: string;
+  body: string;
+  imageUrl: string;
+  imageWrap: ImageWrap;
+  imagePosition: {
+    x: number;
+    y: number;
+  };
+}
+
+export const defaultArticle: MockArticle = {
+  number: "001",
+  title: "\u6211\u7684\u9752\u6625",
+  body: [
+    "\u9752\u6625\u50cf\u662f\u4e00\u672c\u6b63\u5728\u4e66\u5199\u7684\u4e66\u3002\u6bcf\u4e00\u4e2a\u6e05\u6668\u3001\u6bcf\u4e00\u5802\u8bfe\uff0c\u90fd\u5728\u7eb8\u4e0a\u7559\u4e0b\u4e86\u5c5e\u4e8e\u6211\u4eec\u7684\u5370\u8bb0\u3002",
+    "\u6211\u8bb0\u5f97\u64cd\u573a\u4e0a\u7684\u98ce\uff0c\u4e5f\u8bb0\u5f97\u6559\u5ba4\u91cc\u7684\u7b11\u58f0\u3002\u90a3\u4e9b\u770b\u4f3c\u5e73\u5e38\u7684\u65e5\u5b50\uff0c\u6b63\u5728\u65f6\u95f4\u91cc\u6084\u6084\u53d1\u5149\u3002",
+    "\u672a\u6765\u7684\u6211\u4eec\u4f1a\u8d70\u5411\u4e0d\u540c\u7684\u5730\u65b9\uff0c\u4f46\u6b64\u523b\u5199\u4e0b\u7684\u6545\u4e8b\uff0c\u4f1a\u66ff\u6211\u4eec\u6536\u85cf\u8fd9\u6bb5\u660e\u4eae\u800c\u771f\u5b9e\u7684\u9752\u6625\u3002",
+  ].join("\n\n"),
+  imageUrl: "/openclassbook-hero.png",
+  imageWrap: "square",
+  imagePosition: { x: 50, y: 72 },
+};

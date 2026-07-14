@@ -1,0 +1,36 @@
+import type { Template } from "@/types/template";
+
+export const defaultTemplate: Template = {
+  titleFont: {
+    family: "serif",
+    fullName: "System Serif",
+    postscriptName: "system-serif",
+    style: "Regular",
+  },
+  titleSize: 24,
+  titleBold: true,
+  titleAlign: "center",
+  showNumber: true,
+  numberPosition: "above",
+  bodyFont: {
+    family: "serif",
+    fullName: "System Serif",
+    postscriptName: "system-serif",
+    style: "Regular",
+  },
+  bodySize: 14,
+  lineHeight: 1.5,
+  firstLineIndent: 2,
+  justify: true,
+  allowImages: true,
+  imageAlign: "center",
+  imageMaxWidth: 72,
+  pageSize: "a4",
+  pageMargin: "normal",
+  pageNumberPosition: "center",
+  showSubtitle: true,
+  subtitleAlign: "center",
+  titleSpacing: 24,
+  customPageWidth: 210,
+  customPageHeight: 297,
+};
