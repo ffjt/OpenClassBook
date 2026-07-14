@@ -73,10 +73,10 @@ export function ArticleEditorForm({
   const copy = editorCopy[language];
 
   return (
-    <section className="overflow-hidden rounded-xl border border-white/[0.08] bg-[#111317] shadow-2xl shadow-black/20">
-      <header className="border-b border-white/[0.07] px-5 py-5 sm:px-6">
-        <h2 className="text-sm font-semibold text-zinc-100">{copy.title}</h2>
-        <p className="mt-1.5 text-xs leading-5 text-zinc-500">
+    <section className="overflow-hidden rounded-xl border border-border bg-card shadow-xl">
+      <header className="border-b border-border px-5 py-5 sm:px-6">
+        <h2 className="text-sm font-semibold text-foreground">{copy.title}</h2>
+        <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
           {copy.description}
         </p>
       </header>
@@ -86,18 +86,18 @@ export function ArticleEditorForm({
           <fieldset className="space-y-2.5">
             <div className="flex items-center justify-between gap-3">
               <Label
-                className="flex items-center gap-2 text-xs font-medium text-zinc-300"
+                className="flex items-center gap-2 text-xs font-medium text-foreground"
                 htmlFor="article-number"
               >
-                <Hash className="size-3.5 text-zinc-500" />
+                <Hash className="size-3.5 text-muted-foreground" />
                 {copy.number}
               </Label>
-              <span className="text-[10px] text-zinc-600">
+              <span className="text-[10px] text-muted-foreground">
                 {copy.numberHint}
               </span>
             </div>
             <Input
-              className="h-10 rounded-lg border-white/[0.08] bg-white/[0.035] font-mono text-sm tracking-[0.14em] text-zinc-500 shadow-none"
+              className="h-10 rounded-lg border-input bg-background font-mono text-sm tracking-[0.14em] text-muted-foreground shadow-none"
               id="article-number"
               readOnly
               value={article.number}
@@ -107,14 +107,14 @@ export function ArticleEditorForm({
 
         <fieldset className="space-y-2.5">
           <Label
-            className="flex items-center gap-2 text-xs font-medium text-zinc-300"
+            className="flex items-center gap-2 text-xs font-medium text-foreground"
             htmlFor="article-title"
           >
-            <Type className="size-3.5 text-zinc-500" />
+            <Type className="size-3.5 text-muted-foreground" />
             {copy.articleTitle}
           </Label>
           <Input
-            className="h-10 rounded-lg border-white/[0.08] bg-white/[0.035] text-sm text-zinc-100 shadow-none placeholder:text-zinc-700"
+            className="h-10 rounded-lg border-input bg-background text-sm text-foreground shadow-none placeholder:text-muted-foreground"
             id="article-title"
             onChange={(event) => onTitleChange(event.target.value)}
             placeholder={copy.articleTitlePlaceholder}
@@ -124,14 +124,14 @@ export function ArticleEditorForm({
 
         <fieldset className="space-y-2.5">
           <Label
-            className="flex items-center gap-2 text-xs font-medium text-zinc-300"
+            className="flex items-center gap-2 text-xs font-medium text-foreground"
             htmlFor="article-body"
           >
-            <Type className="size-3.5 text-zinc-500" />
+            <Type className="size-3.5 text-muted-foreground" />
             {copy.body}
           </Label>
           <Textarea
-            className="min-h-[300px] rounded-lg border-white/[0.08] bg-white/[0.035] text-sm leading-6 text-zinc-200 shadow-none placeholder:text-zinc-700 xl:min-h-[360px]"
+            className="min-h-[300px] rounded-lg border-input bg-background text-sm leading-6 text-foreground shadow-none placeholder:text-muted-foreground xl:min-h-[360px]"
             id="article-body"
             onChange={(event) => onBodyChange(event.target.value)}
             placeholder={copy.bodyPlaceholder}
@@ -141,16 +141,16 @@ export function ArticleEditorForm({
 
         {template.allowImages && (
           <fieldset className="space-y-2.5">
-            <Label className="flex items-center gap-2 text-xs font-medium text-zinc-300">
-              <ImagePlus className="size-3.5 text-zinc-500" />
+            <Label className="flex items-center gap-2 text-xs font-medium text-foreground">
+              <ImagePlus className="size-3.5 text-muted-foreground" />
               {copy.image}
             </Label>
-            <div className="grid grid-cols-[minmax(0,1fr)_minmax(160px,0.9fr)] items-center gap-4 rounded-lg border border-white/[0.07] bg-white/[0.025] p-3">
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(160px,0.9fr)] items-center gap-4 rounded-lg border border-border bg-muted/30 p-3">
               <Label
-                className="flex items-center gap-2 text-xs text-zinc-400"
+                className="flex items-center gap-2 text-xs text-muted-foreground"
                 htmlFor="author-image-wrap"
               >
-                <WrapText className="size-3.5 text-zinc-500" />
+                <WrapText className="size-3.5 text-muted-foreground" />
                 {copy.imageWrap}
               </Label>
               <Select
@@ -170,19 +170,19 @@ export function ArticleEditorForm({
               </Select>
             </div>
             <button
-              className="group flex w-full flex-col items-center justify-center rounded-lg border border-dashed border-white/[0.12] bg-white/[0.025] px-5 py-7 text-center transition-colors hover:border-blue-500/40 hover:bg-blue-500/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="group flex w-full flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 px-5 py-7 text-center transition-colors hover:border-blue-500/40 hover:bg-blue-500/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               type="button"
             >
               <span className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400 transition-colors group-hover:bg-blue-500/15">
                 <ImagePlus className="size-4" />
               </span>
-              <span className="mt-3 text-xs font-medium text-zinc-300">
+              <span className="mt-3 text-xs font-medium text-foreground">
                 {copy.upload}
               </span>
-              <span className="mt-1 text-[11px] text-zinc-600">
+              <span className="mt-1 text-[11px] text-muted-foreground">
                 {copy.uploadHint}
               </span>
-              <span className="mt-3 text-[10px] text-zinc-700">
+              <span className="mt-3 text-[10px] text-muted-foreground/70">
                 {copy.uploadNote}
               </span>
             </button>

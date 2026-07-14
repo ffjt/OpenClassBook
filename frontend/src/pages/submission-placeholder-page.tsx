@@ -1,6 +1,7 @@
 import { ArrowLeft, FilePenLine } from "lucide-react";
 
 import { LanguageToggle } from "@/components/language-toggle";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/i18n";
 
@@ -48,11 +49,14 @@ export function SubmissionPlaceholderPage({
         >
           OpenClassBook
         </a>
-        <LanguageToggle language={language} onToggle={onToggleLanguage} />
+        <div className="flex items-center gap-2">
+          <LanguageToggle language={language} onToggle={onToggleLanguage} />
+          <ThemeToggle language={language} />
+        </div>
       </header>
 
       <section className="relative z-10 mx-auto flex min-h-[calc(100vh-5rem)] max-w-3xl flex-col items-center justify-center px-6 pb-28 text-center lg:px-10">
-        <span className="flex size-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+        <span className="flex size-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
           <FilePenLine className="size-8" />
         </span>
         <div className="mt-7 flex items-center gap-3 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">

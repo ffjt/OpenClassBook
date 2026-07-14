@@ -15,6 +15,11 @@ import {
 } from "react-router-dom";
 
 import type { Language } from "@/lib/i18n";
+import {
+  bookRepository,
+  type Book,
+  type BookCreateInput,
+} from "@/repositories/bookRepository";
 
 const AuthorEditorPage = lazy(() =>
   import("@/pages/author-editor-page").then((module) => ({
@@ -66,13 +71,11 @@ const LandingPage = lazy(() =>
     default: module.LandingPage,
   })),
 );
-
-interface CreatedBook {
-  owner: string;
-  title: string;
-  inviteCode: string;
-  joinLink: string;
-}
+const MyBooksPage = lazy(() =>
+  import("@/pages/my-books-page").then((module) => ({
+    default: module.MyBooksPage,
+  })),
+);
 
 interface SharedPageProps {
   language: Language;
@@ -81,19 +84,20 @@ interface SharedPageProps {
 }
 
 interface DashboardRouteProps extends SharedPageProps {
-  bookTitle?: string;
   page: "overview" | "authors" | "review" | "template";
 }
 
 function DashboardRoute({
-  bookTitle,
   language,
   onNavigate,
   onToggleLanguage,
   page,
 }: DashboardRouteProps) {
   const { bookId } = useParams();
-  const basePath = bookId ? `/${bookId}/dashboard` : "/dashboard";
+  const routeBookId = bookId && /^\d+$/.test(bookId) ? Number(bookId) : undefined;
+  if (!routeBookId) return <Navigate replace to="/book" />;
+
+  const basePath = `/book/${routeBookId}/dashboard`;
   const sharedProps = {
     basePath,
     language,
@@ -101,26 +105,36 @@ function DashboardRoute({
     onToggleLanguage,
   };
 
-  if (page === "template") return <FormatSettingsPage {...sharedProps} />;
+  if (page === "template") {
+    return <FormatSettingsPage {...sharedProps} bookId={routeBookId} />;
+  }
   if (page === "authors") return <AuthorsPage {...sharedProps} />;
   if (page === "review") return <ReviewPage {...sharedProps} />;
-  return <DashboardOverviewPage {...sharedProps} bookTitle={bookTitle} />;
+  return (
+    <DashboardOverviewPage
+      {...sharedProps}
+      bookId={routeBookId}
+    />
+  );
 }
 
-const createFakeInviteCode = () => {
-  const characters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const suffix = Array.from({ length: 6 }, () =>
-    characters.charAt(Math.floor(Math.random() * characters.length)),
-  ).join("");
+function LegacyDashboardRedirect() {
+  const { bookId } = useParams();
+  const { pathname } = useLocation();
 
-  return `OCB-${suffix}`;
-};
+  if (!bookId || !/^\d+$/.test(bookId)) {
+    return <Navigate replace to="/book" />;
+  }
+
+  const suffix = pathname.split("/dashboard")[1] ?? "";
+  return <Navigate replace to={`/book/${bookId}/dashboard${suffix}`} />;
+}
 
 function App() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const [language, setLanguage] = useState<Language>("en");
-  const [createdBook, setCreatedBook] = useState<CreatedBook | null>(null);
+  const [createdBook, setCreatedBook] = useState<Book | null>(null);
 
   useEffect(() => {
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
@@ -141,15 +155,9 @@ function App() {
   }, []);
 
   const handleBookCreated = useCallback(
-    (owner: string, title: string) => {
-      const inviteCode = createFakeInviteCode();
-
-      setCreatedBook({
-        owner,
-        title,
-        inviteCode,
-        joinLink: `https://openclassbook.local/join/${inviteCode}`,
-      });
+    async (data: BookCreateInput) => {
+      const book = await bookRepository.create(data);
+      setCreatedBook(book);
       navigateTo("/book/created");
     },
     [navigateTo],
@@ -173,8 +181,9 @@ function App() {
     >
       <Routes>
         <Route path="/" element={<LandingPage {...sharedProps} />} />
+        <Route path="/book" element={<MyBooksPage {...sharedProps} />} />
         <Route
-          path="/book/new"
+          path="/book/create"
           element={
             <CreateBookPage
               {...sharedProps}
@@ -188,17 +197,18 @@ function App() {
             createdBook ? (
               <BookCreatedPage {...sharedProps} book={createdBook} />
             ) : (
-              <Navigate replace to="/book/new" />
+              <Navigate replace to="/book/create" />
             )
           }
         />
+        <Route path="/book/new" element={<Navigate replace to="/book/create" />} />
         <Route path="/join" element={<JoinBookPage {...sharedProps} />} />
         <Route
           path="/join/success"
           element={
             <JoinSuccessPage
               {...sharedProps}
-              bookOwner={createdBook?.owner ?? ""}
+              bookOwner={createdBook?.owner_name ?? ""}
             />
           }
         />
@@ -206,42 +216,24 @@ function App() {
           path="/submit/new"
           element={<AuthorEditorPage {...sharedProps} />}
         />
-        {["/dashboard", "/:bookId/dashboard"].map((path) => (
-          <Route
-            key={path}
-            path={path}
-            element={
-              <DashboardRoute
-                {...sharedProps}
-                bookTitle={createdBook?.title}
-                page="overview"
-              />
-            }
-          />
-        ))}
-        {["/dashboard/authors", "/:bookId/dashboard/authors"].map((path) => (
-          <Route
-            key={path}
-            path={path}
-            element={<DashboardRoute {...sharedProps} page="authors" />}
-          />
-        ))}
-        {["/dashboard/review", "/:bookId/dashboard/review"].map((path) => (
-          <Route
-            key={path}
-            path={path}
-            element={<DashboardRoute {...sharedProps} page="review" />}
-          />
-        ))}
-        {["/dashboard/template", "/:bookId/dashboard/template"].map(
-          (path) => (
-            <Route
-              key={path}
-              path={path}
-              element={<DashboardRoute {...sharedProps} page="template" />}
-            />
-          ),
-        )}
+        <Route
+          path="/book/:bookId/dashboard"
+          element={<DashboardRoute {...sharedProps} page="overview" />}
+        />
+        <Route
+          path="/book/:bookId/dashboard/authors"
+          element={<DashboardRoute {...sharedProps} page="authors" />}
+        />
+        <Route
+          path="/book/:bookId/dashboard/review"
+          element={<DashboardRoute {...sharedProps} page="review" />}
+        />
+        <Route
+          path="/book/:bookId/dashboard/template"
+          element={<DashboardRoute {...sharedProps} page="template" />}
+        />
+        <Route path="/dashboard/*" element={<Navigate replace to="/book" />} />
+        <Route path="/:bookId/dashboard/*" element={<LegacyDashboardRedirect />} />
         <Route path="*" element={<LandingPage {...sharedProps} />} />
       </Routes>
     </Suspense>

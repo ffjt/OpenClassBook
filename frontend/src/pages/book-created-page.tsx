@@ -9,14 +9,13 @@ import {
 } from "lucide-react";
 
 import { LanguageToggle } from "@/components/language-toggle";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/i18n";
+import type { Book } from "@/repositories/bookRepository";
 
 interface BookCreatedPageProps {
-  book: {
-    owner: string;
-    title: string;
-  };
+  book: Book;
   language: Language;
   onNavigate: (path: string) => void;
   onToggleLanguage: () => void;
@@ -31,7 +30,7 @@ const pageCopy = {
     ownerLabel: "Book owner",
     nextStep: "Next step",
     nextStepDescription:
-      "Please enter the dashboard first to finish configuring your book.",
+      "Go to My Books to find this book and open its dashboard.",
     dashboardCapabilities: "In the dashboard, you can:",
     capabilities: [
       "Configure the publishing template",
@@ -41,9 +40,9 @@ const pageCopy = {
       "Review submissions",
       "Export PDF (coming later)",
     ],
-    enterDashboard: "Enter dashboard",
+    viewMyBooks: "View My Books",
     invitationNotice:
-      "The invitation code will be provided after you finish configuring the book.",
+      "Invitation code",
   },
   zh: {
     backHome: "\u8fd4\u56de\u9996\u9875",
@@ -53,7 +52,7 @@ const pageCopy = {
     ownerLabel: "\u8d1f\u8d23\u4eba",
     nextStep: "\u4e0b\u4e00\u6b65",
     nextStepDescription:
-      "\u8bf7\u5148\u8fdb\u5165\u4eea\u8868\u76d8\u5b8c\u6210\u4e66\u7c4d\u914d\u7f6e\u3002",
+      "\u8bf7\u524d\u5f80\u6211\u7684\u4e66\u7c4d\uff0c\u627e\u5230\u8fd9\u672c\u4e66\u5e76\u6253\u5f00\u5b83\u7684 Dashboard\u3002",
     dashboardCapabilities: "\u5728\u4eea\u8868\u76d8\u4e2d\uff0c\u4f60\u53ef\u4ee5\uff1a",
     capabilities: [
       "\u914d\u7f6e\u51fa\u7248\u6a21\u677f",
@@ -63,9 +62,9 @@ const pageCopy = {
       "\u67e5\u770b\u6295\u7a3f",
       "\u5bfc\u51fa PDF\uff08\u540e\u7eed\uff09",
     ],
-    enterDashboard: "\u8fdb\u5165\u4eea\u8868\u76d8",
+    viewMyBooks: "\u67e5\u770b\u6211\u7684\u4e66\u7c4d",
     invitationNotice:
-      "\u9080\u8bf7\u7801\u5c06\u5728\u5b8c\u6210\u4e66\u7c4d\u914d\u7f6e\u540e\u63d0\u4f9b\u3002",
+      "\u9080\u8bf7\u7801",
   },
 };
 
@@ -94,6 +93,7 @@ export function BookCreatedPage({
         </a>
         <div className="flex items-center gap-2 sm:gap-5">
           <LanguageToggle language={language} onToggle={onToggleLanguage} />
+          <ThemeToggle language={language} />
           <a
             aria-label={copy.backHome}
             className="group flex size-9 items-center justify-center rounded-full text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:h-auto sm:w-auto sm:justify-start sm:rounded-none"
@@ -130,13 +130,15 @@ export function BookCreatedPage({
           <UserRound className="size-4 shrink-0 text-blue-600" />
           <span>{copy.ownerLabel}</span>
           <span aria-hidden="true">·</span>
-          <span className="truncate font-medium text-foreground">{book.owner}</span>
+          <span className="truncate font-medium text-foreground">
+            {book.owner_name}
+          </span>
         </div>
 
-        <div className="mt-10 w-full overflow-hidden rounded-[2rem] border border-zinc-200/80 bg-white/90 text-left shadow-[0_32px_90px_-55px_rgba(15,23,42,0.35)] backdrop-blur">
+        <div className="mt-10 w-full overflow-hidden rounded-[2rem] border border-border bg-card/90 text-left shadow-[0_32px_90px_-55px_rgba(15,23,42,0.35)] backdrop-blur dark:shadow-[0_32px_90px_-55px_rgba(0,0,0,0.85)]">
           <div className="p-6 sm:p-9 lg:p-10">
-            <div className="flex items-start gap-4 border-b border-zinc-200 pb-7">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-600">
+            <div className="flex items-start gap-4 border-b border-border pb-7">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
                 <Sparkles className="size-5" />
               </span>
               <div>
@@ -156,10 +158,10 @@ export function BookCreatedPage({
               <ul className="mt-5 grid gap-x-8 gap-y-4 sm:grid-cols-2">
                 {copy.capabilities.map((capability) => (
                   <li
-                    className="flex items-center gap-3 text-sm text-zinc-600 sm:text-base"
+                    className="flex items-center gap-3 text-sm text-muted-foreground sm:text-base"
                     key={capability}
                   >
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
                       <Check className="size-3.5" strokeWidth={2.5} />
                     </span>
                     {capability}
@@ -169,20 +171,20 @@ export function BookCreatedPage({
             </div>
           </div>
 
-          <div className="flex justify-end border-t border-zinc-200 bg-zinc-50/60 p-6 sm:p-8 lg:px-10">
+          <div className="flex justify-end border-t border-border bg-muted/40 p-6 sm:p-8 lg:px-10">
             <Button
               className="group h-12 w-full bg-blue-600 px-8 text-base text-white shadow-[0_14px_30px_-14px_rgba(37,99,235,0.8)] hover:bg-blue-700 sm:w-auto"
-              onClick={() => onNavigate("/book/dashboard")}
+              onClick={() => onNavigate(`/book?created=${book.id}`)}
               type="button"
             >
-              {copy.enterDashboard}
+              {copy.viewMyBooks}
               <ArrowRight className="ml-2 size-5 transition-transform group-hover:translate-x-0.5" />
             </Button>
           </div>
         </div>
 
         <p className="mt-6 text-sm text-muted-foreground">
-          {copy.invitationNotice}
+          {copy.invitationNotice}: {book.invite_code}
         </p>
       </section>
     </main>

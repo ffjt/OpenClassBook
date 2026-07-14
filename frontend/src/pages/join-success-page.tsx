@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import { LanguageToggle } from "@/components/language-toggle";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/i18n";
 
@@ -85,7 +86,10 @@ export function JoinSuccessPage({
         >
           OpenClassBook
         </a>
-        <LanguageToggle language={language} onToggle={onToggleLanguage} />
+        <div className="flex items-center gap-2">
+          <LanguageToggle language={language} onToggle={onToggleLanguage} />
+          <ThemeToggle language={language} />
+        </div>
       </header>
 
       <section className="relative z-10 mx-auto flex max-w-5xl flex-col items-center px-6 pb-20 pt-8 sm:pt-14 lg:px-10">
@@ -103,10 +107,10 @@ export function JoinSuccessPage({
           {copy.description}
         </p>
 
-        <div className="mt-10 w-full overflow-hidden rounded-[2rem] border border-zinc-200/80 bg-white/90 shadow-[0_32px_90px_-55px_rgba(15,23,42,0.35)] backdrop-blur">
+        <div className="mt-10 w-full overflow-hidden rounded-[2rem] border border-border bg-card/90 shadow-[0_32px_90px_-55px_rgba(15,23,42,0.35)] backdrop-blur dark:shadow-[0_32px_90px_-55px_rgba(0,0,0,0.85)]">
           <div className="p-6 sm:p-9 lg:p-10">
-            <div className="flex items-start gap-4 border-b border-zinc-200 pb-7">
-              <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+            <div className="flex items-start gap-4 border-b border-border pb-7">
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
                 <BookOpen className="size-5" />
               </span>
               <div className="min-w-0">
@@ -116,14 +120,14 @@ export function JoinSuccessPage({
                 <p className="mt-4 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                   {copy.bookDescription}
                 </p>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-600 sm:text-base sm:leading-7">
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base sm:leading-7">
                   {fakeBook.description}
                 </p>
               </div>
             </div>
 
             <dl className="mt-7 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-5">
+              <div className="rounded-2xl border border-border bg-muted/40 p-5">
                 <dt className="flex items-center gap-2 text-sm text-muted-foreground">
                   <UserRound className="size-4 text-blue-600" />
                   {copy.bookOwner}
@@ -133,7 +137,7 @@ export function JoinSuccessPage({
                 </dd>
               </div>
 
-              <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-5">
+              <div className="rounded-2xl border border-border bg-muted/40 p-5">
                 <dt className="flex items-center gap-2 text-sm text-muted-foreground">
                   <UsersRound className="size-4 text-blue-600" />
                   {copy.contributors}
@@ -143,12 +147,12 @@ export function JoinSuccessPage({
                 </dd>
               </div>
 
-              <div className="rounded-2xl border border-blue-100 bg-blue-50/55 p-5">
+              <div className="rounded-2xl border border-blue-200 bg-blue-50/55 p-5 dark:border-blue-900 dark:bg-blue-950/25">
                 <dt className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Hash className="size-4 text-blue-600" />
                   {copy.numbering}
                 </dt>
-                <dd className="mt-3 flex items-center gap-2 text-lg font-semibold tracking-[-0.02em] text-blue-700">
+                <dd className="mt-3 flex items-center gap-2 text-lg font-semibold tracking-[-0.02em] text-blue-700 dark:text-blue-300">
                   {fakeBook.articleNumberingEnabled ? (
                     <Check className="size-4" strokeWidth={2.5} />
                   ) : null}
@@ -160,7 +164,7 @@ export function JoinSuccessPage({
             </dl>
           </div>
 
-          <div className="flex flex-col gap-5 border-t border-zinc-200 bg-zinc-50/60 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8 lg:px-10">
+          <div className="flex flex-col gap-5 border-t border-border bg-muted/40 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8 lg:px-10">
             <div>
               <p className="font-semibold tracking-[-0.015em]">{copy.ready}</p>
               <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">

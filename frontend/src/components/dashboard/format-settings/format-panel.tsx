@@ -145,10 +145,10 @@ interface PanelSectionProps {
 
 function PanelSection({ children, icon: Icon, title }: PanelSectionProps) {
   return (
-    <Card className="border-white/[0.07] bg-[#131519] shadow-none">
-      <CardHeader className="flex-row items-center gap-2.5 space-y-0 border-b border-white/[0.06] px-4 py-3.5">
+    <Card className="border-border bg-card shadow-none">
+      <CardHeader className="flex-row items-center gap-2.5 space-y-0 border-b border-border px-4 py-3.5">
         <Icon className="size-4 text-blue-400" />
-        <CardTitle className="text-sm text-zinc-100">{title}</CardTitle>
+        <CardTitle className="text-sm text-foreground">{title}</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4 p-4">{children}</CardContent>
     </Card>
@@ -165,7 +165,7 @@ function ControlRow({ children, htmlFor, label }: ControlRowProps) {
   return (
     <div className="grid min-h-9 grid-cols-[minmax(0,1fr)_minmax(156px,210px)] items-center gap-3 sm:gap-4">
       <Label
-        className="min-w-0 text-xs font-medium leading-5 text-zinc-400"
+        className="min-w-0 text-xs font-medium leading-5 text-muted-foreground"
         htmlFor={htmlFor}
       >
         {label}
@@ -191,7 +191,7 @@ function AlignmentControl({ label, onChange, value }: AlignmentControlProps) {
   return (
     <div
       aria-label={label}
-      className="grid grid-cols-3 rounded-lg border border-white/[0.08] bg-white/[0.025] p-0.5"
+      className="grid grid-cols-3 rounded-lg border border-border bg-muted/30 p-0.5"
       role="group"
     >
       {alignmentOptions.map(({ icon: Icon, value: option }) => (
@@ -199,8 +199,8 @@ function AlignmentControl({ label, onChange, value }: AlignmentControlProps) {
           aria-label={`${label}: ${option}`}
           aria-pressed={value === option}
           className={cn(
-            "flex h-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:text-zinc-200",
-            value === option && "bg-white/[0.09] text-blue-400 shadow-sm",
+            "flex h-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground",
+            value === option && "bg-background text-blue-500 shadow-sm",
           )}
           key={option}
           onClick={() => onChange(option)}
@@ -244,17 +244,17 @@ export function FormatPanel({
               <ScanText className="size-4" />
             </span>
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-zinc-200">
+              <p className="text-xs font-semibold text-foreground">
                 {copy.sections.systemFontsError}
               </p>
-              <p className="mt-1 truncate text-[10px] text-zinc-600">
+              <p className="mt-1 truncate text-[10px] text-muted-foreground">
                 {fontStatusText}
               </p>
             </div>
           </div>
           {fontStatus === "denied" && (
             <button
-              className="flex h-8 shrink-0 items-center rounded-lg border border-white/[0.08] bg-white/[0.035] px-3 text-[11px] font-medium text-zinc-300 transition-colors hover:bg-white/[0.07] hover:text-white"
+              className="flex h-8 shrink-0 items-center rounded-lg border border-border bg-background px-3 text-[11px] font-medium text-foreground transition-colors hover:bg-muted"
               onClick={onLoadSystemFonts}
               type="button"
             >
@@ -278,7 +278,7 @@ export function FormatPanel({
         <ControlRow htmlFor="title-size" label={copy.fields.size}>
           <div className="relative">
             <Input
-              className="h-9 rounded-lg border-white/[0.08] bg-white/[0.035] px-3 pr-10 text-xs text-zinc-200 focus-visible:ring-2 focus-visible:ring-blue-500/20"
+              className="h-9 rounded-lg border-input bg-background px-3 pr-10 text-xs text-foreground focus-visible:ring-2 focus-visible:ring-blue-500/20"
               id="title-size"
               inputMode="numeric"
               max={72}
@@ -287,7 +287,7 @@ export function FormatPanel({
               type="number"
               value={settings.titleSize}
             />
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-600">
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
               px
             </span>
           </div>
@@ -337,7 +337,7 @@ export function FormatPanel({
               }
               value={settings.titleSpacing}
             />
-            <span className="w-9 text-right text-[11px] tabular-nums text-zinc-500">
+            <span className="w-9 text-right text-[11px] tabular-nums text-muted-foreground">
               {settings.titleSpacing}px
             </span>
           </div>
@@ -387,7 +387,7 @@ export function FormatPanel({
         <ControlRow htmlFor="body-size" label={copy.fields.size}>
           <div className="relative">
             <Input
-              className="h-9 rounded-lg border-white/[0.08] bg-white/[0.035] px-3 pr-10 text-xs text-zinc-200 focus-visible:ring-2 focus-visible:ring-blue-500/20"
+              className="h-9 rounded-lg border-input bg-background px-3 pr-10 text-xs text-foreground focus-visible:ring-2 focus-visible:ring-blue-500/20"
               id="body-size"
               inputMode="numeric"
               max={48}
@@ -396,7 +396,7 @@ export function FormatPanel({
               type="number"
               value={settings.bodySize}
             />
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-600">
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
               px
             </span>
           </div>
@@ -435,7 +435,7 @@ export function FormatPanel({
         </ControlRow>
         <ControlRow htmlFor="justify-body" label={copy.fields.justify}>
           <div className="flex items-center justify-end gap-3">
-            <AlignJustify className="size-3.5 text-zinc-600" />
+            <AlignJustify className="size-3.5 text-muted-foreground" />
             <Switch
               aria-label={copy.fields.justify}
               checked={settings.justify}
@@ -479,7 +479,7 @@ export function FormatPanel({
             <ControlRow htmlFor="paper-width" label={copy.fields.paperWidth}>
               <div className="relative">
                 <Input
-                  className="h-9 rounded-lg border-white/[0.08] bg-white/[0.035] px-3 pr-10 text-xs text-zinc-200 focus-visible:ring-2 focus-visible:ring-blue-500/20"
+                  className="h-9 rounded-lg border-input bg-background px-3 pr-10 text-xs text-foreground focus-visible:ring-2 focus-visible:ring-blue-500/20"
                   id="paper-width"
                   max={420}
                   min={80}
@@ -490,7 +490,7 @@ export function FormatPanel({
                   type="number"
                   value={settings.customPageWidth}
                 />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-600">
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
                   mm
                 </span>
               </div>
@@ -498,7 +498,7 @@ export function FormatPanel({
             <ControlRow htmlFor="paper-height" label={copy.fields.paperHeight}>
               <div className="relative">
                 <Input
-                  className="h-9 rounded-lg border-white/[0.08] bg-white/[0.035] px-3 pr-10 text-xs text-zinc-200 focus-visible:ring-2 focus-visible:ring-blue-500/20"
+                  className="h-9 rounded-lg border-input bg-background px-3 pr-10 text-xs text-foreground focus-visible:ring-2 focus-visible:ring-blue-500/20"
                   id="paper-height"
                   max={594}
                   min={80}
@@ -509,7 +509,7 @@ export function FormatPanel({
                   type="number"
                   value={settings.customPageHeight}
                 />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-600">
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
                   mm
                 </span>
               </div>

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle2, KeyRound } from "lucide-react";
 
 import { LanguageToggle } from "@/components/language-toggle";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -106,6 +107,7 @@ export function JoinBookPage({
         </a>
         <div className="flex items-center gap-2 sm:gap-5">
           <LanguageToggle language={language} onToggle={onToggleLanguage} />
+          <ThemeToggle language={language} />
           <a
             aria-label={copy.backHome}
             className="group flex size-9 items-center justify-center rounded-full text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:h-auto sm:w-auto sm:justify-start sm:rounded-none"
@@ -136,7 +138,7 @@ export function JoinBookPage({
         </div>
 
         {joinedBook ? (
-          <div className="rounded-[2rem] border border-zinc-200/80 bg-white/90 p-6 shadow-[0_32px_90px_-55px_rgba(15,23,42,0.35)] backdrop-blur sm:p-9 lg:p-11">
+          <div className="rounded-[2rem] border border-border bg-card/90 p-6 shadow-[0_32px_90px_-55px_rgba(15,23,42,0.35)] backdrop-blur dark:shadow-[0_32px_90px_-55px_rgba(0,0,0,0.85)] sm:p-9 lg:p-11">
             <span className="flex size-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-[0_16px_40px_-18px_rgba(37,99,235,0.65)]">
               <CheckCircle2 className="size-6" />
             </span>
@@ -150,16 +152,16 @@ export function JoinBookPage({
               {copy.joinedIntro}
             </p>
 
-            <div className="mt-8 rounded-2xl border border-blue-100 bg-blue-50/45 p-5 sm:p-6">
+            <div className="mt-8 rounded-2xl border border-blue-200 bg-blue-50/45 p-5 dark:border-blue-900 dark:bg-blue-950/25 sm:p-6">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 {copy.book}
               </p>
               <p className="mt-2 text-xl font-semibold tracking-[-0.025em]">
                 {joinedBook.title}
               </p>
-              <div className="mt-5 flex items-center justify-between gap-4 border-t border-blue-100 pt-5">
+              <div className="mt-5 flex items-center justify-between gap-4 border-t border-blue-200 pt-5 dark:border-blue-900">
                 <span className="text-sm text-muted-foreground">{copy.inviteCode}</span>
-                <span className="font-mono text-sm font-semibold tracking-[0.1em] text-blue-700">
+                <span className="font-mono text-sm font-semibold tracking-[0.1em] text-blue-700 dark:text-blue-300">
                   {joinedBook.inviteCode}
                 </span>
               </div>
@@ -170,12 +172,12 @@ export function JoinBookPage({
           </div>
         ) : (
           <form
-            className="rounded-[2rem] border border-zinc-200/80 bg-white/90 p-6 shadow-[0_32px_90px_-55px_rgba(15,23,42,0.35)] backdrop-blur sm:p-9 lg:p-11"
+            className="rounded-[2rem] border border-border bg-card/90 p-6 shadow-[0_32px_90px_-55px_rgba(15,23,42,0.35)] backdrop-blur dark:shadow-[0_32px_90px_-55px_rgba(0,0,0,0.85)] sm:p-9 lg:p-11"
             noValidate
             onSubmit={handleSubmit}
           >
             <div className="flex items-start gap-4">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
                 <KeyRound className="size-5" />
               </span>
               <div>
@@ -219,7 +221,7 @@ export function JoinBookPage({
               </p>
             </div>
 
-            <div className="mt-8 flex justify-end border-t border-zinc-200 pt-7">
+            <div className="mt-8 flex justify-end border-t border-border pt-7">
               <Button
                 className="group w-full bg-blue-600 text-white hover:bg-blue-700 sm:w-auto"
                 size="lg"

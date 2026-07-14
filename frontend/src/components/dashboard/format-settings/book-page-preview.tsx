@@ -79,19 +79,19 @@ export function BookPagePreview({
   );
 
   return (
-    <section className="overflow-hidden rounded-xl border border-white/[0.08] bg-[#111317] shadow-2xl shadow-black/20">
-      <header className="flex h-12 items-center justify-between border-b border-white/[0.07] px-4">
+    <section className="overflow-hidden rounded-xl border border-border bg-card shadow-xl">
+      <header className="flex h-12 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2.5">
           <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.55)]" />
-          <h2 className="text-xs font-semibold text-zinc-200">{copy.title}</h2>
+          <h2 className="text-xs font-semibold text-foreground">{copy.title}</h2>
         </div>
-        <div className="flex items-center gap-2 text-[10px] font-medium text-zinc-600">
+        <div className="flex items-center gap-2 text-[10px] font-medium text-muted-foreground">
           <Maximize2 className="size-3" />
           {paper.label}
         </div>
       </header>
 
-      <div className="flex items-start justify-center bg-[#090a0d] p-5 sm:p-8 xl:p-10">
+      <div className="flex items-start justify-center bg-muted/40 p-5 sm:p-8 xl:p-10">
         <article
           aria-label={`${paper.label} ${copy.title}`}
           className="relative w-full overflow-hidden bg-[#fffefa] text-slate-800 shadow-[0_20px_70px_rgba(0,0,0,0.48)] ring-1 ring-black/10 transition-all duration-200"

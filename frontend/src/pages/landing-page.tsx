@@ -1,6 +1,7 @@
 import { ArrowUpRight, Github } from "lucide-react";
 
 import { LanguageToggle } from "@/components/language-toggle";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/i18n";
 
@@ -13,6 +14,7 @@ const landingCopy = {
     description:
       "An open-source publishing platform for collecting essays and generating print-ready books.",
     createBook: "Create a Book",
+    viewMyBooks: "View My Books",
     join: "Join",
     viewGithub: "View on GitHub",
     imageAlt:
@@ -23,6 +25,7 @@ const landingCopy = {
     words: ["收集。", "编辑。", "出版。"],
     description: "一个用于收集文章并生成可直接印刷书籍的开源出版平台。",
     createBook: "创建一本书",
+    viewMyBooks: "查看我的书籍",
     join: "\u52a0\u5165",
     viewGithub: "在 GitHub 上查看",
     imageAlt: "文章汇集并出版成书的抽象编辑插画",
@@ -43,8 +46,8 @@ export function LandingPage({
   const copy = landingCopy[language];
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_72%_42%,rgba(37,99,235,0.08),transparent_28%)]" />
+    <main className="relative min-h-screen overflow-hidden bg-background text-foreground transition-colors duration-300">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_72%_42%,rgba(37,99,235,0.08),transparent_28%)] dark:bg-[radial-gradient(circle_at_72%_42%,rgba(37,99,235,0.14),transparent_30%)]" />
 
       <header className="relative z-10 mx-auto flex h-20 max-w-7xl items-center justify-between px-6 lg:px-10">
         <a className="text-[15px] font-semibold tracking-[-0.02em]" href="#top">
@@ -60,6 +63,7 @@ export function LandingPage({
             {copy.join}
           </Button>
           <LanguageToggle language={language} onToggle={onToggleLanguage} />
+          <ThemeToggle language={language} />
           <a
             aria-label="GitHub"
             className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -98,14 +102,22 @@ export function LandingPage({
             {copy.description}
           </p>
 
-          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Button
               className="group bg-blue-600 text-white hover:bg-blue-700"
-              onClick={() => onNavigate("/book/new")}
+              onClick={() => onNavigate("/book/create")}
               size="lg"
             >
               {copy.createBook}
               <ArrowUpRight className="ml-2 size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            </Button>
+            <Button
+              className="bg-background"
+              onClick={() => onNavigate("/book")}
+              size="lg"
+              variant="outline"
+            >
+              {copy.viewMyBooks}
             </Button>
             <a
               className="inline-flex h-12 items-center justify-center whitespace-nowrap rounded-full border border-border bg-background px-7 text-[15px] font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -120,7 +132,7 @@ export function LandingPage({
         </div>
 
         <div className="relative flex min-h-[420px] items-center justify-center lg:min-h-[620px]">
-          <div className="absolute inset-[8%] rounded-[3rem] border border-zinc-200/70 bg-zinc-50/60 shadow-[0_40px_100px_-52px_rgba(15,23,42,0.28)]" />
+          <div className="absolute inset-[8%] rounded-[3rem] border border-zinc-200/70 bg-zinc-50/60 shadow-[0_40px_100px_-52px_rgba(15,23,42,0.28)] dark:border-zinc-800/80 dark:bg-zinc-900/60 dark:shadow-[0_40px_100px_-52px_rgba(0,0,0,0.9)]" />
           <img
             alt={copy.imageAlt}
             className="relative z-10 w-full max-w-[680px] object-contain"

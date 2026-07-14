@@ -10,25 +10,30 @@ import type { Language } from "@/lib/i18n";
 interface DashboardLayoutProps {
   activeSection: DashboardSection;
   basePath: string;
+  bookTitle?: string;
   children: ReactNode;
   language: Language;
   onNavigate: (path: string) => void;
   onToggleLanguage: () => void;
+  ownerName?: string;
 }
 
 export function DashboardLayout({
   activeSection,
   basePath,
+  bookTitle,
   children,
   language,
   onNavigate,
   onToggleLanguage,
+  ownerName,
 }: DashboardLayoutProps) {
   return (
-    <div className="dark min-h-screen bg-[#0e0f12] text-foreground">
+    <div className="min-h-screen bg-background text-foreground">
       <DashboardSidebar
         activeSection={activeSection}
         basePath={basePath}
+        bookTitle={bookTitle}
         language={language}
         onNavigate={onNavigate}
       />
@@ -37,6 +42,7 @@ export function DashboardLayout({
           activeSection={activeSection}
           language={language}
           onToggleLanguage={onToggleLanguage}
+          ownerName={ownerName}
         />
         <main className="mx-auto w-full max-w-[1440px] px-5 py-8 sm:px-7 lg:px-10 lg:py-10">
           {children}

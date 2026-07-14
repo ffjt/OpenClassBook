@@ -4,6 +4,7 @@ import { BookOpen, FilePenLine } from "lucide-react";
 import { ArticleEditorForm } from "@/components/author-editor/article-editor-form";
 import { LiveArticlePreview } from "@/components/author-editor/live-article-preview";
 import { LanguageToggle } from "@/components/language-toggle";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { Language } from "@/lib/i18n";
 import { defaultArticle } from "@/mock/article";
 
@@ -38,8 +39,8 @@ export function AuthorEditorPage({
   const copy = pageCopy[language];
 
   return (
-    <div className="dark min-h-screen bg-[#0e0f12] text-foreground">
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-white/[0.07] bg-[#0e0f12]/90 px-5 backdrop-blur-xl sm:px-7 lg:px-10">
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/90 px-5 backdrop-blur-xl sm:px-7 lg:px-10">
         <a
           className="flex items-center gap-3"
           href="/"
@@ -51,23 +52,26 @@ export function AuthorEditorPage({
           <span className="flex size-9 items-center justify-center rounded-lg border border-blue-500/25 bg-blue-500/10 text-blue-400">
             <BookOpen className="size-[18px]" />
           </span>
-          <span className="text-sm font-semibold tracking-[-0.02em] text-zinc-100">
+          <span className="text-sm font-semibold tracking-[-0.02em] text-foreground">
             OpenClassBook
           </span>
         </a>
-        <LanguageToggle language={language} onToggle={onToggleLanguage} />
+        <div className="flex items-center gap-2">
+          <LanguageToggle language={language} onToggle={onToggleLanguage} />
+          <ThemeToggle language={language} />
+        </div>
       </header>
 
       <main className="mx-auto w-full max-w-[1440px] px-5 py-8 sm:px-7 lg:px-10 lg:py-10">
-        <header className="border-b border-white/[0.07] pb-7">
+        <header className="border-b border-border pb-7">
           <p className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-400">
             <FilePenLine className="size-3.5" />
             {copy.eyebrow}
           </p>
-          <h1 className="text-2xl font-semibold tracking-[-0.035em] text-zinc-50 sm:text-3xl">
+          <h1 className="text-2xl font-semibold tracking-[-0.035em] text-foreground sm:text-3xl">
             {copy.title}
           </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-500">
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
             {copy.description}
           </p>
         </header>

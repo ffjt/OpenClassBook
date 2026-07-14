@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/select";
 import type { Language } from "@/lib/i18n";
 import type { Article, ArticleStatus } from "@/mock/articles";
 import type { MockArticle } from "@/mock/article";
-import { articleRepository } from "@/repositories/articleRepository";
+import { reviewArticleRepository } from "@/repositories/reviewArticleRepository";
 
 const copy = {
   en: {
@@ -72,7 +72,7 @@ const statusStyles: Record<ArticleStatus, string> = {
 };
 
 interface ReviewPageProps {
-  basePath?: string;
+  basePath: string;
   language: Language;
   onNavigate: (path: string) => void;
   onToggleLanguage: () => void;
@@ -97,7 +97,7 @@ function toPreviewArticle(article: Article): MockArticle {
 }
 
 export function ReviewPage({
-  basePath = "/dashboard",
+  basePath,
   language,
   onNavigate,
   onToggleLanguage,
@@ -112,7 +112,7 @@ export function ReviewPage({
 
   useEffect(() => {
     let active = true;
-    articleRepository.getArticles().then((loadedArticles) => {
+    reviewArticleRepository.getArticles().then((loadedArticles) => {
       if (!active) return;
       setArticles(loadedArticles);
       setSelectedArticle(loadedArticles[0] ?? null);
@@ -153,10 +153,10 @@ export function ReviewPage({
     try {
       const updated =
         action === "approve"
-          ? await articleRepository.approveArticle(selectedArticle.id)
+          ? await reviewArticleRepository.approveArticle(selectedArticle.id)
           : action === "reject"
-            ? await articleRepository.rejectArticle(selectedArticle.id)
-            : await articleRepository.updateArticle(selectedArticle.id, {});
+            ? await reviewArticleRepository.rejectArticle(selectedArticle.id)
+            : await reviewArticleRepository.updateArticle(selectedArticle.id, {});
       replaceArticle(
         updated,
         action === "approve" ? pageCopy.approved : action === "reject" ? pageCopy.returned : pageCopy.saved,
@@ -174,25 +174,25 @@ export function ReviewPage({
       onNavigate={onNavigate}
       onToggleLanguage={onToggleLanguage}
     >
-      <header className="border-b border-white/[0.07] pb-7">
+      <header className="border-b border-border pb-7">
         <p className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-400">
           <FileCheck2 className="size-3.5" />
           {pageCopy.eyebrow}
         </p>
-        <h1 className="text-2xl font-semibold tracking-[-0.035em] text-zinc-50 sm:text-3xl">
+        <h1 className="text-2xl font-semibold tracking-[-0.035em] text-foreground sm:text-3xl">
           {pageCopy.title}
         </h1>
-        <p className="mt-2 text-sm text-zinc-500">{pageCopy.description}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{pageCopy.description}</p>
       </header>
 
       <div className="mt-6 grid items-start gap-5 xl:grid-cols-[280px_minmax(340px,0.9fr)_minmax(420px,1.1fr)]">
-        <aside className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#131519] xl:sticky xl:top-24 xl:flex xl:h-[calc(100vh-7.5rem)] xl:flex-col">
-          <div className="border-b border-white/[0.07] p-4">
+        <aside className="overflow-hidden rounded-xl border border-border bg-card xl:sticky xl:top-24 xl:flex xl:h-[calc(100vh-7.5rem)] xl:flex-col">
+          <div className="border-b border-border p-4">
             <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 aria-label={pageCopy.searchLabel}
-                className="h-10 rounded-lg border-white/[0.08] bg-white/[0.035] pl-9 text-sm text-zinc-200 placeholder:text-zinc-600"
+                className="h-10 rounded-lg border-input bg-background pl-9 text-sm text-foreground placeholder:text-muted-foreground"
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={pageCopy.search}
                 value={query}
@@ -210,7 +210,7 @@ export function ReviewPage({
               <option value="rejected">{pageCopy.statuses.rejected}</option>
             </Select>
           </div>
-          <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             <span>{filteredArticles.length} {pageCopy.articles}</span>
             <span>{pageCopy.updated}</span>
           </div>
@@ -218,66 +218,66 @@ export function ReviewPage({
             {filteredArticles.length ? (
               filteredArticles.map((article) => (
                 <button
-                  className={`mb-1 block w-full rounded-lg border px-3 py-3 text-left transition-colors ${selectedArticle?.id === article.id ? "border-blue-500/25 bg-blue-500/[0.08]" : "border-transparent hover:bg-white/[0.035]"}`}
+                  className={`mb-1 block w-full rounded-lg border px-3 py-3 text-left transition-colors ${selectedArticle?.id === article.id ? "border-blue-500/25 bg-blue-500/[0.08]" : "border-transparent hover:bg-muted/50"}`}
                   key={article.id}
                   onClick={() => setSelectedArticle(article)}
                   type="button"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="text-[10px] font-semibold tracking-[0.12em] text-zinc-600">#{article.number}</span>
+                    <span className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground">#{article.number}</span>
                     <Badge className={`rounded-md px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] ${statusStyles[article.status]}`}>
                       {pageCopy.statuses[article.status]}
                     </Badge>
                   </div>
-                  <p className="mt-2 line-clamp-2 text-[13px] font-medium leading-5 text-zinc-200">{article.title}</p>
-                  <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-zinc-600">
+                  <p className="mt-2 line-clamp-2 text-[13px] font-medium leading-5 text-foreground">{article.title}</p>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                     <span className="truncate">{article.author}</span>
                     <span className="shrink-0">{formatDate(article.updatedAt, language)}</span>
                   </div>
                 </button>
               ))
             ) : (
-              <p className="px-4 py-10 text-center text-sm text-zinc-600">{pageCopy.noMatches}</p>
+              <p className="px-4 py-10 text-center text-sm text-muted-foreground">{pageCopy.noMatches}</p>
             )}
           </div>
         </aside>
 
-        <section className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#131519] xl:sticky xl:top-24 xl:flex xl:h-[calc(100vh-7.5rem)] xl:flex-col">
+        <section className="overflow-hidden rounded-xl border border-border bg-card xl:sticky xl:top-24 xl:flex xl:h-[calc(100vh-7.5rem)] xl:flex-col">
           {selectedArticle ? (
             <>
               <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                     {pageCopy.article} #{selectedArticle.number}
                   </span>
                   <Badge className={`rounded-md ${statusStyles[selectedArticle.status]}`}>
                     {pageCopy.statuses[selectedArticle.status]}
                   </Badge>
                 </div>
-                <h2 className="mt-5 text-2xl font-semibold leading-tight tracking-[-0.035em] text-zinc-50">
+                <h2 className="mt-5 text-2xl font-semibold leading-tight tracking-[-0.035em] text-foreground">
                   {selectedArticle.title}
                 </h2>
-                <p className="mt-2 text-xs text-zinc-500">{pageCopy.by} {selectedArticle.author}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{pageCopy.by} {selectedArticle.author}</p>
                 <img alt="" className="mt-6 aspect-[2/1] w-full rounded-lg object-cover" src={selectedArticle.image} />
-                <div className="mt-6 space-y-4 text-sm leading-7 text-zinc-400">
+                <div className="mt-6 space-y-4 text-sm leading-7 text-muted-foreground">
                   {selectedArticle.content.split("\n\n").map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2 border-t border-white/[0.07] p-4">
+              <div className="flex flex-wrap gap-2 border-t border-border p-4">
                 <Button className="h-9 rounded-lg bg-emerald-600 px-3.5 text-white hover:bg-emerald-500" disabled={busyAction !== null} onClick={() => runAction("approve")}>
                   <Check className="mr-1.5 size-3.5" />{busyAction === "approve" ? pageCopy.approving : pageCopy.approve}
                 </Button>
                 <Button className="h-9 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3.5 text-rose-400 hover:bg-rose-500/15" disabled={busyAction !== null} onClick={() => runAction("reject")}>
                   <X className="mr-1.5 size-3.5" />{busyAction === "reject" ? pageCopy.rejecting : pageCopy.reject}
                 </Button>
-                <Button className="h-9 rounded-lg border border-white/[0.08] bg-white/[0.035] px-3.5 text-zinc-300 hover:bg-white/[0.06]" disabled={busyAction !== null} onClick={() => runAction("draft")}>
+                <Button className="h-9 rounded-lg border border-border bg-background px-3.5 text-foreground hover:bg-muted" disabled={busyAction !== null} onClick={() => runAction("draft")}>
                   <Clock3 className="mr-1.5 size-3.5" />{busyAction === "draft" ? pageCopy.saving : pageCopy.saveDraft}
                 </Button>
                 {notice && <span className="flex items-center gap-1.5 text-xs text-emerald-400" role="status"><Send className="size-3.5" />{notice}</span>}
               </div>
             </>
           ) : (
-            <p className="flex min-h-80 items-center justify-center text-sm text-zinc-600">{pageCopy.selectArticle}</p>
+            <p className="flex min-h-80 items-center justify-center text-sm text-muted-foreground">{pageCopy.selectArticle}</p>
           )}
         </section>
 

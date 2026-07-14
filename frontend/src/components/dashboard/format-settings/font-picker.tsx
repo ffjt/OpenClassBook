@@ -94,7 +94,7 @@ export function FontPicker({
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-label={ariaLabel}
-        className="flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white/[0.035] px-3 text-left text-xs text-zinc-200 shadow-sm outline-none transition-colors hover:border-white/[0.13] hover:bg-white/[0.05] focus-visible:border-blue-500/60 focus-visible:ring-2 focus-visible:ring-blue-500/20"
+        className="flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-left text-xs text-foreground shadow-sm outline-none transition-colors hover:border-blue-500/30 hover:bg-muted focus-visible:border-blue-500/60 focus-visible:ring-2 focus-visible:ring-blue-500/20"
         onClick={() => {
           if (!isOpen) onOpen?.();
           setIsOpen((current) => !current);
@@ -110,20 +110,20 @@ export function FontPicker({
         </span>
         <ChevronDown
           className={cn(
-            "size-3.5 shrink-0 text-zinc-500 transition-transform",
+            "size-3.5 shrink-0 text-muted-foreground transition-transform",
             isOpen && "rotate-180",
           )}
         />
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-lg border border-white/[0.1] bg-[#181a1f] shadow-2xl shadow-black/50 ring-1 ring-black/30">
-          <div className="border-b border-white/[0.07] p-2">
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-lg border border-border bg-popover shadow-2xl">
+          <div className="border-b border-border p-2">
             <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-zinc-600" />
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
                 aria-label={copy.search}
-                className="h-8 w-full rounded-md border border-white/[0.07] bg-black/20 pl-8 pr-2 text-xs text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/15"
+                className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-2 text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/15"
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={copy.search}
                 ref={searchRef}
@@ -147,7 +147,7 @@ export function FontPicker({
                   <button
                     aria-selected={isSelected}
                     className={cn(
-                      "flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:bg-white/[0.06] focus-visible:outline-none",
+                      "flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:outline-none",
                       isSelected && "bg-blue-500/10 text-blue-300",
                     )}
                     key={font.postscriptName}
@@ -165,7 +165,7 @@ export function FontPicker({
                       >
                         {font.fullName}
                       </span>
-                      <span className="mt-0.5 block truncate font-sans text-[9px] text-zinc-600">
+                      <span className="mt-0.5 block truncate font-sans text-[9px] text-muted-foreground">
                         {font.family}
                         {font.style ? ` · ${font.style}` : ""}
                       </span>
@@ -180,7 +180,7 @@ export function FontPicker({
                 );
               })
             ) : (
-              <p className="px-3 py-6 text-center text-[11px] text-zinc-600">
+              <p className="px-3 py-6 text-center text-[11px] text-muted-foreground">
                 {copy.empty}
               </p>
             )}

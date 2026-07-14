@@ -437,13 +437,13 @@ export function LiveArticlePreview({
   );
 
   return (
-    <section className="overflow-hidden rounded-xl border border-white/[0.08] bg-[#111317] shadow-2xl shadow-black/20">
-      <header className="flex h-12 items-center justify-between border-b border-white/[0.07] px-4">
+    <section className="overflow-hidden rounded-xl border border-border bg-card shadow-xl">
+      <header className="flex h-12 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2.5">
           <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.55)]" />
-          <h2 className="text-xs font-semibold text-zinc-200">{copy.title}</h2>
+          <h2 className="text-xs font-semibold text-foreground">{copy.title}</h2>
         </div>
-        <div className="flex items-center gap-2 text-[10px] font-medium text-zinc-600">
+        <div className="flex items-center gap-2 text-[10px] font-medium text-muted-foreground">
           <Maximize2 className="size-3" />
           {paper.label}
           <span aria-hidden="true">{"\u00b7"}</span>
@@ -456,7 +456,7 @@ export function LiveArticlePreview({
         </div>
       </header>
 
-      <div className="flex flex-col items-center gap-6 bg-[#090a0d] p-5 sm:p-8 xl:p-10">
+      <div className="flex flex-col items-center gap-6 bg-muted/40 p-5 sm:p-8 xl:p-10">
         {pages.map((page, pageIndex) => {
           const isFirstPage = pageIndex === 0;
           const pageNumber = pageIndex + 1;

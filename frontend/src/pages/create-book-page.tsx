@@ -13,18 +13,20 @@ import {
 } from "lucide-react";
 
 import { LanguageToggle } from "@/components/language-toggle";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { Language } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import type { BookCreateInput } from "@/repositories/bookRepository";
 
 type NumberingMode = "none" | "automatic" | "import";
 
 interface CreateBookPageProps {
   language: Language;
-  onBookCreated: (owner: string, title: string) => void;
+  onBookCreated: (data: BookCreateInput) => Promise<void>;
   onNavigate: (path: string) => void;
   onToggleLanguage: () => void;
 }
@@ -107,8 +109,10 @@ const createBookCopy = {
     supportedFiles: "Excel, CSV, or TXT",
     fileError: "Choose a supported Excel, CSV, or TXT file.",
     removeFile: "Remove file",
-    saved: "Book setup saved in this session.",
-    unsent: "Nothing is sent until a later step is added.",
+    saved: "Book saved to the database.",
+    unsent: "Your book will be saved when you continue.",
+    createError: "The book could not be created. Please try again.",
+    creating: "Creating...",
     continue: "Continue",
   },
   zh: {
@@ -161,8 +165,10 @@ const createBookCopy = {
     supportedFiles: "支持 Excel、CSV 或 TXT",
     fileError: "请选择有效的 Excel、CSV 或 TXT 文件。",
     removeFile: "移除文件",
-    saved: "书籍设置已保存在本次会话中。",
-    unsent: "后续步骤开发完成前，不会发送任何数据。",
+    saved: "书籍已保存到数据库。",
+    unsent: "点击继续后，书籍将保存到数据库。",
+    createError: "书籍创建失败，请重试。",
+    creating: "正在创建……",
     continue: "继续",
   },
 };
@@ -186,6 +192,8 @@ export function CreateBookPage({
   const [showRangeError, setShowRangeError] = useState(false);
   const [showFileError, setShowFileError] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showCreateError, setShowCreateError] = useState(false);
   const copy = createBookCopy[language];
   const startNumber = Number(rangeStart);
   const endNumber = Number(rangeEnd);
@@ -202,9 +210,10 @@ export function CreateBookPage({
       importFile.name.toLowerCase().endsWith(extension),
     );
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsSaved(false);
+    setShowCreateError(false);
 
     if (!owner.trim()) {
       setShowOwnerError(true);
@@ -237,11 +246,27 @@ export function CreateBookPage({
     }
 
     setShowFileError(false);
-    setIsSaved(true);
-    onBookCreated(owner.trim(), title.trim());
+    setIsSubmitting(true);
+
+    try {
+      await onBookCreated({
+        title: title.trim(),
+        description: description.trim() || null,
+        owner_name: owner.trim(),
+        number_mode: numberingMode,
+      });
+      setIsSaved(true);
+    } catch {
+      setShowCreateError(true);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const markChanged = () => setIsSaved(false);
+  const markChanged = () => {
+    setIsSaved(false);
+    setShowCreateError(false);
+  };
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
@@ -260,6 +285,7 @@ export function CreateBookPage({
         </a>
         <div className="flex items-center gap-2 sm:gap-5">
           <LanguageToggle language={language} onToggle={onToggleLanguage} />
+          <ThemeToggle language={language} />
           <a
             aria-label={copy.backHome}
             className="group flex size-9 items-center justify-center rounded-full text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:h-auto sm:w-auto sm:justify-start sm:rounded-none"
@@ -288,13 +314,13 @@ export function CreateBookPage({
             {copy.pageIntro}
           </p>
 
-          <div className="mt-10 hidden border-l border-zinc-200 pl-5 text-sm leading-6 text-muted-foreground lg:block">
+          <div className="mt-10 hidden border-l border-border pl-5 text-sm leading-6 text-muted-foreground lg:block">
             {copy.numberNote}
           </div>
         </div>
 
         <form
-          className="rounded-[2rem] border border-zinc-200/80 bg-white/90 p-6 shadow-[0_32px_90px_-55px_rgba(15,23,42,0.35)] backdrop-blur sm:p-9 lg:p-11"
+          className="rounded-[2rem] border border-border bg-card/90 p-6 shadow-[0_32px_90px_-55px_rgba(15,23,42,0.35)] backdrop-blur dark:shadow-[0_32px_90px_-55px_rgba(0,0,0,0.85)] sm:p-9 lg:p-11"
           noValidate
           onSubmit={handleSubmit}
         >
@@ -409,8 +435,8 @@ export function CreateBookPage({
                     className={cn(
                       "relative flex cursor-pointer gap-4 rounded-2xl border p-4 transition-all focus-within:ring-2 focus-within:ring-blue-600 focus-within:ring-offset-2 sm:p-5",
                       isSelected
-                        ? "border-blue-600 bg-blue-50/55 shadow-[0_0_0_3px_rgba(37,99,235,0.08)]"
-                        : "border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50/60",
+                        ? "border-blue-600 bg-blue-50/55 shadow-[0_0_0_3px_rgba(37,99,235,0.08)] dark:bg-blue-950/25"
+                        : "border-border bg-background hover:border-blue-500/40 hover:bg-muted/50",
                     )}
                     htmlFor={`numbering-${id}`}
                   >
@@ -433,7 +459,7 @@ export function CreateBookPage({
                         "flex size-10 shrink-0 items-center justify-center rounded-xl",
                         isSelected
                           ? "bg-blue-600 text-white"
-                          : "bg-zinc-100 text-zinc-600",
+                          : "bg-muted text-muted-foreground",
                       )}
                     >
                       <Icon className="size-[18px]" />
@@ -448,13 +474,13 @@ export function CreateBookPage({
                             "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border",
                             isSelected
                               ? "border-blue-600 bg-blue-600 text-white"
-                              : "border-zinc-300 bg-white text-transparent",
+                              : "border-input bg-background text-transparent",
                           )}
                         >
                           <Check className="size-3" strokeWidth={3} />
                         </span>
                       </span>
-                      <span className="mt-1 block text-sm leading-5 text-zinc-600">
+                      <span className="mt-1 block text-sm leading-5 text-muted-foreground">
                         {option.description}
                       </span>
                       <span className="mt-2 block text-xs leading-5 text-muted-foreground">
@@ -464,7 +490,7 @@ export function CreateBookPage({
                   </label>
 
                   {isSelected && id === "automatic" ? (
-                    <div className="animate-in fade-in slide-in-from-top-1 rounded-2xl border border-blue-100 bg-blue-50/35 p-4 duration-200 sm:p-5">
+                    <div className="animate-in fade-in slide-in-from-top-1 rounded-2xl border border-blue-200 bg-blue-50/35 p-4 duration-200 dark:border-blue-900 dark:bg-blue-950/20 sm:p-5">
                       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
                         <div>
                           <h4 className="text-sm font-semibold">{copy.rangeTitle}</h4>
@@ -473,7 +499,7 @@ export function CreateBookPage({
                           </p>
                         </div>
                         {isRangeValid ? (
-                          <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-semibold tabular-nums text-blue-700 shadow-sm ring-1 ring-blue-100">
+                          <span className="shrink-0 rounded-full bg-background px-3 py-1 text-xs font-semibold tabular-nums text-blue-700 shadow-sm ring-1 ring-blue-200 dark:text-blue-300 dark:ring-blue-900">
                             {formatArticleNumber(startNumber)}–{formatArticleNumber(endNumber)}
                           </span>
                         ) : null}
@@ -484,7 +510,7 @@ export function CreateBookPage({
                           <Label htmlFor="range-start">{copy.rangeStart}</Label>
                           <Input
                             aria-invalid={showRangeError && !isRangeValid}
-                            className="bg-white tabular-nums"
+                            className="bg-background tabular-nums"
                             id="range-start"
                             inputMode="numeric"
                             max={999}
@@ -503,7 +529,7 @@ export function CreateBookPage({
                           <Label htmlFor="range-end">{copy.rangeEnd}</Label>
                           <Input
                             aria-invalid={showRangeError && !isRangeValid}
-                            className="bg-white tabular-nums"
+                            className="bg-background tabular-nums"
                             id="range-end"
                             inputMode="numeric"
                             max={999}
@@ -533,14 +559,14 @@ export function CreateBookPage({
                   ) : null}
 
                   {isSelected && id === "import" ? (
-                    <div className="animate-in fade-in slide-in-from-top-1 rounded-2xl border border-blue-100 bg-blue-50/35 p-4 duration-200 sm:p-5">
+                    <div className="animate-in fade-in slide-in-from-top-1 rounded-2xl border border-blue-200 bg-blue-50/35 p-4 duration-200 dark:border-blue-900 dark:bg-blue-950/20 sm:p-5">
                       <h4 className="text-sm font-semibold">{copy.uploadTitle}</h4>
                       <p className="mt-1 text-xs leading-5 text-muted-foreground">
                         {copy.uploadIntro}
                       </p>
 
                       <label
-                        className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-blue-200 bg-white px-5 py-6 text-center transition-colors hover:border-blue-400 hover:bg-blue-50/40 focus-within:ring-2 focus-within:ring-blue-600 focus-within:ring-offset-2"
+                        className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-blue-200 bg-background px-5 py-6 text-center transition-colors hover:border-blue-400 hover:bg-blue-50/40 focus-within:ring-2 focus-within:ring-blue-600 focus-within:ring-offset-2 dark:border-blue-900 dark:hover:bg-blue-950/25"
                         htmlFor="import-file"
                       >
                         <input
@@ -565,7 +591,7 @@ export function CreateBookPage({
                         <span className="flex size-10 items-center justify-center rounded-xl bg-blue-600 text-white">
                           <Upload className="size-[18px]" />
                         </span>
-                        <span className="mt-3 text-sm font-semibold text-blue-700">
+                        <span className="mt-3 text-sm font-semibold text-blue-700 dark:text-blue-300">
                           {copy.chooseFile}
                         </span>
                         <span className="mt-1 text-xs text-muted-foreground">
@@ -574,8 +600,8 @@ export function CreateBookPage({
                       </label>
 
                       {importFile ? (
-                        <div className="mt-3 flex items-center gap-3 rounded-xl border border-zinc-200 bg-white p-3">
-                          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600">
+                        <div className="mt-3 flex items-center gap-3 rounded-xl border border-border bg-background p-3">
+                          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                             <FileText className="size-4" />
                           </span>
                           <span className="min-w-0 flex-1">
@@ -588,7 +614,7 @@ export function CreateBookPage({
                           </span>
                           <button
                             aria-label={copy.removeFile}
-                            className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                            className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
                             onClick={() => {
                               setImportFile(null);
                               setShowFileError(false);
@@ -614,10 +640,14 @@ export function CreateBookPage({
             </div>
           </fieldset>
 
-          <div className="mt-9 flex flex-col-reverse items-stretch justify-between gap-4 border-t border-zinc-200 pt-7 sm:flex-row sm:items-center">
+          <div className="mt-9 flex flex-col-reverse items-stretch justify-between gap-4 border-t border-border pt-7 sm:flex-row sm:items-center">
             <div aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
-              {isSaved ? (
-                <span className="flex items-center gap-2 text-emerald-700">
+              {showCreateError ? (
+                <span className="text-red-600" role="alert">
+                  {copy.createError}
+                </span>
+              ) : isSaved ? (
+                <span className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
                   <Check className="size-4" />
                   {copy.saved}
                 </span>
@@ -627,10 +657,11 @@ export function CreateBookPage({
             </div>
             <Button
               className="group shrink-0 bg-blue-600 text-white hover:bg-blue-700"
+              disabled={isSubmitting}
               size="lg"
               type="submit"
             >
-              {copy.continue}
+              {isSubmitting ? copy.creating : copy.continue}
               <ArrowRight className="ml-2 size-4 transition-transform group-hover:translate-x-0.5" />
             </Button>
           </div>

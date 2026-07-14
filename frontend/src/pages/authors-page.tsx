@@ -26,7 +26,7 @@ import { authors, type ArticleStatus, type AuthorStatus } from "@/mock/authors";
 import { cn } from "@/lib/utils";
 
 interface AuthorsPageProps {
-  basePath?: string;
+  basePath: string;
   language: Language;
   onNavigate: (path: string) => void;
   onToggleLanguage: () => void;
@@ -35,13 +35,13 @@ interface AuthorsPageProps {
 const statusStyles: Record<AuthorStatus, string> = {
   Joined: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
   Invited: "border-blue-500/20 bg-blue-500/10 text-blue-400",
-  "Not Joined": "border-white/[0.1] bg-white/[0.04] text-zinc-500",
+  "Not Joined": "border-border bg-muted/40 text-muted-foreground",
 };
 
 const articleStyles: Record<ArticleStatus, string> = {
   Submitted: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
   Draft: "border-amber-500/20 bg-amber-500/10 text-amber-400",
-  "Not Started": "border-white/[0.1] bg-white/[0.04] text-zinc-500",
+  "Not Started": "border-border bg-muted/40 text-muted-foreground",
 };
 
 const authorsCopy = {
@@ -142,7 +142,7 @@ const updatedAtCopy: Record<string, Record<Language, string>> = {
 };
 
 export function AuthorsPage({
-  basePath = "/dashboard",
+  basePath,
   language,
   onNavigate,
   onToggleLanguage,
@@ -168,7 +168,7 @@ export function AuthorsPage({
   }, [query, statusFilter]);
 
   const stats = [
-    { label: copy.stats.total, value: authors.length, tone: "text-zinc-100" },
+    { label: copy.stats.total, value: authors.length, tone: "text-foreground" },
     {
       label: copy.stats.joined,
       value: authors.filter((author) => author.status === "Joined").length,
@@ -196,14 +196,14 @@ export function AuthorsPage({
       onNavigate={onNavigate}
       onToggleLanguage={onToggleLanguage}
     >
-      <section className="flex flex-col gap-4 border-b border-white/[0.07] pb-8 sm:flex-row sm:items-end sm:justify-between">
+      <section className="flex flex-col gap-4 border-b border-border pb-8 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-[-0.035em] text-zinc-50 sm:text-3xl">
+          <h1 className="text-2xl font-semibold tracking-[-0.035em] text-foreground sm:text-3xl">
             {copy.title}
           </h1>
-          <p className="mt-2 text-sm text-zinc-500">{copy.description}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{copy.description}</p>
         </div>
-        <span className="hidden items-center gap-2 text-xs text-zinc-600 sm:flex">
+        <span className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
           <Users className="size-3.5" />
           {authors.length} {copy.contributors}
         </span>
@@ -212,11 +212,11 @@ export function AuthorsPage({
       <section className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map(({ label, tone, value }) => (
           <Card
-            className="border-white/[0.07] bg-[#131519] shadow-none"
+            className="border-border bg-card shadow-none"
             key={label}
           >
             <CardContent className="p-5">
-              <p className="text-xs font-medium text-zinc-500">{label}</p>
+              <p className="text-xs font-medium text-muted-foreground">{label}</p>
               <p
                 className={cn(
                   "mt-2 text-2xl font-semibold tracking-[-0.03em]",
@@ -234,10 +234,10 @@ export function AuthorsPage({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative w-full sm:w-72">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 aria-label={copy.searchLabel}
-                className="h-10 rounded-lg border-white/[0.08] bg-white/[0.035] pl-9 text-sm placeholder:text-zinc-600"
+                className="h-10 rounded-lg border-input bg-background pl-9 text-sm placeholder:text-muted-foreground"
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={copy.search}
                 value={query}
@@ -250,18 +250,18 @@ export function AuthorsPage({
               }
               value={statusFilter}
             >
-              <option className="bg-[#1a1c21]" value="All">
+              <option className="bg-popover" value="All">
                 {copy.allStatuses}
               </option>
               {(Object.keys(statusStyles) as AuthorStatus[]).map((status) => (
-                <option className="bg-[#1a1c21]" key={status} value={status}>
+                <option className="bg-popover" key={status} value={status}>
                   {copy.statuses[status]}
                 </option>
               ))}
             </Select>
           </div>
           <Button
-            className="h-10 rounded-lg bg-zinc-100 px-4 text-sm text-zinc-950 hover:bg-white"
+            className="h-10 rounded-lg bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90"
             type="button"
           >
             <UserPlus className="mr-2 size-4" />
@@ -269,20 +269,20 @@ export function AuthorsPage({
           </Button>
         </div>
 
-        <Card className="mt-4 overflow-hidden border-white/[0.07] bg-[#131519] shadow-none">
+        <Card className="mt-4 overflow-hidden border-border bg-card shadow-none">
           {authors.length === 0 ? (
             <div className="flex min-h-72 flex-col items-center justify-center px-6 py-16 text-center">
-              <span className="flex size-11 items-center justify-center rounded-full bg-white/[0.05] text-zinc-500">
+              <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
                 <Users className="size-5" />
               </span>
-              <h2 className="mt-4 text-sm font-semibold text-zinc-200">
+              <h2 className="mt-4 text-sm font-semibold text-foreground">
                 {copy.noAuthors}
               </h2>
-              <p className="mt-1.5 max-w-xs text-sm text-zinc-500">
+              <p className="mt-1.5 max-w-xs text-sm text-muted-foreground">
                 {copy.noAuthorsDescription}
               </p>
               <Button
-                className="mt-5 h-9 rounded-lg bg-zinc-100 px-4 text-xs text-zinc-950 hover:bg-white"
+                className="mt-5 h-9 rounded-lg bg-primary px-4 text-xs text-primary-foreground hover:bg-primary/90"
                 type="button"
               >
                 <UserPlus className="mr-2 size-3.5" />
@@ -291,17 +291,17 @@ export function AuthorsPage({
             </div>
           ) : filteredAuthors.length === 0 ? (
             <div className="flex min-h-64 flex-col items-center justify-center px-6 py-16 text-center">
-              <span className="flex size-11 items-center justify-center rounded-full bg-white/[0.05] text-zinc-500">
+              <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
                 <Search className="size-5" />
               </span>
-              <h2 className="mt-4 text-sm font-semibold text-zinc-200">
+              <h2 className="mt-4 text-sm font-semibold text-foreground">
                 {copy.noResults}
               </h2>
-              <p className="mt-1.5 text-sm text-zinc-500">
+              <p className="mt-1.5 text-sm text-muted-foreground">
                 {copy.noResultsDescription}
               </p>
               <Button
-                className="mt-5 h-9 rounded-lg border-white/[0.1] bg-transparent px-4 text-xs text-zinc-300 hover:bg-white/[0.05]"
+                className="mt-5 h-9 rounded-lg border-border bg-transparent px-4 text-xs text-foreground hover:bg-muted"
                 onClick={() => {
                   setQuery("");
                   setStatusFilter("All");
@@ -329,10 +329,10 @@ export function AuthorsPage({
               <TableBody>
                 {filteredAuthors.map((author) => (
                   <TableRow key={author.id}>
-                    <TableCell className="font-mono text-xs text-zinc-500">
+                    <TableCell className="font-mono text-xs text-muted-foreground">
                       {author.number}
                     </TableCell>
-                    <TableCell className="font-medium text-zinc-200">
+                    <TableCell className="font-medium text-foreground">
                       {author.name}
                     </TableCell>
                     <TableCell>
@@ -350,7 +350,7 @@ export function AuthorsPage({
                         {copy.articleStatuses[author.articleStatus]}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-zinc-500">
+                    <TableCell className="text-muted-foreground">
                       {author.updatedAt
                         ? (updatedAtCopy[author.updatedAt]?.[language] ??
                           author.updatedAt)
@@ -360,7 +360,7 @@ export function AuthorsPage({
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           aria-label={`${copy.actionLabel} ${author.name}`}
-                          className="inline-flex size-8 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/[0.07] hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                           type="button"
                         >
                           <MoreHorizontal className="size-4" />
