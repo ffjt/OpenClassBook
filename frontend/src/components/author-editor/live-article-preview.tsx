@@ -248,13 +248,15 @@ function getFlowImageStyle(
 interface LiveArticlePreviewProps {
   article: MockArticle;
   language: Language;
-  onImagePositionChange: (position: MockArticle["imagePosition"]) => void;
+  onImagePositionChange?: (position: MockArticle["imagePosition"]) => void;
+  readOnly?: boolean;
 }
 
 export function LiveArticlePreview({
   article,
   language,
   onImagePositionChange,
+  readOnly = false,
 }: LiveArticlePreviewProps) {
   const { template } = useTemplate();
   const copy = previewCopy[language];
@@ -324,6 +326,7 @@ export function LiveArticlePreview({
   };
 
   const handleImageKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (readOnly) return;
     const distance = event.shiftKey ? 5 : 2;
     const deltas: Record<string, { x: number; y: number }> = {
       ArrowDown: { x: 0, y: distance },
@@ -341,7 +344,7 @@ export function LiveArticlePreview({
     };
     pendingPosition.current = nextPosition;
     setPreviewImagePosition(nextPosition);
-    onImagePositionChange(nextPosition);
+    onImagePositionChange?.(nextPosition);
   };
 
   const renderWrapSpacer = () => (
@@ -361,36 +364,39 @@ export function LiveArticlePreview({
 
   const renderImage = () => (
     <figure
-      aria-label={copy.moveImage}
-      className="group absolute cursor-grab touch-none select-none overflow-hidden border border-blue-400/50 bg-slate-50 shadow-md outline-none ring-blue-500/30 active:cursor-grabbing focus-visible:ring-2"
+      aria-label={readOnly ? undefined : copy.moveImage}
+      className={`group absolute touch-none select-none overflow-hidden border border-blue-400/50 bg-slate-50 shadow-md outline-none ring-blue-500/30 ${readOnly ? "cursor-default" : "cursor-grab active:cursor-grabbing focus-visible:ring-2"}`}
       data-image-wrap={article.imageWrap}
       onKeyDown={handleImageKeyDown}
       onPointerDown={(event) => {
-        if (event.button !== 0) return;
+        if (readOnly || event.button !== 0) return;
         event.preventDefault();
         setIsDragging(true);
         event.currentTarget.setPointerCapture(event.pointerId);
         scheduleImagePosition(getImagePositionFromPointer(event));
       }}
       onPointerMove={(event) => {
+        if (readOnly) return;
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           scheduleImagePosition(getImagePositionFromPointer(event));
         }
       }}
       onPointerUp={(event) => {
+        if (readOnly) return;
         const finalPosition = getImagePositionFromPointer(event);
         scheduleImagePosition(finalPosition);
-        onImagePositionChange(finalPosition);
+        onImagePositionChange?.(finalPosition);
         setIsDragging(false);
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId);
         }
       }}
       onPointerCancel={() => {
-        onImagePositionChange(pendingPosition.current);
+        if (readOnly) return;
+        onImagePositionChange?.(pendingPosition.current);
         setIsDragging(false);
       }}
-      role="button"
+      role={readOnly ? undefined : "button"}
       style={{
         left: `${previewImagePosition.x}%`,
         opacity: article.imageWrap === "behindText" ? 0.38 : 1,
@@ -399,7 +405,7 @@ export function LiveArticlePreview({
         width: `${Math.min(90, template.imageMaxWidth)}%`,
         zIndex: article.imageWrap === "behindText" ? 0 : 4,
       }}
-      tabIndex={0}
+      tabIndex={readOnly ? -1 : 0}
     >
       <img
         alt=""
@@ -407,9 +413,11 @@ export function LiveArticlePreview({
         draggable={false}
         src={article.imageUrl}
       />
-      <span className="pointer-events-none absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-md bg-slate-950/70 text-white opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-        <Move className="size-3.5" />
-      </span>
+      {!readOnly && (
+        <span className="pointer-events-none absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-md bg-slate-950/70 text-white opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+          <Move className="size-3.5" />
+        </span>
+      )}
     </figure>
   );
 

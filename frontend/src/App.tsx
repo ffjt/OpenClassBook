@@ -46,6 +46,11 @@ const FormatSettingsPage = lazy(() =>
     default: module.FormatSettingsPage,
   })),
 );
+const ReviewPage = lazy(() =>
+  import("@/pages/review-page").then((module) => ({
+    default: module.ReviewPage,
+  })),
+);
 const JoinBookPage = lazy(() =>
   import("@/pages/join-book-page").then((module) => ({
     default: module.JoinBookPage,
@@ -77,7 +82,7 @@ interface SharedPageProps {
 
 interface DashboardRouteProps extends SharedPageProps {
   bookTitle?: string;
-  page: "overview" | "authors" | "template";
+  page: "overview" | "authors" | "review" | "template";
 }
 
 function DashboardRoute({
@@ -98,6 +103,7 @@ function DashboardRoute({
 
   if (page === "template") return <FormatSettingsPage {...sharedProps} />;
   if (page === "authors") return <AuthorsPage {...sharedProps} />;
+  if (page === "review") return <ReviewPage {...sharedProps} />;
   return <DashboardOverviewPage {...sharedProps} bookTitle={bookTitle} />;
 }
 
@@ -218,6 +224,13 @@ function App() {
             key={path}
             path={path}
             element={<DashboardRoute {...sharedProps} page="authors" />}
+          />
+        ))}
+        {["/dashboard/review", "/:bookId/dashboard/review"].map((path) => (
+          <Route
+            key={path}
+            path={path}
+            element={<DashboardRoute {...sharedProps} page="review" />}
           />
         ))}
         {["/dashboard/template", "/:bookId/dashboard/template"].map(

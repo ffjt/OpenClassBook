@@ -32,10 +32,10 @@ const statDefinitions = [
 ] as const;
 
 const quickActionDefinitions = [
-  { label: "inviteAuthors", icon: UserPlus },
-  { label: "viewArticles", icon: FileText },
-  { label: "review", icon: FileCheck2 },
-  { label: "exportPdf", icon: FileOutput },
+  { label: "inviteAuthors", icon: UserPlus, path: "/authors" },
+  { label: "viewArticles", icon: FileText, path: "/articles" },
+  { label: "review", icon: FileCheck2, path: "/review" },
+  { label: "exportPdf", icon: FileOutput, path: "/export" },
 ] as const;
 
 const dashboardCopy = {
@@ -302,10 +302,11 @@ export function DashboardOverviewPage({
             </p>
           </CardHeader>
           <CardContent className="grid gap-2 p-5 pt-3 sm:grid-cols-2 xl:grid-cols-1">
-            {quickActionDefinitions.map(({ icon: Icon, label }) => (
+            {quickActionDefinitions.map(({ icon: Icon, label, path }) => (
               <button
                 className="group flex h-12 items-center gap-3 rounded-lg border border-white/[0.07] bg-white/[0.02] px-3.5 text-left text-sm font-medium text-zinc-300 transition-colors hover:border-white/[0.12] hover:bg-white/[0.05] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 key={label}
+                onClick={() => onNavigate(`${basePath}${path}`)}
                 type="button"
               >
                 <span className="flex size-7 items-center justify-center rounded-md bg-white/[0.05] text-zinc-500 transition-colors group-hover:text-blue-400">
