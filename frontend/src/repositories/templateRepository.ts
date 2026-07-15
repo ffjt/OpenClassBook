@@ -1,5 +1,15 @@
 import { ApiError, apiRequest } from "@/repositories/apiClient";
-import type { Template } from "@/types/template";
+import { defaultTemplate } from "@/mock/template";
+import type {
+  Alignment,
+  FontSelection,
+  NumberPosition,
+  PageMargin,
+  PageNumberPosition,
+  PageSize,
+  SubtitleMode,
+  Template,
+} from "@/types/template";
 
 export interface BookTemplate {
   id: number;
@@ -9,6 +19,132 @@ export interface BookTemplate {
   image_rules: Record<string, unknown> | null;
   numbering_rules: Record<string, unknown> | null;
   page_rules: Record<string, unknown> | null;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+function readFont(value: unknown, fallback: FontSelection): FontSelection {
+  if (typeof value === "string") {
+    return {
+      family: value,
+      fullName: value,
+      postscriptName: value,
+      style: "Regular",
+    };
+  }
+
+  if (!isRecord(value)) return { ...fallback };
+
+  return {
+    family: typeof value.family === "string" ? value.family : fallback.family,
+    fullName:
+      typeof value.fullName === "string" ? value.fullName : fallback.fullName,
+    postscriptName:
+      typeof value.postscriptName === "string"
+        ? value.postscriptName
+        : fallback.postscriptName,
+    style: typeof value.style === "string" ? value.style : fallback.style,
+  };
+}
+
+function readNumber(value: unknown, fallback: number) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function readBoolean(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function readOption<Value extends string>(
+  value: unknown,
+  options: readonly Value[],
+  fallback: Value,
+) {
+  return typeof value === "string" && options.includes(value as Value)
+    ? (value as Value)
+    : fallback;
+}
+
+export function deserializeTemplate(stored: BookTemplate): Template {
+  const title = stored.title_format ?? {};
+  const body = stored.body_format ?? {};
+  const images = stored.image_rules ?? {};
+  const numbering = stored.numbering_rules ?? {};
+  const page = stored.page_rules ?? {};
+
+  return {
+    titleFont: readFont(title.font, defaultTemplate.titleFont),
+    titleSize: readNumber(title.size, defaultTemplate.titleSize),
+    titleBold: readBoolean(title.bold, defaultTemplate.titleBold),
+    titleAlign: readOption<Alignment>(
+      title.align,
+      ["left", "center", "right"],
+      defaultTemplate.titleAlign,
+    ),
+    subtitleMode: readOption<SubtitleMode>(
+      title.subtitle_mode,
+      ["disabled", "fixed", "free"],
+      readBoolean(title.show_subtitle, true) ? "free" : "disabled",
+    ),
+    fixedSubtitle:
+      typeof title.fixed_subtitle === "string"
+        ? title.fixed_subtitle
+        : defaultTemplate.fixedSubtitle,
+    subtitleAlign: readOption<Alignment>(
+      title.subtitle_align,
+      ["left", "center", "right"],
+      defaultTemplate.subtitleAlign,
+    ),
+    titleSpacing: readNumber(title.spacing, defaultTemplate.titleSpacing),
+    showNumber: readBoolean(numbering.show, defaultTemplate.showNumber),
+    numberPosition: readOption<NumberPosition>(
+      numbering.position,
+      ["above", "left", "hidden"],
+      defaultTemplate.numberPosition,
+    ),
+    bodyFont: readFont(body.font, defaultTemplate.bodyFont),
+    bodySize: readNumber(body.size, defaultTemplate.bodySize),
+    lineHeight: readNumber(body.line_height, defaultTemplate.lineHeight),
+    firstLineIndent: readNumber(
+      body.first_line_indent,
+      defaultTemplate.firstLineIndent,
+    ),
+    justify: readBoolean(body.justify, defaultTemplate.justify),
+    allowImages: readBoolean(images.allow, defaultTemplate.allowImages),
+    imageAlign: readOption<Alignment>(
+      images.align,
+      ["left", "center", "right"],
+      defaultTemplate.imageAlign,
+    ),
+    imageMaxWidth: readNumber(
+      images.max_width,
+      defaultTemplate.imageMaxWidth,
+    ),
+    pageSize: readOption<PageSize>(
+      page.size,
+      ["a4", "a5", "b5", "custom"],
+      defaultTemplate.pageSize,
+    ),
+    pageMargin: readOption<PageMargin>(
+      page.margin,
+      ["narrow", "normal", "wide"],
+      defaultTemplate.pageMargin,
+    ),
+    pageNumberPosition: readOption<PageNumberPosition>(
+      page.number_position,
+      ["center", "right", "hidden"],
+      defaultTemplate.pageNumberPosition,
+    ),
+    customPageWidth: readNumber(
+      page.custom_width,
+      defaultTemplate.customPageWidth,
+    ),
+    customPageHeight: readNumber(
+      page.custom_height,
+      defaultTemplate.customPageHeight,
+    ),
+  };
 }
 
 export const templateRepository = {
@@ -21,15 +157,23 @@ export const templateRepository = {
     }
   },
 
-  save(bookId: number, template: Template) {
-    return apiRequest<BookTemplate>(`/books/${bookId}/template`, {
+  async getSettingsByBook(bookId: number) {
+    const stored = await this.getByBook(bookId);
+    return stored ? deserializeTemplate(stored) : null;
+  },
+
+  async save(bookId: number, template: Template) {
+    const stored = await apiRequest<BookTemplate>(`/books/${bookId}/template`, {
       body: JSON.stringify({
         title_format: {
           font: template.titleFont,
           size: template.titleSize,
           bold: template.titleBold,
           align: template.titleAlign,
-          show_subtitle: template.showSubtitle,
+          subtitle_mode: template.subtitleMode,
+          fixed_subtitle: template.fixedSubtitle,
+          // Retained for clients that still read the former boolean setting.
+          show_subtitle: template.subtitleMode !== "disabled",
           subtitle_align: template.subtitleAlign,
           spacing: template.titleSpacing,
         },
@@ -59,5 +203,6 @@ export const templateRepository = {
       }),
       method: "PATCH",
     });
+    return deserializeTemplate(stored);
   },
 };

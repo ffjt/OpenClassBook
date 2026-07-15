@@ -10,6 +10,7 @@ export type NumberPosition = "above" | "left" | "hidden";
 export type PageMargin = "narrow" | "normal" | "wide";
 export type PageNumberPosition = "center" | "right" | "hidden";
 export type PageSize = "a4" | "a5" | "b5" | "custom";
+export type SubtitleMode = "disabled" | "fixed" | "free";
 
 /** Shared in-memory contract for every book publishing surface. */
 export interface Template {
@@ -35,9 +36,8 @@ export interface Template {
   pageMargin: PageMargin;
   pageNumberPosition: PageNumberPosition;
 
-  // These options are already exposed by Format Settings and remain part of
-  // the shared contract until their dedicated controls are redesigned.
-  showSubtitle: boolean;
+  subtitleMode: SubtitleMode;
+  fixedSubtitle: string;
   subtitleAlign: Alignment;
   titleSpacing: number;
   customPageWidth: number;

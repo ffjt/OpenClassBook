@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -18,12 +18,8 @@ class Article(Base):
     )
     title: Mapped[str] = mapped_column(String(255))
     content: Mapped[str] = mapped_column(Text)
-    images: Mapped[list[str]] = mapped_column(JSON, default=list)
+    image: Mapped[str | None] = mapped_column(Text, nullable=True)
     number: Mapped[str] = mapped_column(String(50))
-    review_status: Mapped[str] = mapped_column(String(32), default="pending")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    status: Mapped[str] = mapped_column(String(32), default="draft")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

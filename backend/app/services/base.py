@@ -2,7 +2,6 @@ from pydantic import BaseModel
 
 from app.db.database import Base
 from app.repositories.base import BaseRepository
-from app.schemas.common import MessageResponse
 
 
 class BaseService[
@@ -30,6 +29,3 @@ class BaseService[
 
     def list(self, *, offset: int = 0, limit: int = 100) -> list[ModelT]:
         return self.repository.list(offset=offset, limit=limit)
-
-    def not_implemented(self) -> MessageResponse:
-        return MessageResponse(message="Not Implemented", message_zh="尚未实现")

@@ -1,28 +1,50 @@
 from datetime import datetime
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+
+ArticleStatus = Literal["draft", "pending", "approved", "rejected"]
+ArticleTitle = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
+]
+ArticleNumber = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=50),
+]
 
 
 class ArticleBase(BaseModel):
-    author_id: int
-    title: str = Field(min_length=1, max_length=255)
-    content: str
-    images: list[str] = Field(default_factory=list)
-    number: str = Field(min_length=1, max_length=50)
-    review_status: str = Field(default="pending", max_length=32)
+    author_id: int = Field(gt=0)
+    number: ArticleNumber
+    title: ArticleTitle
+    content: str = ""
+    image: str | None = None
+    status: ArticleStatus = "draft"
 
 
 class ArticleCreate(ArticleBase):
-    book_id: int
+    pass
 
 
 class ArticleUpdate(BaseModel):
-    author_id: int | None = None
-    title: str | None = Field(default=None, min_length=1, max_length=255)
+    author_id: int | None = Field(default=None, gt=0)
+    number: ArticleNumber | None = None
+    title: ArticleTitle | None = None
     content: str | None = None
-    images: list[str] | None = None
-    number: str | None = Field(default=None, min_length=1, max_length=50)
-    review_status: str | None = Field(default=None, max_length=32)
+    image: str | None = None
+    status: ArticleStatus | None = None
+
+    @field_validator("author_id", "number", "title", "content", "status")
+    @classmethod
+    def required_fields_cannot_be_null(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("field cannot be null / 字段不能为空")
+        return value
+
+
+class ArticleStatusUpdate(BaseModel):
+    status: ArticleStatus
 
 
 class ArticleResponse(ArticleBase):
@@ -31,4 +53,14 @@ class ArticleResponse(ArticleBase):
     id: int
     book_id: int
     created_at: datetime
+    updated_at: datetime
+
+
+class ArticleCreateData(ArticleCreate):
+    book_id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ArticleUpdateData(ArticleUpdate):
     updated_at: datetime

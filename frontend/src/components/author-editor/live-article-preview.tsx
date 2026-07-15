@@ -6,14 +6,13 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
-  type PointerEvent,
 } from "react";
 import { Maximize2, Move } from "lucide-react";
+import { Rnd } from "react-rnd";
 
 import { useTemplate } from "@/hooks/use-template";
 import type { Language } from "@/lib/i18n";
-import type { MockArticle } from "@/mock/article";
-import type { ImageWrap } from "@/types/article";
+import type { ImageWrap, PreviewArticle } from "@/types/article";
 import {
   getFontFamilyStyle,
   type PageMargin,
@@ -26,13 +25,15 @@ const previewCopy = {
     title: "Live Preview",
     pages: "pages",
     page: "Page",
-    moveImage: "Move image",
+    resizeImage: "Move or resize image",
+    imageHelp: "Drag across pages to move · Pull an edge or corner to resize",
   },
   zh: {
     title: "\u5b9e\u65f6\u9884\u89c8",
     pages: "\u9875",
     page: "\u7b2c",
-    moveImage: "\u79fb\u52a8\u56fe\u7247",
+    resizeImage: "\u79fb\u52a8\u6216\u8c03\u6574\u56fe\u7247\u5927\u5c0f",
+    imageHelp: "\u53ef\u8de8\u9875\u62d6\u52a8 \u00b7 \u62c9\u4f38\u8fb9\u7f18\u6216\u89d2\u70b9\u53ef\u7f29\u653e",
   },
 } as const;
 
@@ -134,7 +135,12 @@ function getPageCapacities(template: Template, body: string) {
   };
 }
 
-function paginateArticle(body: string, imageUrl: string, template: Template) {
+function paginateArticle(
+  body: string,
+  imageUrl: string,
+  imagePage: number,
+  template: Template,
+) {
   const sourceLines = body.replace(/\r\n/g, "\n").split("\n");
   const capacities = getPageCapacities(template, body);
   const pages: PreviewPage[] = [{ lines: [], showImage: false }];
@@ -196,11 +202,15 @@ function paginateArticle(body: string, imageUrl: string, template: Template) {
       Math.max(0.3, 0.88 - template.imageMaxWidth / 180),
     );
 
-    if (usedCharacters > finalCapacity * imageTextRatio) {
-      pages.push({ lines: [], showImage: true });
-    } else {
-      finalPage.showImage = true;
+    const needsImagePage = usedCharacters > finalCapacity * imageTextRatio;
+    if (needsImagePage && (imagePage < 0 || imagePage >= pages.length)) {
+      pages.push({ lines: [], showImage: false });
     }
+    const targetPage =
+      imagePage < 0
+        ? pages.length - 1
+        : clamp(imagePage, 0, pages.length - 1);
+    pages[targetPage].showImage = true;
   }
 
   return pages;
@@ -210,11 +220,11 @@ const clamp = (value: number, minimum: number, maximum: number) =>
   Math.min(maximum, Math.max(minimum, value));
 
 function getFlowImageStyle(
-  position: MockArticle["imagePosition"],
+  position: PreviewArticle["imagePosition"],
   imageWrap: ImageWrap,
-  template: Template,
+  imageSize: PreviewArticle["imageSize"],
 ): CSSProperties {
-  const width = Math.min(90, template.imageMaxWidth);
+  const width = imageSize.width;
   const leftEdge = clamp(position.x - width / 2, 0, 100 - width);
   const rightEdge = 100 - leftEdge - width;
   const placeOnLeft = position.x <= 50;
@@ -246,16 +256,20 @@ function getFlowImageStyle(
 }
 
 interface LiveArticlePreviewProps {
-  article: MockArticle;
+  article: PreviewArticle;
   language: Language;
-  onImagePositionChange?: (position: MockArticle["imagePosition"]) => void;
+  onImagePageChange?: (page: number) => void;
+  onImagePositionChange?: (position: PreviewArticle["imagePosition"]) => void;
+  onImageSizeChange?: (size: PreviewArticle["imageSize"]) => void;
   readOnly?: boolean;
 }
 
 export function LiveArticlePreview({
   article,
   language,
+  onImagePageChange,
   onImagePositionChange,
+  onImageSizeChange,
   readOnly = false,
 }: LiveArticlePreviewProps) {
   const { template } = useTemplate();
@@ -273,57 +287,58 @@ export function LiveArticlePreview({
       : paperStyles[template.pageSize];
   const showNumber =
     template.showNumber && template.numberPosition !== "hidden";
+  const subtitle =
+    template.subtitleMode === "fixed"
+      ? template.fixedSubtitle
+      : template.subtitleMode === "free"
+        ? article.subtitle
+        : "";
   const pages = useMemo(
-    () => paginateArticle(article.body, article.imageUrl, template),
-    [article.body, article.imageUrl, template],
+    () =>
+      paginateArticle(
+        article.body,
+        article.imageUrl,
+        article.imagePage,
+        template,
+      ),
+    [article.body, article.imagePage, article.imageUrl, template],
+  );
+  const resolvedImagePage = Math.max(
+    0,
+    pages.findIndex((page) => page.showImage),
   );
   const [previewImagePosition, setPreviewImagePosition] = useState(
     article.imagePosition,
   );
-  const [isDragging, setIsDragging] = useState(false);
-  const pendingPosition = useRef(article.imagePosition);
-  const animationFrame = useRef<number | null>(null);
+  const [previewImageSize, setPreviewImageSize] = useState(article.imageSize);
+  const [previewImagePage, setPreviewImagePage] = useState(resolvedImagePage);
+  const [isInteracting, setIsInteracting] = useState(false);
+  const pageContentRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const [imageBounds, setImageBounds] = useState({ width: 0, height: 0 });
   const isOverlayImage =
     article.imageWrap === "behindText" ||
     article.imageWrap === "inFrontOfText";
 
   useEffect(() => {
-    if (!isDragging) {
-      pendingPosition.current = article.imagePosition;
+    if (!isInteracting) {
       setPreviewImagePosition(article.imagePosition);
+      setPreviewImageSize(article.imageSize);
+      setPreviewImagePage(resolvedImagePage);
     }
-  }, [article.imagePosition, isDragging]);
+  }, [article.imagePosition, article.imageSize, isInteracting, resolvedImagePage]);
 
-  useEffect(
-    () => () => {
-      if (animationFrame.current !== null) {
-        cancelAnimationFrame(animationFrame.current);
-      }
-    },
-    [],
-  );
-
-  const scheduleImagePosition = (
-    position: MockArticle["imagePosition"],
-  ) => {
-    pendingPosition.current = position;
-    if (animationFrame.current !== null) return;
-
-    animationFrame.current = requestAnimationFrame(() => {
-      setPreviewImagePosition(pendingPosition.current);
-      animationFrame.current = null;
-    });
-  };
-
-  const getImagePositionFromPointer = (event: PointerEvent<HTMLElement>) => {
-    const page = event.currentTarget.closest("article");
-    if (!page) return pendingPosition.current;
-
-    const bounds = page.getBoundingClientRect();
-    const x = clamp(((event.clientX - bounds.left) / bounds.width) * 100, 4, 96);
-    const y = clamp(((event.clientY - bounds.top) / bounds.height) * 100, 8, 92);
-    return { x, y };
-  };
+  useEffect(() => {
+    const imageBoundsElement = pageContentRefs.current[previewImagePage];
+    if (!imageBoundsElement) return;
+    const updateBounds = () => {
+      const bounds = imageBoundsElement.getBoundingClientRect();
+      setImageBounds({ width: bounds.width, height: bounds.height });
+    };
+    updateBounds();
+    const observer = new ResizeObserver(updateBounds);
+    observer.observe(imageBoundsElement);
+    return () => observer.disconnect();
+  }, [pages.length, previewImagePage]);
 
   const handleImageKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (readOnly) return;
@@ -338,13 +353,108 @@ export function LiveArticlePreview({
     if (!delta) return;
 
     event.preventDefault();
+    const halfWidth = previewImageSize.width / 2;
+    const halfHeight = previewImageSize.height / 2;
     const nextPosition = {
-      x: clamp(previewImagePosition.x + delta.x, 4, 96),
-      y: clamp(previewImagePosition.y + delta.y, 8, 92),
+      x: clamp(previewImagePosition.x + delta.x, halfWidth, 100 - halfWidth),
+      y: clamp(previewImagePosition.y + delta.y, halfHeight, 100 - halfHeight),
     };
-    pendingPosition.current = nextPosition;
     setPreviewImagePosition(nextPosition);
     onImagePositionChange?.(nextPosition);
+  };
+
+  const getPercentPosition = (
+    x: number,
+    y: number,
+    size = previewImageSize,
+  ) => ({
+    x: imageBounds.width
+      ? ((x + (size.width / 100) * imageBounds.width * 0.5) /
+          imageBounds.width) *
+        100
+      : previewImagePosition.x,
+    y: imageBounds.height
+      ? ((y + (size.height / 100) * imageBounds.height * 0.5) /
+          imageBounds.height) *
+        100
+      : previewImagePosition.y,
+  });
+
+  const imagePixelPosition = {
+    x:
+      (previewImagePosition.x / 100) * imageBounds.width -
+      (previewImageSize.width / 100) * imageBounds.width * 0.5,
+    y:
+      (previewImagePosition.y / 100) * imageBounds.height -
+      (previewImageSize.height / 100) * imageBounds.height * 0.5,
+  };
+
+  const getDropTarget = (sourcePage: number, x: number, y: number) => {
+    const sourceElement = pageContentRefs.current[sourcePage];
+    if (!sourceElement) {
+      return {
+        page: sourcePage,
+        position: getPercentPosition(x, y),
+        size: previewImageSize,
+      };
+    }
+
+    const sourceBounds = sourceElement.getBoundingClientRect();
+    const imageWidth = (previewImageSize.width / 100) * sourceBounds.width;
+    const imageHeight = (previewImageSize.height / 100) * sourceBounds.height;
+    const centerX = sourceBounds.left + x + imageWidth / 2;
+    const centerY = sourceBounds.top + y + imageHeight / 2;
+    const availablePages = pageContentRefs.current
+      .map((element, page) =>
+        element ? { bounds: element.getBoundingClientRect(), page } : null,
+      )
+      .filter((entry): entry is { bounds: DOMRect; page: number } => Boolean(entry));
+    const firstPage = availablePages[0];
+    if (!firstPage) {
+      return {
+        page: sourcePage,
+        position: getPercentPosition(x, y),
+        size: previewImageSize,
+      };
+    }
+    const target = availablePages.reduce<{
+      bounds: DOMRect;
+      distance: number;
+      page: number;
+    }>((closest, candidate) => {
+      const distance =
+        centerY < candidate.bounds.top
+          ? candidate.bounds.top - centerY
+          : centerY > candidate.bounds.bottom
+            ? centerY - candidate.bounds.bottom
+            : 0;
+      return distance < closest.distance
+        ? { ...candidate, distance }
+        : closest;
+    }, { ...firstPage, distance: Number.POSITIVE_INFINITY });
+    const nextSize = {
+      width: (imageWidth / target.bounds.width) * 100,
+      height: (imageHeight / target.bounds.height) * 100,
+    };
+    const halfWidth = nextSize.width / 2;
+    const halfHeight = nextSize.height / 2;
+
+    return {
+      page: target.page,
+      position: {
+        x: clamp(
+          ((centerX - target.bounds.left) / target.bounds.width) * 100,
+          halfWidth,
+          100 - halfWidth,
+        ),
+        y: clamp(
+          ((centerY - target.bounds.top) / target.bounds.height) * 100,
+          halfHeight,
+          100 - halfHeight,
+        ),
+      },
+      size: nextSize,
+    };
   };
 
   const renderWrapSpacer = () => (
@@ -354,86 +464,129 @@ export function LiveArticlePreview({
         ...getFlowImageStyle(
           previewImagePosition,
           article.imageWrap,
-          template,
+          previewImageSize,
         ),
-        aspectRatio: "2 / 1",
+        aspectRatio: `${previewImageSize.width} / ${previewImageSize.height}`,
         visibility: "hidden",
       }}
     />
   );
 
-  const renderImage = () => (
-    <figure
-      aria-label={readOnly ? undefined : copy.moveImage}
-      className={`group absolute touch-none select-none overflow-hidden border border-blue-400/50 bg-slate-50 shadow-md outline-none ring-blue-500/30 ${readOnly ? "cursor-default" : "cursor-grab active:cursor-grabbing focus-visible:ring-2"}`}
+  const renderImage = (pageIndex: number) => (
+    <Rnd
+      aria-label={readOnly ? undefined : copy.resizeImage}
+      className={`group touch-none select-none outline-none ring-blue-500/30 ${readOnly ? "cursor-default" : "cursor-grab active:cursor-grabbing focus-visible:ring-2"}`}
       data-image-wrap={article.imageWrap}
+      disableDragging={readOnly}
+      enableResizing={!readOnly}
+      minHeight="6%"
+      minWidth="8%"
+      onDrag={(_event, data) => {
+        setPreviewImagePosition(getPercentPosition(data.x, data.y));
+      }}
+      onDragStart={() => setIsInteracting(true)}
+      onDragStop={(_event, data) => {
+        const target = getDropTarget(pageIndex, data.x, data.y);
+        setPreviewImagePage(target.page);
+        setPreviewImagePosition(target.position);
+        setPreviewImageSize(target.size);
+        onImagePageChange?.(target.page);
+        onImagePositionChange?.(target.position);
+        onImageSizeChange?.(target.size);
+        setIsInteracting(false);
+      }}
       onKeyDown={handleImageKeyDown}
-      onPointerDown={(event) => {
-        if (readOnly || event.button !== 0) return;
-        event.preventDefault();
-        setIsDragging(true);
-        event.currentTarget.setPointerCapture(event.pointerId);
-        scheduleImagePosition(getImagePositionFromPointer(event));
+      onResize={(_event, _direction, element, _delta, position) => {
+        const nextSize = {
+          width: (element.offsetWidth / imageBounds.width) * 100,
+          height: (element.offsetHeight / imageBounds.height) * 100,
+        };
+        setPreviewImageSize(nextSize);
+        setPreviewImagePosition(getPercentPosition(position.x, position.y, nextSize));
       }}
-      onPointerMove={(event) => {
-        if (readOnly) return;
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-          scheduleImagePosition(getImagePositionFromPointer(event));
-        }
+      onResizeStart={() => setIsInteracting(true)}
+      onResizeStop={(_event, _direction, element, _delta, position) => {
+        const nextSize = {
+          width: (element.offsetWidth / imageBounds.width) * 100,
+          height: (element.offsetHeight / imageBounds.height) * 100,
+        };
+        const nextPosition = getPercentPosition(position.x, position.y, nextSize);
+        setPreviewImageSize(nextSize);
+        setPreviewImagePosition(nextPosition);
+        onImageSizeChange?.(nextSize);
+        onImagePositionChange?.(nextPosition);
+        setIsInteracting(false);
       }}
-      onPointerUp={(event) => {
-        if (readOnly) return;
-        const finalPosition = getImagePositionFromPointer(event);
-        scheduleImagePosition(finalPosition);
-        onImagePositionChange?.(finalPosition);
-        setIsDragging(false);
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-          event.currentTarget.releasePointerCapture(event.pointerId);
-        }
-      }}
-      onPointerCancel={() => {
-        if (readOnly) return;
-        onImagePositionChange?.(pendingPosition.current);
-        setIsDragging(false);
-      }}
+      position={imagePixelPosition}
       role={readOnly ? undefined : "button"}
+      size={{
+        height: `${previewImageSize.height}%`,
+        width: `${previewImageSize.width}%`,
+      }}
       style={{
-        left: `${previewImagePosition.x}%`,
         opacity: article.imageWrap === "behindText" ? 0.38 : 1,
-        top: `${previewImagePosition.y}%`,
-        transform: "translate(-50%, -50%)",
-        width: `${Math.min(90, template.imageMaxWidth)}%`,
         zIndex: article.imageWrap === "behindText" ? 0 : 4,
       }}
       tabIndex={readOnly ? -1 : 0}
     >
-      <img
-        alt=""
-        className="aspect-[16/8] w-full object-cover object-[70%_65%]"
-        draggable={false}
-        src={article.imageUrl}
-      />
-      {!readOnly && (
-        <span className="pointer-events-none absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-md bg-slate-950/70 text-white opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-          <Move className="size-3.5" />
-        </span>
-      )}
-    </figure>
+      <figure className="relative size-full overflow-hidden border border-blue-400/60 bg-slate-50 shadow-md">
+        <img
+          alt=""
+          className="size-full object-cover"
+          draggable={false}
+          src={article.imageUrl}
+        />
+        {!readOnly && (
+          <>
+            <span className="pointer-events-none absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-md bg-slate-950/70 text-white opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+              <Move className="size-3.5" />
+            </span>
+            {[
+              "left-0 top-0 -translate-x-1/2 -translate-y-1/2",
+              "right-0 top-0 translate-x-1/2 -translate-y-1/2",
+              "bottom-0 left-0 -translate-x-1/2 translate-y-1/2",
+              "bottom-0 right-0 translate-x-1/2 translate-y-1/2",
+            ].map((position) => (
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none absolute size-2 rounded-[2px] border border-white bg-blue-500 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 ${position}`}
+                key={position}
+              />
+            ))}
+          </>
+        )}
+      </figure>
+    </Rnd>
   );
 
   const title = (
-    <h2
-      className="break-words text-slate-950"
-      style={{
-        fontFamily: getFontFamilyStyle(template.titleFont),
-        fontSize: `${template.titleSize}px`,
-        fontWeight: template.titleBold ? 700 : 400,
-        lineHeight: 1.25,
-        textAlign: template.titleAlign,
-      }}
-    >
-      {article.title || "\u00a0"}
-    </h2>
+    <div>
+      <h2
+        className="break-words text-slate-950"
+        style={{
+          fontFamily: getFontFamilyStyle(template.titleFont),
+          fontSize: `${template.titleSize}px`,
+          fontWeight: template.titleBold ? 700 : 400,
+          lineHeight: 1.25,
+          textAlign: template.titleAlign,
+        }}
+      >
+        {article.title || "\u00a0"}
+      </h2>
+      {subtitle && (
+        <p
+          className="mt-2 break-words text-slate-500"
+          style={{
+            fontFamily: getFontFamilyStyle(template.titleFont),
+            fontSize: `${Math.max(12, template.titleSize * 0.5)}px`,
+            lineHeight: 1.4,
+            textAlign: template.subtitleAlign,
+          }}
+        >
+          {subtitle}
+        </p>
+      )}
+    </div>
   );
 
   return (
@@ -457,16 +610,18 @@ export function LiveArticlePreview({
       </header>
 
       <div className="flex flex-col items-center gap-6 bg-muted/40 p-5 sm:p-8 xl:p-10">
+        {article.imageUrl && !readOnly && (
+          <p className="flex items-center gap-2 self-center text-[10px] font-medium text-muted-foreground">
+            <Move className="size-3" />
+            {copy.imageHelp}
+          </p>
+        )}
         {pages.map((page, pageIndex) => {
           const isFirstPage = pageIndex === 0;
           const pageNumber = pageIndex + 1;
           const imageInsertIndex = clamp(
             Math.round(
-              ((isDragging
-                ? article.imagePosition.y
-                : previewImagePosition.y) /
-                100) *
-                page.lines.length,
+              (previewImagePosition.y / 100) * page.lines.length,
             ),
             0,
             page.lines.length,
@@ -475,7 +630,7 @@ export function LiveArticlePreview({
           return (
             <article
               aria-label={`${paper.label} ${copy.title} ${pageNumber}`}
-              className="relative w-full overflow-hidden bg-[#fffefa] text-slate-800 shadow-[0_20px_70px_rgba(0,0,0,0.48)] ring-1 ring-black/10 transition-all duration-200"
+              className={`relative w-full bg-[#fffefa] text-slate-800 shadow-[0_20px_70px_rgba(0,0,0,0.48)] ring-1 ring-black/10 transition-all duration-200 ${page.showImage && isInteracting ? "z-10 overflow-visible" : "overflow-hidden"}`}
               key={pageNumber}
               style={{
                 aspectRatio: paper.aspectRatio,
@@ -484,7 +639,12 @@ export function LiveArticlePreview({
               }}
             >
               <div className="flex h-full flex-col">
-                <div className="relative min-h-0 flex-1 overflow-hidden">
+                <div
+                  className={`relative min-h-0 flex-1 ${page.showImage && isInteracting ? "overflow-visible" : "overflow-hidden"}`}
+                  ref={(element) => {
+                    pageContentRefs.current[pageIndex] = element;
+                  }}
+                >
                   {isFirstPage &&
                     showNumber &&
                     template.numberPosition === "above" && (
@@ -550,7 +710,7 @@ export function LiveArticlePreview({
                       renderWrapSpacer()}
                   </div>
 
-                  {page.showImage && renderImage()}
+                  {page.showImage && renderImage(pageIndex)}
                 </div>
 
                 {template.pageNumberPosition !== "hidden" && (

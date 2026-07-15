@@ -49,7 +49,12 @@ const panelCopy = {
       font: "Font",
       size: "Size",
       bold: "Bold",
-      showSubtitle: "Show subtitle",
+      subtitleMode: "Subtitle rule",
+      subtitleDisabled: "Subtitle unavailable",
+      subtitleFixed: "Require the same subtitle",
+      subtitleFree: "Allow custom subtitles",
+      fixedSubtitle: "Required subtitle",
+      fixedSubtitlePlaceholder: "Enter the subtitle used for every article",
       subtitleAlignment: "Subtitle align",
       alignment: "Alignment",
       titleSpacing: "Title spacing",
@@ -234,6 +239,24 @@ export function FormatPanel({
     fontStatus === "unsupported"
       ? copy.fields.fontUnsupported
       : copy.fields.fontDenied;
+  const subtitleCopy =
+    language === "zh"
+      ? {
+          disabled: "\u526f\u6807\u9898\u4e0d\u53ef\u7528",
+          fixed: "\u5f3a\u5236\u4f7f\u7528\u76f8\u540c\u526f\u6807\u9898",
+          free: "\u81ea\u7531\u4f7f\u7528\u526f\u6807\u9898",
+          label: "\u526f\u6807\u9898\u89c4\u5219",
+          placeholder: "\u8f93\u5165\u6bcf\u7bc7\u6587\u7ae0\u90fd\u4f7f\u7528\u7684\u526f\u6807\u9898",
+          required: "\u7edf\u4e00\u526f\u6807\u9898",
+        }
+      : {
+          disabled: "Subtitle unavailable",
+          fixed: "Require the same subtitle",
+          free: "Allow custom subtitles",
+          label: "Subtitle rule",
+          placeholder: "Enter the subtitle used for every article",
+          required: "Required subtitle",
+        };
 
   return (
     <div className="grid content-start gap-3">
@@ -301,16 +324,35 @@ export function FormatPanel({
             onChange={(event) => onChange("titleBold", event.target.checked)}
           />
         </ControlRow>
-        <ControlRow htmlFor="show-subtitle" label={copy.fields.showSubtitle}>
-          <Switch
-            aria-label={copy.fields.showSubtitle}
-            checked={settings.showSubtitle}
-            className="ml-auto"
-            id="show-subtitle"
-            onChange={(event) => onChange("showSubtitle", event.target.checked)}
-          />
+        <ControlRow htmlFor="subtitle-mode" label={subtitleCopy.label}>
+          <Select
+            className="h-9 text-xs"
+            id="subtitle-mode"
+            onChange={(event) =>
+              onChange(
+                "subtitleMode",
+                event.target.value as BookFormatSettings["subtitleMode"],
+              )
+            }
+            value={settings.subtitleMode}
+          >
+            <option value="disabled">{subtitleCopy.disabled}</option>
+            <option value="fixed">{subtitleCopy.fixed}</option>
+            <option value="free">{subtitleCopy.free}</option>
+          </Select>
         </ControlRow>
-        {settings.showSubtitle && (
+        {settings.subtitleMode === "fixed" && (
+          <ControlRow htmlFor="fixed-subtitle" label={subtitleCopy.required}>
+            <Input
+              className="h-9 rounded-lg border-input bg-background px-3 text-xs text-foreground placeholder:text-muted-foreground"
+              id="fixed-subtitle"
+              onChange={(event) => onChange("fixedSubtitle", event.target.value)}
+              placeholder={subtitleCopy.placeholder}
+              value={settings.fixedSubtitle}
+            />
+          </ControlRow>
+        )}
+        {settings.subtitleMode !== "disabled" && (
           <ControlRow label={copy.fields.subtitleAlignment}>
             <AlignmentControl
               label={copy.fields.subtitleAlignment}

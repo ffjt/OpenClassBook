@@ -1,22 +1,47 @@
 from datetime import datetime
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator
+
+from app.schemas.book import BookResponse
+
+AuthorStatus = Literal["invited", "joined", "not_joined"]
+AuthorArticleStatus = Literal["not_started", "draft", "submitted"]
+AuthorName = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=120),
+]
+AuthorNumber = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=50),
+]
 
 
 class AuthorBase(BaseModel):
-    name: str = Field(min_length=1, max_length=120)
-    number: str = Field(min_length=1, max_length=50)
-    join_status: str = Field(default="pending", max_length=32)
+    number: AuthorNumber
+    name: AuthorName
+    status: AuthorStatus = "joined"
+    article_status: AuthorArticleStatus = "not_started"
+    joined_at: datetime | None = None
 
 
 class AuthorCreate(AuthorBase):
-    book_id: int
+    pass
 
 
 class AuthorUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=120)
-    number: str | None = Field(default=None, min_length=1, max_length=50)
-    join_status: str | None = Field(default=None, max_length=32)
+    number: AuthorNumber | None = None
+    name: AuthorName | None = None
+    status: AuthorStatus | None = None
+    article_status: AuthorArticleStatus | None = None
+    joined_at: datetime | None = None
+
+    @field_validator("number", "name", "status", "article_status")
+    @classmethod
+    def required_fields_cannot_be_null(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("field cannot be null / 字段不能为空")
+        return value
 
 
 class AuthorResponse(AuthorBase):
@@ -24,4 +49,17 @@ class AuthorResponse(AuthorBase):
 
     id: int
     book_id: int
-    created_at: datetime
+    updated_at: datetime
+
+
+class AuthorDetailResponse(AuthorResponse):
+    book: BookResponse
+
+
+class AuthorCreateData(AuthorCreate):
+    book_id: int
+    updated_at: datetime
+
+
+class AuthorUpdateData(AuthorUpdate):
+    updated_at: datetime

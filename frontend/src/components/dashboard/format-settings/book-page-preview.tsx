@@ -62,7 +62,21 @@ export function BookPagePreview({
       >
         我的青春
       </h2>
-      {settings.showSubtitle && (
+      {settings.subtitleMode === "fixed" && settings.fixedSubtitle && (
+        <p
+          className="mt-2 text-slate-500"
+          style={{
+            fontFamily: getFontFamilyStyle(settings.titleFont),
+            fontSize: `${Math.max(12, settings.titleSize * 0.5)}px`,
+            lineHeight: 1.4,
+            textAlign: settings.subtitleAlign,
+          }}
+        >
+          {settings.fixedSubtitle}
+        </p>
+      )}
+      {settings.subtitleMode !== "disabled" &&
+        (settings.subtitleMode !== "fixed" || !settings.fixedSubtitle) && (
         <p
           className="mt-2 text-slate-500"
           style={{

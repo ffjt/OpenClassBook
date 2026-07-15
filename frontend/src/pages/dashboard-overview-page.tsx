@@ -9,8 +9,10 @@ import {
   FileCheck2,
   FileOutput,
   FileText,
+  Hash,
   RefreshCw,
   Settings2,
+  Type,
   UserPlus,
   UserRound,
   Users,
@@ -52,8 +54,8 @@ const statDefinitions = [
 
 const quickActionDefinitions = [
   { label: "inviteAuthors", icon: UserPlus, path: "/authors" },
-  { label: "viewArticles", icon: FileText, path: "/review" },
   { label: "review", icon: FileCheck2, path: "/review" },
+  { label: "typography", icon: Type, path: "/typography" },
   { label: "exportPdf", icon: FileOutput, path: "/export" },
 ] as const;
 
@@ -62,6 +64,12 @@ const copy = {
     descriptionEmpty: "No description yet.",
     createdAt: "Created",
     owner: "Owner",
+    numberMode: "Number assignment mode",
+    numberModes: {
+      none: "No article numbers",
+      automatic: "Generate numbers automatically",
+      import: "Import existing numbers",
+    },
     stats: {
       authors: "Authors",
       submitted: "Submitted",
@@ -113,8 +121,8 @@ const copy = {
     quickActionsDescription: "Common tasks for this book",
     actions: {
       inviteAuthors: "Invite Authors",
-      viewArticles: "View Articles",
       review: "Review",
+      typography: "Start Typography",
       exportPdf: "Export PDF",
     },
     errorTitle: "Unable to load the dashboard",
@@ -129,6 +137,12 @@ const copy = {
     descriptionEmpty: "暂无简介。",
     createdAt: "创建时间",
     owner: "负责人",
+    numberMode: "编号分配模式",
+    numberModes: {
+      none: "不使用编号",
+      automatic: "自动生成编号",
+      import: "导入已有编号",
+    },
     stats: {
       authors: "作者人数",
       submitted: "已投稿",
@@ -179,8 +193,8 @@ const copy = {
     quickActionsDescription: "这本书的常用操作",
     actions: {
       inviteAuthors: "邀请作者",
-      viewArticles: "查看文章",
       review: "审核投稿",
+      typography: "开始排版",
       exportPdf: "导出 PDF",
     },
     errorTitle: "无法加载仪表盘",
@@ -256,8 +270,8 @@ export function DashboardOverviewPage({
 
     Promise.all([
       bookRepository.get(bookId),
-      authorRepository.listByBook(bookId),
-      articleRepository.listByBook(bookId),
+      authorRepository.list(bookId),
+      articleRepository.list(bookId),
       templateRepository.getByBook(bookId),
     ])
       .then(([book, authors, articles, template]) => {
@@ -333,10 +347,10 @@ export function DashboardOverviewPage({
   const { articles, authors, template } = data;
   const submitted = articles.length;
   const pending = articles.filter(
-    (article) => article.review_status === "pending",
+    (article) => article.status === "pending",
   ).length;
   const approved = articles.filter(
-    (article) => article.review_status === "approved",
+    (article) => article.status === "approved",
   ).length;
   const progress = authors.length
     ? Math.min(100, Math.round((submitted / authors.length) * 100))
@@ -388,7 +402,7 @@ export function DashboardOverviewPage({
             {book.description || pageCopy.descriptionEmpty}
           </p>
         </div>
-        <dl className="grid shrink-0 gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-1">
+        <dl className="grid shrink-0 gap-2 text-xs text-muted-foreground sm:grid-cols-3 lg:grid-cols-1">
           <div className="flex items-center gap-2">
             <CalendarDays className="size-3.5 text-muted-foreground" />
             <dt>{pageCopy.createdAt}</dt>
@@ -398,6 +412,13 @@ export function DashboardOverviewPage({
             <UserRound className="size-3.5 text-muted-foreground" />
             <dt>{pageCopy.owner}</dt>
             <dd className="text-foreground">{book.owner_name}</dd>
+          </div>
+          <div className="flex items-center gap-2">
+            <Hash className="size-3.5 text-muted-foreground" />
+            <dt>{pageCopy.numberMode}</dt>
+            <dd className="text-foreground">
+              {pageCopy.numberModes[book.number_mode]}
+            </dd>
           </div>
         </dl>
       </section>
@@ -478,7 +499,13 @@ export function DashboardOverviewPage({
               </div>
               <Button
                 className="h-9 shrink-0 rounded-lg bg-primary px-4 text-xs text-primary-foreground hover:bg-primary/90"
-                onClick={() => onNavigate(`${basePath}${nextStep.path}`)}
+                onClick={() =>
+                  onNavigate(
+                    authors.length === 0 && template
+                      ? `/book/${book.id}/invite`
+                      : `${basePath}${nextStep.path}`,
+                  )
+                }
                 type="button"
               >
                 {nextStep.action}
@@ -511,7 +538,13 @@ export function DashboardOverviewPage({
               <button
                 className="group flex h-12 items-center gap-3 rounded-lg border border-border bg-background px-3.5 text-left text-sm font-medium text-foreground transition-colors hover:border-blue-500/30 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 key={label}
-                onClick={() => onNavigate(`${basePath}${path}`)}
+                onClick={() =>
+                  onNavigate(
+                    label === "inviteAuthors"
+                      ? `/book/${book.id}/invite`
+                      : `${basePath}${path}`,
+                  )
+                }
                 type="button"
               >
                 <span className="flex size-7 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:text-blue-500">

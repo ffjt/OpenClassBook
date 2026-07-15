@@ -1,8 +1,8 @@
 # OpenClassBook Backend / OpenClassBook 后端
 
-FastAPI、SQLAlchemy 2.x、Pydantic v2 与 SQLite 构成的分层后端。Book CRUD 已接入真实 SQLite，其他业务路由仍为占位实现。
+FastAPI、SQLAlchemy 2.x、Pydantic v2 与 SQLite 构成的分层后端。Books、Authors、Articles 与 Review 状态均已接入真实 SQLite。
 
-A layered backend built with FastAPI, SQLAlchemy 2.x, Pydantic v2, and SQLite. Book CRUD uses real SQLite persistence; other business routes remain placeholders.
+A layered backend built with FastAPI, SQLAlchemy 2.x, Pydantic v2, and SQLite. Books, authors, articles, and review statuses use real SQLite persistence.
 
 ## 运行 / Run
 
@@ -26,6 +26,23 @@ During development, frontend requests from `localhost`, `127.0.0.1`, and private
 - `GET /api/v1/books/{id}`
 - `PATCH /api/v1/books/{id}`
 - `DELETE /api/v1/books/{id}`
+
+## Author API / 作者接口
+
+- `GET /api/v1/books/{book_id}/authors`
+- `POST /api/v1/books/{book_id}/authors`
+- `GET /api/v1/authors/{id}`
+- `PATCH /api/v1/authors/{id}`
+- `DELETE /api/v1/authors/{id}`
+
+## Article API / 文章接口
+
+- `GET /api/v1/books/{book_id}/articles`
+- `POST /api/v1/books/{book_id}/articles`
+- `GET /api/v1/articles/{id}`
+- `PATCH /api/v1/articles/{id}`
+- `DELETE /api/v1/articles/{id}`
+- `PATCH /api/v1/articles/{id}/status`
 
 ## 检查 / Check
 

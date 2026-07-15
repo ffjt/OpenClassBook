@@ -1,13 +1,19 @@
 import { useState } from "react";
-import { CircleAlert, CheckCircle2, LoaderCircle, WandSparkles } from "lucide-react";
+import {
+  CircleAlert,
+  CheckCircle2,
+  LoaderCircle,
+  RefreshCw,
+  WandSparkles,
+} from "lucide-react";
 
 import { BookPagePreview } from "@/components/dashboard/format-settings/book-page-preview";
 import { FormatPanel } from "@/components/dashboard/format-settings/format-panel";
 import type { Template } from "@/types/template";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { Button } from "@/components/ui/button";
+import { useBookTemplate } from "@/hooks/use-book-template";
 import { useSystemFonts } from "@/hooks/use-system-fonts";
-import { useTemplate } from "@/hooks/use-template";
 import type { Language } from "@/lib/i18n";
 import { templateRepository } from "@/repositories/templateRepository";
 
@@ -22,6 +28,9 @@ const formatSettingsCopy = {
     saving: "Saving...",
     saved: "Settings saved.",
     error: "Could not save settings. Please try again.",
+    loading: "Loading saved settings...",
+    loadError: "Could not load the saved settings.",
+    retry: "Try Again",
   },
   zh: {
     eyebrow: "书籍模板设计器",
@@ -32,6 +41,9 @@ const formatSettingsCopy = {
     saving: "正在保存...",
     saved: "设置已保存。",
     error: "保存失败，请重试。",
+    loading: "正在加载已保存的设置...",
+    loadError: "无法加载已保存的设置。",
+    retry: "重试",
   },
 } as const;
 
@@ -70,7 +82,12 @@ interface FormatSettingsContentProps {
 
 function FormatSettingsContent({ bookId, language }: FormatSettingsContentProps) {
   const copy = formatSettingsCopy[language];
-  const { template: settings, setTemplate } = useTemplate();
+  const {
+    reload,
+    status: loadStatus,
+    template: settings,
+    setTemplate,
+  } = useBookTemplate(bookId);
   const { fontOptions, loadSystemFonts, status: fontStatus } = useSystemFonts();
   const [saveStatus, setSaveStatus] = useState<
     "idle" | "saving" | "saved" | "error"
@@ -87,12 +104,35 @@ function FormatSettingsContent({ bookId, language }: FormatSettingsContentProps)
   const saveSettings = async () => {
     setSaveStatus("saving");
     try {
-      await templateRepository.save(bookId, settings);
+      const savedTemplate = await templateRepository.save(bookId, settings);
+      setTemplate(savedTemplate);
       setSaveStatus("saved");
     } catch {
       setSaveStatus("error");
     }
   };
+
+  if (loadStatus === "idle" || loadStatus === "loading") {
+    return (
+      <div className="flex min-h-[420px] items-center justify-center text-sm text-muted-foreground">
+        <LoaderCircle className="mr-2 size-4 animate-spin" />
+        {copy.loading}
+      </div>
+    );
+  }
+
+  if (loadStatus === "error") {
+    return (
+      <div className="flex min-h-[420px] flex-col items-center justify-center gap-4 text-center">
+        <CircleAlert className="size-7 text-rose-400" />
+        <p className="text-sm text-muted-foreground">{copy.loadError}</p>
+        <Button onClick={reload} type="button" variant="outline">
+          <RefreshCw className="mr-2 size-4" />
+          {copy.retry}
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <>

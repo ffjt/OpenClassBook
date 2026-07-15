@@ -178,15 +178,19 @@ def test_dashboard_collections_are_read_from_sqlite(
             book_id=book.id,
             name="Avery",
             number="001",
-            join_status="joined",
-            created_at=now,
+            status="joined",
+            article_status="submitted",
+            joined_at=now,
+            updated_at=now,
         )
         other_author = Author(
             book_id=other_book.id,
             name="Jordan",
             number="002",
-            join_status="joined",
-            created_at=now,
+            status="joined",
+            article_status="submitted",
+            joined_at=now,
+            updated_at=now,
         )
         session.add_all([author, other_author])
         session.flush()
@@ -198,9 +202,9 @@ def test_dashboard_collections_are_read_from_sqlite(
                     author_id=author.id,
                     title="A real submission",
                     content="Stored in SQLite",
-                    images=[],
+                    image=None,
                     number="001",
-                    review_status="approved",
+                    status="approved",
                     created_at=now,
                     updated_at=now,
                 ),
@@ -209,9 +213,9 @@ def test_dashboard_collections_are_read_from_sqlite(
                     author_id=other_author.id,
                     title="Other submission",
                     content="Not part of this dashboard",
-                    images=[],
+                    image=None,
                     number="002",
-                    review_status="pending",
+                    status="pending",
                     created_at=now,
                     updated_at=now,
                 ),
@@ -236,7 +240,7 @@ def test_dashboard_collections_are_read_from_sqlite(
     assert [article["title"] for article in articles_response.json()] == [
         "A real submission"
     ]
-    assert articles_response.json()[0]["review_status"] == "approved"
+    assert articles_response.json()[0]["status"] == "approved"
 
     template_response = client.get(f"/api/v1/books/{book_id}/template")
     assert template_response.status_code == 200
@@ -308,3 +312,189 @@ def test_template_settings_are_created_and_updated(client: TestClient) -> None:
         "/api/v1/books/999/template",
         json={"title_format": {"size": 24}},
     ).status_code == 404
+
+
+def test_author_crud_persists_to_sqlite(
+    client: TestClient,
+    test_session_factory: sessionmaker[Session],
+) -> None:
+    book = client.post(
+        "/api/v1/books",
+        json={
+            "title": "Authors Test",
+            "description": None,
+            "owner_name": "Alex",
+            "number_mode": "automatic",
+        },
+    ).json()
+    collection = f"/api/v1/books/{book['id']}/authors"
+
+    create_response = client.post(
+        collection,
+        json={"number": " 001 ", "name": " Avery ", "status": "joined"},
+    )
+    assert create_response.status_code == 201
+    created = create_response.json()
+    assert created["book_id"] == book["id"]
+    assert created["number"] == "001"
+    assert created["name"] == "Avery"
+    assert created["status"] == "joined"
+    assert created["article_status"] == "not_started"
+    assert created["joined_at"]
+    assert created["updated_at"]
+
+    with test_session_factory() as session:
+        persisted = session.get(Author, created["id"])
+        assert persisted is not None
+        assert persisted.status == "joined"
+
+    assert client.get(collection).json() == [created]
+    author_detail = client.get(f"/api/v1/authors/{created['id']}").json()
+    assert {key: author_detail[key] for key in created} == created
+    assert author_detail["book"]["id"] == book["id"]
+    assert author_detail["book"]["title"] == "Authors Test"
+
+    update_response = client.patch(
+        f"/api/v1/authors/{created['id']}",
+        json={"name": "Avery Lee", "status": "not_joined"},
+    )
+    assert update_response.status_code == 200
+    updated = update_response.json()
+    assert updated["name"] == "Avery Lee"
+    assert updated["status"] == "not_joined"
+    assert updated["joined_at"] is None
+
+    assert client.patch(f"/api/v1/authors/{created['id']}", json={}).status_code == 400
+    assert client.delete(f"/api/v1/authors/{created['id']}").status_code == 204
+    assert client.get(f"/api/v1/authors/{created['id']}").status_code == 404
+    assert client.get(collection).json() == []
+
+
+def test_invitation_join_and_welcome_flow_persists_to_sqlite(
+    client: TestClient,
+    test_session_factory: sessionmaker[Session],
+) -> None:
+    book = client.post(
+        "/api/v1/books",
+        json={
+            "title": "Our Class Stories",
+            "description": "A real invitation flow",
+            "owner_name": "Ms. Zhang",
+            "number_mode": "automatic",
+        },
+    ).json()
+
+    invite_response = client.get(f"/api/v1/books/{book['id']}/invite")
+    assert invite_response.status_code == 200
+    assert invite_response.json() == {
+        "book_id": book["id"],
+        "title": "Our Class Stories",
+        "owner_name": "Ms. Zhang",
+        "invite_code": book["invite_code"],
+    }
+
+    join_path = f"/api/v1/join/{book['invite_code']}"
+    invitation_response = client.get(join_path)
+    assert invitation_response.status_code == 200
+    assert invitation_response.json()["book"] == book
+
+    join_response = client.post(join_path, json={"name": "  Zhang San  "})
+    assert join_response.status_code == 201
+    author_id = join_response.json()["author_id"]
+
+    with test_session_factory() as session:
+        author = session.get(Author, author_id)
+        assert author is not None
+        assert author.book_id == book["id"]
+        assert author.name == "Zhang San"
+        assert author.number == "001"
+        assert author.status == "joined"
+        assert author.joined_at is not None
+
+    welcome_response = client.get(f"/api/v1/authors/{author_id}")
+    assert welcome_response.status_code == 200
+    welcome = welcome_response.json()
+    assert welcome["name"] == "Zhang San"
+    assert welcome["book"]["title"] == "Our Class Stories"
+    assert welcome["book"]["owner_name"] == "Ms. Zhang"
+    assert welcome["book"]["description"] == "A real invitation flow"
+    assert welcome["book"]["number_mode"] == "automatic"
+    assert welcome["book"]["author_count"] == 1
+
+
+def test_invalid_invitation_returns_404(client: TestClient) -> None:
+    assert client.get("/api/v1/books/999/invite").status_code == 404
+    assert client.get("/api/v1/join/OCB-NOT123").status_code == 404
+    assert client.post(
+        "/api/v1/join/OCB-NOT123",
+        json={"name": "Alex"},
+    ).status_code == 404
+
+
+def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) -> None:
+    book = client.post(
+        "/api/v1/books",
+        json={
+            "title": "Review Test",
+            "description": None,
+            "owner_name": "Alex",
+            "number_mode": "automatic",
+        },
+    ).json()
+    author = client.post(
+        f"/api/v1/books/{book['id']}/authors",
+        json={"number": "001", "name": "Avery", "status": "joined"},
+    ).json()
+    collection = f"/api/v1/books/{book['id']}/articles"
+
+    create_response = client.post(
+        collection,
+        json={
+            "author_id": author["id"],
+            "number": "001",
+            "title": "A real draft",
+            "content": "Stored in SQLite",
+            "image": "https://example.com/image.jpg",
+            "status": "draft",
+        },
+    )
+    assert create_response.status_code == 201
+    created = create_response.json()
+    assert created["book_id"] == book["id"]
+    assert created["status"] == "draft"
+    assert created["image"] == "https://example.com/image.jpg"
+    assert client.get(f"/api/v1/authors/{author['id']}").json()[
+        "article_status"
+    ] == "draft"
+
+    assert client.get(collection).json() == [created]
+    assert client.get(f"/api/v1/articles/{created['id']}").json() == created
+
+    update_response = client.patch(
+        f"/api/v1/articles/{created['id']}",
+        json={"title": "A real submission", "status": "pending"},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["title"] == "A real submission"
+    assert update_response.json()["status"] == "pending"
+
+    approve_response = client.patch(
+        f"/api/v1/articles/{created['id']}/status",
+        json={"status": "approved"},
+    )
+    assert approve_response.status_code == 200
+    assert approve_response.json()["status"] == "approved"
+    assert client.get(f"/api/v1/authors/{author['id']}").json()[
+        "article_status"
+    ] == "submitted"
+
+    assert client.patch(
+        f"/api/v1/articles/{created['id']}/status",
+        json={"status": "invalid"},
+    ).status_code == 422
+    assert client.delete(f"/api/v1/articles/{created['id']}").status_code == 204
+    assert client.get(f"/api/v1/articles/{created['id']}").status_code == 404
+    assert client.get(collection).json() == []
+    assert client.get(f"/api/v1/authors/{author['id']}").json()[
+        "article_status"
+    ] == "not_started"
