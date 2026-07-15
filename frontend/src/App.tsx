@@ -56,6 +56,11 @@ const ReviewPage = lazy(() =>
     default: module.ReviewPage,
   })),
 );
+const BookLayoutPage = lazy(() =>
+  import("@/pages/book-layout-page").then((module) => ({
+    default: module.BookLayoutPage,
+  })),
+);
 const JoinBookPage = lazy(() =>
   import("@/pages/join-book-page").then((module) => ({
     default: module.JoinBookPage,
@@ -84,7 +89,7 @@ interface SharedPageProps {
 }
 
 interface DashboardRouteProps extends SharedPageProps {
-  page: "overview" | "authors" | "review" | "template";
+  page: "overview" | "authors" | "review" | "template" | "layout";
 }
 
 function DashboardRoute({
@@ -110,6 +115,7 @@ function DashboardRoute({
   }
   if (page === "authors") return <AuthorsPage {...sharedProps} />;
   if (page === "review") return <ReviewPage {...sharedProps} />;
+  if (page === "layout") return <BookLayoutPage {...sharedProps} bookId={routeBookId} />;
   return (
     <DashboardOverviewPage
       {...sharedProps}
@@ -231,6 +237,10 @@ function App() {
         <Route
           path="/book/:bookId/dashboard/template"
           element={<DashboardRoute {...sharedProps} page="template" />}
+        />
+        <Route
+          path="/book/:bookId/dashboard/layout"
+          element={<DashboardRoute {...sharedProps} page="layout" />}
         />
         <Route path="/dashboard/*" element={<Navigate replace to="/book" />} />
         <Route path="/:bookId/dashboard/*" element={<LegacyDashboardRedirect />} />

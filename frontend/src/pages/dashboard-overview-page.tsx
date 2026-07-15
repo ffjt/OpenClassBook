@@ -54,6 +54,7 @@ const quickActionDefinitions = [
   { label: "inviteAuthors", icon: UserPlus, path: "/authors" },
   { label: "viewArticles", icon: FileText, path: "/review" },
   { label: "review", icon: FileCheck2, path: "/review" },
+  { label: "bookLayout", icon: Settings2, path: "/layout" },
   { label: "exportPdf", icon: FileOutput, path: "/export" },
 ] as const;
 
@@ -115,6 +116,7 @@ const copy = {
       inviteAuthors: "Invite Authors",
       viewArticles: "View Articles",
       review: "Review",
+      bookLayout: "Book Layout",
       exportPdf: "Export PDF",
     },
     errorTitle: "Unable to load the dashboard",
@@ -181,6 +183,7 @@ const copy = {
       inviteAuthors: "邀请作者",
       viewArticles: "查看文章",
       review: "审核投稿",
+      bookLayout: "书籍排版",
       exportPdf: "导出 PDF",
     },
     errorTitle: "无法加载仪表盘",

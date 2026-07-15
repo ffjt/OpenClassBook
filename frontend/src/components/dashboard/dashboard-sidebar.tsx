@@ -5,7 +5,7 @@ import {
   LayoutDashboard,
   Settings,
   SlidersHorizontal,
-  Type,
+  ListTree,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -18,7 +18,7 @@ export type DashboardSection =
   | "Authors"
   | "Review"
   | "Template"
-  | "Typography"
+  | "Layout"
   | "Export"
   | "Settings";
 
@@ -34,7 +34,7 @@ const navigationItems: NavigationItem[] = [
   { label: "Authors", title: { en: "Authors", zh: "作者" }, icon: Users, path: "/authors" },
   { label: "Review", title: { en: "Review", zh: "审核" }, icon: FileCheck2, path: "/review" },
   { label: "Template", title: { en: "Format Settings", zh: "格式设置" }, icon: SlidersHorizontal, path: "/template" },
-  { label: "Typography", title: { en: "Typography", zh: "排版" }, icon: Type, path: "/typography" },
+  { label: "Layout", title: { en: "Book Layout", zh: "书籍排版" }, icon: ListTree, path: "/layout" },
   { label: "Export", title: { en: "Export", zh: "导出" }, icon: FileOutput, path: "/export" },
   { label: "Settings", title: { en: "Settings", zh: "设置" }, icon: Settings, path: "/settings" },
 ];
