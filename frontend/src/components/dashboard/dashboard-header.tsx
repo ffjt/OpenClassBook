@@ -17,7 +17,7 @@ const sectionTitles: Record<DashboardSection, Record<Language, string>> = {
   Authors: { en: "Authors", zh: "作者" },
   Review: { en: "Review", zh: "审核" },
   Template: { en: "Format Settings", zh: "格式设置" },
-  Typography: { en: "Typography", zh: "排版" },
+  Layout: { en: "Book Layout", zh: "书籍排版" },
   Export: { en: "Export", zh: "导出" },
   Settings: { en: "Settings", zh: "设置" },
 };

@@ -12,7 +12,6 @@ import {
   Hash,
   RefreshCw,
   Settings2,
-  Type,
   UserPlus,
   UserRound,
   Users,
@@ -55,7 +54,7 @@ const statDefinitions = [
 const quickActionDefinitions = [
   { label: "inviteAuthors", icon: UserPlus, path: "/authors" },
   { label: "review", icon: FileCheck2, path: "/review" },
-  { label: "typography", icon: Type, path: "/typography" },
+  { label: "bookLayout", icon: Settings2, path: "/layout" },
   { label: "exportPdf", icon: FileOutput, path: "/export" },
 ] as const;
 
@@ -122,7 +121,7 @@ const copy = {
     actions: {
       inviteAuthors: "Invite Authors",
       review: "Review",
-      typography: "Start Typography",
+      bookLayout: "Book Layout",
       exportPdf: "Export PDF",
     },
     errorTitle: "Unable to load the dashboard",
@@ -194,7 +193,7 @@ const copy = {
     actions: {
       inviteAuthors: "邀请作者",
       review: "审核投稿",
-      typography: "开始排版",
+      bookLayout: "书籍排版",
       exportPdf: "导出 PDF",
     },
     errorTitle: "无法加载仪表盘",

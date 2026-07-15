@@ -11,13 +11,14 @@ export interface Article {
   content: string;
   image: string | null;
   status: ArticleStatus;
+  review_status: Exclude<ArticleStatus, "draft">;
   created_at: string;
   updated_at: string;
 }
 
 export interface ArticleCreateInput {
   author_id: number;
-  number: string;
+  number?: string;
   title: string;
   content: string;
   image?: string | null;
@@ -29,6 +30,19 @@ export type ArticleUpdateInput = Partial<ArticleCreateInput>;
 export const articleRepository = {
   list(bookId: number) {
     return apiRequest<Article[]>(`/books/${bookId}/articles`);
+  },
+
+  listByAuthor(authorId: number) {
+    return apiRequest<Article[]>(`/authors/${authorId}/articles`);
+  },
+
+  listByBook(bookId: number) {
+    return this.list(bookId).then((articles) =>
+      articles.map((article) => ({
+        ...article,
+        review_status: article.status as Article["review_status"],
+      })),
+    );
   },
 
   get(id: number) {

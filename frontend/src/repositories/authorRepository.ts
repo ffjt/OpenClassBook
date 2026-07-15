@@ -34,6 +34,10 @@ export const authorRepository = {
     return apiRequest<Author[]>(`/books/${bookId}/authors`);
   },
 
+  listByBook(bookId: number) {
+    return this.list(bookId);
+  },
+
   get(id: number) {
     return apiRequest<AuthorDetail>(`/authors/${id}`);
   },
