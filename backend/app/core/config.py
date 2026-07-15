@@ -1,4 +1,8 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -7,6 +11,9 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "sqlite:///./openclassbook.db"
+    export_dir: Path = Path("generated/exports")
+    storage_dir: Path = BACKEND_ROOT / "storage"
+    max_upload_size: int = 100 * 1024 * 1024
     cors_origins: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

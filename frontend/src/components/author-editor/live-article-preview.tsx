@@ -62,7 +62,7 @@ const paperCapacity: Record<PageSize, number> = {
   custom: 1,
 };
 
-interface PreviewPage {
+export interface PreviewPage {
   lines: string[];
   showImage: boolean;
 }
@@ -135,7 +135,9 @@ function getPageCapacities(template: Template, body: string) {
   };
 }
 
-function paginateArticle(
+// Shared with the book-layout publication preview.
+// eslint-disable-next-line react-refresh/only-export-components
+export function paginateArticle(
   body: string,
   imageUrl: string,
   imagePage: number,
@@ -286,7 +288,9 @@ export function LiveArticlePreview({
         }
       : paperStyles[template.pageSize];
   const showNumber =
-    template.showNumber && template.numberPosition !== "hidden";
+    Boolean(article.number) &&
+    template.showNumber &&
+    template.numberPosition !== "hidden";
   const subtitle =
     template.subtitleMode === "fixed"
       ? template.fixedSubtitle

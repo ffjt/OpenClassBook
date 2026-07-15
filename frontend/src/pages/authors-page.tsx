@@ -1,14 +1,19 @@
 import {
   AlertCircle,
-  Hash,
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  FileText,
   MoreHorizontal,
   RefreshCw,
   Search,
+  Trash2,
   UserPlus,
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { LiveArticlePreview } from "@/components/author-editor/live-article-preview";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,7 +25,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -30,17 +34,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Language } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
+import {
+  articleRepository,
+  type Article,
+  type ArticleStatus,
+} from "@/repositories/articleRepository";
 import {
   authorRepository,
   type Author,
-  type AuthorArticleStatus,
-  type AuthorStatus,
+  type AuthorPreview,
 } from "@/repositories/authorRepository";
-import {
-  bookRepository,
-  type NumberMode,
-} from "@/repositories/bookRepository";
+import type { PreviewArticle } from "@/types/article";
 
 interface AuthorsPageProps {
   basePath: string;
@@ -50,156 +54,117 @@ interface AuthorsPageProps {
   onToggleLanguage: () => void;
 }
 
-const statusStyles: Record<AuthorStatus, string> = {
-  joined: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
-  invited: "border-blue-500/20 bg-blue-500/10 text-blue-400",
-  not_joined: "border-border bg-muted/40 text-muted-foreground",
-};
-
-const articleStyles: Record<AuthorArticleStatus, string> = {
-  submitted: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
-  draft: "border-amber-500/20 bg-amber-500/10 text-amber-400",
-  not_started: "border-border bg-muted/40 text-muted-foreground",
-};
-
-const authorsCopy = {
+const copy = {
   en: {
     title: "Authors",
-    description: "Manage everyone contributing to this book.",
-    contributors: "contributors",
-    numberMode: "Number assignment mode",
-    numberModes: {
-      none: "No article numbers",
-      automatic: "Generate numbers automatically",
-      import: "Import existing numbers",
-    },
-    stats: {
-      total: "Total Authors",
-      joined: "Joined",
-      submitted: "Submitted",
-      pending: "Pending",
-    },
+    description: "Each author has a stable identity and can manage multiple articles.",
+    totalAuthors: "Total Authors",
+    totalArticles: "Total Articles",
+    activeAuthors: "Authors with submissions",
     search: "Search authors...",
-    searchLabel: "Search authors",
-    filterLabel: "Filter authors by status",
-    allStatuses: "All statuses",
     invite: "Invite Authors",
+    name: "Display Name",
+    articles: "Articles",
+    latest: "Latest Article",
+    updated: "Last Updated",
+    actions: "Actions",
+    noArticle: "No submissions yet",
     noAuthors: "No authors yet.",
-    noAuthorsDescription:
-      "Invite your first author to start collecting articles.",
-    noResults: "No authors found.",
-    noResultsDescription: "Try adjusting your search or status filter.",
-    clearFilters: "Clear filters",
-    columns: {
-      number: "Number",
-      name: "Name",
-      status: "Status",
-      article: "Article",
-      updatedAt: "Last Updated",
-      actions: "Actions",
-    },
-    actions: { view: "View", edit: "Edit", remove: "Remove" },
-    actionLabel: "Actions for",
-    statuses: {
-      joined: "Joined",
-      invited: "Invited",
-      not_joined: "Not Joined",
-    },
-    articleStatuses: {
-      submitted: "Submitted",
-      draft: "Draft",
-      not_started: "Not Started",
-    },
-    errorTitle: "Unable to load authors",
-    errorDescription:
-      "Unable to connect to the backend. Please confirm FastAPI is running.",
+    noResults: "No matching authors.",
+    viewArticles: "View articles",
+    remove: "Remove",
+    removeConfirm: "Remove this author and all their articles?",
+    error: "Unable to load authors.",
     retry: "Retry",
     loading: "Loading authors",
-    removeConfirm: "Remove this author and their articles?",
+    back: "Back to authors",
+    authorArticles: "Articles by",
+    articleCount: (count: number) => `${count} ${count === 1 ? "article" : "articles"}`,
+    noAuthorArticles: "This author has not created any articles yet.",
+    loadingArticles: "Loading articles",
+    articleError: "Unable to load this author's articles.",
+    statuses: {
+      draft: "Draft",
+      pending: "Pending",
+      approved: "Approved",
+      rejected: "Returned",
+    },
+    showContent: "View content",
+    hideContent: "Hide content",
+    goToReview: "Go to review",
+    deleteArticle: "Delete",
+    deleteConfirm: "Delete this article? This action cannot be undone.",
+    actionError: "The operation failed. Please try again.",
   },
   zh: {
     title: "作者管理",
-    description: "管理本书的所有投稿作者。",
-    contributors: "位作者",
-    numberMode: "编号分配模式",
-    numberModes: {
-      none: "不使用编号",
-      automatic: "自动生成编号",
-      import: "导入已有编号",
-    },
-    stats: {
-      total: "作者总数",
-      joined: "已加入",
-      submitted: "已投稿",
-      pending: "待完成",
-    },
+    description: "每位作者拥有稳定身份，并可统一管理多篇文章。",
+    totalAuthors: "作者总数",
+    totalArticles: "文章总数",
+    activeAuthors: "已有投稿作者",
     search: "搜索作者...",
-    searchLabel: "搜索作者",
-    filterLabel: "按状态筛选作者",
-    allStatuses: "全部状态",
     invite: "邀请作者",
+    name: "显示名称",
+    articles: "文章数量",
+    latest: "最近文章",
+    updated: "最后更新",
+    actions: "操作",
+    noArticle: "暂无投稿",
     noAuthors: "暂无作者。",
-    noAuthorsDescription: "邀请第一位作者开始投稿。",
-    noResults: "未找到作者。",
-    noResultsDescription: "请调整搜索内容或状态筛选条件。",
-    clearFilters: "清除筛选",
-    columns: {
-      number: "编号",
-      name: "姓名",
-      status: "加入状态",
-      article: "文章状态",
-      updatedAt: "最后更新",
-      actions: "操作",
-    },
-    actions: { view: "查看", edit: "编辑", remove: "移除" },
-    actionLabel: "操作：",
-    statuses: {
-      joined: "已加入",
-      invited: "已邀请",
-      not_joined: "未加入",
-    },
-    articleStatuses: {
-      submitted: "已投稿",
-      draft: "草稿",
-      not_started: "未开始",
-    },
-    errorTitle: "无法加载作者",
-    errorDescription: "无法连接后端。请确认 FastAPI 正在运行。",
+    noResults: "未找到匹配的作者。",
+    viewArticles: "查看文章",
+    remove: "移除",
+    removeConfirm: "确定移除这位作者及其全部文章吗？",
+    error: "无法加载作者。",
     retry: "重试",
     loading: "正在加载作者",
-    removeConfirm: "确定移除这位作者及其文章吗？",
+    back: "返回作者列表",
+    authorArticles: "作者文章",
+    articleCount: (count: number) => `${count} 篇文章`,
+    noAuthorArticles: "这位作者还没有创建文章。",
+    loadingArticles: "正在加载文章",
+    articleError: "无法加载这位作者的文章。",
+    statuses: {
+      draft: "草稿",
+      pending: "待审核",
+      approved: "已通过",
+      rejected: "已退回",
+    },
+    showContent: "查看内容",
+    hideContent: "收起内容",
+    goToReview: "转到审核",
+    deleteArticle: "删除",
+    deleteConfirm: "确定删除这篇文章吗？此操作无法撤销。",
+    actionError: "操作失败，请重试。",
   },
 } as const;
 
+const statusStyles: Record<ArticleStatus, string> = {
+  draft: "border-slate-500/20 bg-slate-500/10 text-slate-400",
+  pending: "border-amber-500/20 bg-amber-500/10 text-amber-400",
+  approved: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
+  rejected: "border-rose-500/20 bg-rose-500/10 text-rose-400",
+};
+
 function formatDate(value: string, language: Language) {
+  const timestamp = /(?:Z|[+-]\d{2}:\d{2})$/.test(value) ? value : `${value}Z`;
   return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en", {
     dateStyle: "medium",
-  }).format(new Date(value));
+  }).format(new Date(timestamp));
 }
 
-function AuthorsSkeleton({ language }: { language: Language }) {
-  return (
-    <div
-      aria-label={authorsCopy[language].loading}
-      className="animate-pulse"
-      role="status"
-    >
-      <div className="border-b border-border pb-8">
-        <div className="h-8 w-52 rounded bg-muted" />
-        <div className="mt-3 h-4 w-80 rounded bg-muted/70" />
-      </div>
-      <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }, (_, index) => (
-          <div
-            className="h-24 rounded-xl border border-border bg-muted/30"
-            key={index}
-          />
-        ))}
-      </div>
-      <div className="mt-7 h-10 w-full max-w-md rounded-lg bg-muted/50" />
-      <div className="mt-4 h-72 rounded-xl border border-border bg-muted/30" />
-    </div>
-  );
+function toPreviewArticle(article: Article): PreviewArticle {
+  return {
+    number: article.number,
+    title: article.title,
+    subtitle: "",
+    body: article.content,
+    imageUrl: article.image ?? "",
+    imagePage: -1,
+    imageWrap: "topBottom",
+    imagePosition: { x: 50, y: 72 },
+    imageSize: { width: 50, height: 25 },
+  };
 }
 
 export function AuthorsPage({
@@ -209,136 +174,132 @@ export function AuthorsPage({
   onNavigate,
   onToggleLanguage,
 }: AuthorsPageProps) {
-  const copy = authorsCopy[language];
+  const pageCopy = copy[language];
   const [authors, setAuthors] = useState<Author[]>([]);
-  const [numberMode, setNumberMode] = useState<NumberMode | null>(null);
+  const [previews, setPreviews] = useState<Map<number, AuthorPreview>>(new Map());
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | AuthorStatus>(
-    "all",
-  );
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [selectedAuthor, setSelectedAuthor] = useState<Author | null>(null);
+  const [authorArticles, setAuthorArticles] = useState<Article[]>([]);
+  const [isArticlesLoading, setIsArticlesLoading] = useState(false);
+  const [articlesError, setArticlesError] = useState(false);
+  const [articlesReloadKey, setArticlesReloadKey] = useState(0);
+  const [expandedArticleId, setExpandedArticleId] = useState<number | null>(null);
+  const [busyArticleId, setBusyArticleId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState(false);
 
   useEffect(() => {
     let active = true;
     setIsLoading(true);
     setHasError(false);
 
-    Promise.all([bookRepository.get(bookId), authorRepository.list(bookId)])
-      .then(([book, loadedAuthors]) => {
-        if (active) {
-          setAuthors(loadedAuthors);
-          setNumberMode(book.number_mode);
-        }
-      })
-      .catch(() => {
+    async function loadAuthors() {
+      try {
+        const loadedAuthors = await authorRepository.list(bookId);
+        const loadedPreviews = await Promise.all(
+          loadedAuthors.map((author) => authorRepository.preview(author.id)),
+        );
+        if (!active) return;
+        setAuthors(loadedAuthors);
+        setPreviews(
+          new Map(
+            loadedAuthors.map((author, index) => [author.id, loadedPreviews[index]]),
+          ),
+        );
+      } catch {
         if (active) setHasError(true);
-      })
-      .finally(() => {
+      } finally {
         if (active) setIsLoading(false);
-      });
+      }
+    }
 
+    void loadAuthors();
     return () => {
       active = false;
     };
   }, [bookId, reloadKey]);
 
-  const filteredAuthors = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return authors.filter((author) => {
-      const matchesQuery =
-        !normalizedQuery ||
-        author.name.toLowerCase().includes(normalizedQuery) ||
-        author.number.toLowerCase().includes(normalizedQuery);
-      const matchesStatus =
-        statusFilter === "all" || author.status === statusFilter;
-      return matchesQuery && matchesStatus;
-    });
-  }, [authors, query, statusFilter]);
+  useEffect(() => {
+    if (!selectedAuthor) return;
+    let active = true;
+    setIsArticlesLoading(true);
+    setArticlesError(false);
+    setActionError(false);
 
-  const stats = [
-    { label: copy.stats.total, value: authors.length, tone: "text-foreground" },
-    {
-      label: copy.stats.joined,
-      value: authors.filter((author) => author.status === "joined").length,
-      tone: "text-emerald-400",
-    },
-    {
-      label: copy.stats.submitted,
-      value: authors.filter((author) => author.article_status === "submitted")
-        .length,
-      tone: "text-blue-400",
-    },
-    {
-      label: copy.stats.pending,
-      value: authors.filter((author) => author.article_status !== "submitted")
-        .length,
-      tone: "text-amber-400",
-    },
-  ];
+    articleRepository
+      .listByAuthor(selectedAuthor.id)
+      .then((articles) => {
+        if (active) setAuthorArticles(articles);
+      })
+      .catch(() => {
+        if (active) setArticlesError(true);
+      })
+      .finally(() => {
+        if (active) setIsArticlesLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [articlesReloadKey, selectedAuthor]);
+
+  const filteredAuthors = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return authors.filter((author) => author.name.toLowerCase().includes(normalized));
+  }, [authors, query]);
+
+  const totalArticles = [...previews.values()].reduce(
+    (sum, preview) => sum + preview.article_count,
+    0,
+  );
+  const activeAuthors = [...previews.values()].filter(
+    (preview) => preview.article_count > 0,
+  ).length;
+
+  const refreshSelectedAuthor = async () => {
+    if (!selectedAuthor) return;
+    const preview = await authorRepository.preview(selectedAuthor.id);
+    setPreviews((current) => new Map(current).set(selectedAuthor.id, preview));
+  };
 
   const removeAuthor = async (author: Author) => {
-    if (!window.confirm(copy.removeConfirm)) return;
-    setDeletingId(author.id);
+    if (!window.confirm(pageCopy.removeConfirm)) return;
     try {
       await authorRepository.delete(author.id);
       setAuthors((current) => current.filter((item) => item.id !== author.id));
+      setPreviews((current) => {
+        const next = new Map(current);
+        next.delete(author.id);
+        return next;
+      });
     } catch {
       setHasError(true);
-    } finally {
-      setDeletingId(null);
     }
   };
 
-  if (isLoading) {
-    return (
-      <DashboardLayout
-        activeSection="Authors"
-        basePath={basePath}
-        language={language}
-        onNavigate={onNavigate}
-        onToggleLanguage={onToggleLanguage}
-      >
-        <AuthorsSkeleton language={language} />
-      </DashboardLayout>
-    );
-  }
+  const deleteArticle = async (article: Article) => {
+    if (!window.confirm(pageCopy.deleteConfirm)) return;
+    setBusyArticleId(article.id);
+    setActionError(false);
+    try {
+      await articleRepository.delete(article.id);
+      setAuthorArticles((current) => current.filter((item) => item.id !== article.id));
+      setExpandedArticleId((current) => (current === article.id ? null : current));
+      await refreshSelectedAuthor();
+    } catch {
+      setActionError(true);
+    } finally {
+      setBusyArticleId(null);
+    }
+  };
 
-  if (hasError) {
-    return (
-      <DashboardLayout
-        activeSection="Authors"
-        basePath={basePath}
-        language={language}
-        onNavigate={onNavigate}
-        onToggleLanguage={onToggleLanguage}
-      >
-        <Card className="mx-auto mt-20 max-w-lg border-border bg-card shadow-none">
-          <CardContent className="flex flex-col items-center px-7 py-12 text-center">
-            <span className="flex size-12 items-center justify-center rounded-full bg-rose-500/10 text-rose-400 ring-1 ring-inset ring-rose-500/20">
-              <AlertCircle className="size-5" />
-            </span>
-            <h1 className="mt-5 text-lg font-semibold text-foreground">
-              {copy.errorTitle}
-            </h1>
-            <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-              {copy.errorDescription}
-            </p>
-            <Button
-              className="mt-6 h-9 rounded-lg bg-primary px-4 text-xs text-primary-foreground hover:bg-primary/90"
-              onClick={() => setReloadKey((value) => value + 1)}
-              type="button"
-            >
-              <RefreshCw className="mr-2 size-3.5" />
-              {copy.retry}
-            </Button>
-          </CardContent>
-        </Card>
-      </DashboardLayout>
-    );
-  }
+  const openAuthor = (author: Author) => {
+    setSelectedAuthor(author);
+    setExpandedArticleId(null);
+    setAuthorArticles([]);
+  };
 
   return (
     <DashboardLayout
@@ -348,203 +309,275 @@ export function AuthorsPage({
       onNavigate={onNavigate}
       onToggleLanguage={onToggleLanguage}
     >
-      <section className="flex flex-col gap-4 border-b border-border pb-8 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-[-0.035em] text-foreground sm:text-3xl">
-            {copy.title}
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">{copy.description}</p>
+      {isLoading ? (
+        <div aria-label={pageCopy.loading} className="animate-pulse" role="status">
+          <div className="h-8 w-52 rounded bg-muted" />
+          <div className="mt-7 grid gap-3 sm:grid-cols-3">
+            {Array.from({ length: 3 }, (_, index) => (
+              <div className="h-24 rounded-xl bg-muted/40" key={index} />
+            ))}
+          </div>
+          <div className="mt-7 h-72 rounded-xl bg-muted/30" />
         </div>
-        <dl className="grid shrink-0 gap-2 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <Hash className="size-3.5" />
-            <dt>{copy.numberMode}</dt>
-            <dd className="text-foreground">
-              {numberMode ? copy.numberModes[numberMode] : "—"}
-            </dd>
-          </div>
-          <div className="flex items-center gap-2">
-            <Users className="size-3.5" />
-            <dt className="sr-only">{copy.stats.total}</dt>
-            <dd>
-              {authors.length} {copy.contributors}
-            </dd>
-          </div>
-        </dl>
-      </section>
-
-      <section className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map(({ label, tone, value }) => (
-          <Card className="border-border bg-card shadow-none" key={label}>
-            <CardContent className="p-5">
-              <p className="text-xs font-medium text-muted-foreground">{label}</p>
-              <p
-                className={cn(
-                  "mt-2 text-2xl font-semibold tracking-[-0.03em]",
-                  tone,
-                )}
-              >
-                {value}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </section>
-
-      <section className="mt-7">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="relative w-full sm:w-72">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                aria-label={copy.searchLabel}
-                className="h-10 rounded-lg border-input bg-background pl-9 text-sm placeholder:text-muted-foreground"
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={copy.search}
-                value={query}
-              />
-            </div>
-            <Select
-              aria-label={copy.filterLabel}
-              onChange={(event) =>
-                setStatusFilter(event.target.value as "all" | AuthorStatus)
-              }
-              value={statusFilter}
-            >
-              <option className="bg-popover" value="all">
-                {copy.allStatuses}
-              </option>
-              {(Object.keys(statusStyles) as AuthorStatus[]).map((status) => (
-                <option className="bg-popover" key={status} value={status}>
-                  {copy.statuses[status]}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <Button
-            className="h-10 rounded-lg bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90"
-            onClick={() => onNavigate(`/book/${bookId}/invite`)}
-            type="button"
-          >
-            <UserPlus className="mr-2 size-4" />
-            {copy.invite}
-          </Button>
-        </div>
-
-        <Card className="mt-4 overflow-hidden border-border bg-card shadow-none">
-          {authors.length === 0 ? (
-            <div className="flex min-h-72 flex-col items-center justify-center px-6 py-16 text-center">
-              <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <Users className="size-5" />
-              </span>
-              <h2 className="mt-4 text-sm font-semibold text-foreground">
-                {copy.noAuthors}
-              </h2>
-              <p className="mt-1.5 max-w-xs text-sm text-muted-foreground">
-                {copy.noAuthorsDescription}
-              </p>
-              <Button
-                className="mt-5 h-9 rounded-lg bg-primary px-4 text-xs text-primary-foreground hover:bg-primary/90"
-                onClick={() => onNavigate(`/book/${bookId}/invite`)}
-                type="button"
-              >
-                <UserPlus className="mr-2 size-3.5" />
-                {copy.invite}
-              </Button>
-            </div>
-          ) : filteredAuthors.length === 0 ? (
-            <div className="flex min-h-64 flex-col items-center justify-center px-6 py-16 text-center">
-              <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <Search className="size-5" />
-              </span>
-              <h2 className="mt-4 text-sm font-semibold text-foreground">
-                {copy.noResults}
-              </h2>
-              <p className="mt-1.5 text-sm text-muted-foreground">
-                {copy.noResultsDescription}
-              </p>
-              <Button
-                className="mt-5 h-9 rounded-lg border-border bg-transparent px-4 text-xs text-foreground hover:bg-muted"
-                onClick={() => {
-                  setQuery("");
-                  setStatusFilter("all");
-                }}
-                type="button"
-                variant="outline"
-              >
-                {copy.clearFilters}
-              </Button>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-24">{copy.columns.number}</TableHead>
-                  <TableHead>{copy.columns.name}</TableHead>
-                  <TableHead>{copy.columns.status}</TableHead>
-                  <TableHead>{copy.columns.article}</TableHead>
-                  <TableHead>{copy.columns.updatedAt}</TableHead>
-                  <TableHead className="w-16 text-right">
-                    {copy.columns.actions}
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAuthors.map((author) => (
-                  <TableRow key={author.id}>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {author.number}
-                    </TableCell>
-                    <TableCell className="font-medium text-foreground">
-                      {author.name}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={cn("border", statusStyles[author.status])}>
-                        {copy.statuses[author.status]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={cn(
-                          "border",
-                          articleStyles[author.article_status],
-                        )}
-                      >
-                        {copy.articleStatuses[author.article_status]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDate(author.updated_at, language)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          aria-label={`${copy.actionLabel} ${author.name}`}
-                          className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                          type="button"
-                        >
-                          <MoreHorizontal className="size-4" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuItem>{copy.actions.view}</DropdownMenuItem>
-                          <DropdownMenuItem>{copy.actions.edit}</DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-red-400 focus:text-red-300"
-                            disabled={deletingId === author.id}
-                            onClick={() => void removeAuthor(author)}
-                          >
-                            {copy.actions.remove}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+      ) : hasError ? (
+        <Card className="mx-auto mt-20 max-w-lg">
+          <CardContent className="flex flex-col items-center py-12 text-center">
+            <AlertCircle className="size-6 text-rose-400" />
+            <p className="mt-4 text-sm text-muted-foreground">{pageCopy.error}</p>
+            <Button className="mt-5" onClick={() => setReloadKey((value) => value + 1)}>
+              <RefreshCw className="mr-2 size-4" />
+              {pageCopy.retry}
+            </Button>
+          </CardContent>
         </Card>
-      </section>
+      ) : (
+        <>
+          <header className="flex flex-col gap-4 border-b border-border pb-8 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 className="text-3xl font-semibold tracking-[-0.035em]">{pageCopy.title}</h1>
+              <p className="mt-2 text-sm text-muted-foreground">{pageCopy.description}</p>
+            </div>
+            <Button onClick={() => onNavigate(`/book/${bookId}/invite`)}>
+              <UserPlus className="mr-2 size-4" />
+              {pageCopy.invite}
+            </Button>
+          </header>
+
+          <section className="mt-7 grid gap-3 sm:grid-cols-3">
+            {[
+              { label: pageCopy.totalAuthors, value: authors.length, icon: Users },
+              { label: pageCopy.totalArticles, value: totalArticles, icon: FileText },
+              { label: pageCopy.activeAuthors, value: activeAuthors, icon: UserPlus },
+            ].map(({ icon: Icon, label, value }) => (
+              <Card key={label}>
+                <CardContent className="p-5">
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Icon className="size-3.5" />
+                    {label}
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold">{value}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </section>
+
+          {selectedAuthor ? (
+            <section className="mt-7">
+              <button
+                className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                onClick={() => setSelectedAuthor(null)}
+                type="button"
+              >
+                <ArrowLeft className="size-4" />
+                {pageCopy.back}
+              </button>
+              <div className="mt-5 flex flex-col gap-2 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    {pageCopy.authorArticles}
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">
+                    {selectedAuthor.name}
+                  </h2>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {pageCopy.articleCount(authorArticles.length)}
+                </p>
+              </div>
+
+              {isArticlesLoading ? (
+                <div aria-label={pageCopy.loadingArticles} className="mt-5 space-y-3 animate-pulse" role="status">
+                  {Array.from({ length: 3 }, (_, index) => (
+                    <div className="h-28 rounded-xl bg-muted/30" key={index} />
+                  ))}
+                </div>
+              ) : articlesError ? (
+                <Card className="mt-5">
+                  <CardContent className="flex min-h-56 flex-col items-center justify-center text-center">
+                    <AlertCircle className="size-5 text-rose-400" />
+                    <p className="mt-3 text-sm text-muted-foreground">{pageCopy.articleError}</p>
+                    <Button
+                      className="mt-5 h-9 px-4"
+                      onClick={() => setArticlesReloadKey((value) => value + 1)}
+                      variant="outline"
+                    >
+                      <RefreshCw className="mr-2 size-3.5" />
+                      {pageCopy.retry}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : authorArticles.length === 0 ? (
+                <Card className="mt-5">
+                  <CardContent className="flex min-h-56 flex-col items-center justify-center text-center">
+                    <FileText className="size-6 text-muted-foreground" />
+                    <p className="mt-4 text-sm text-muted-foreground">{pageCopy.noAuthorArticles}</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="mt-5 space-y-3">
+                  {actionError ? (
+                    <p className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-400" role="alert">
+                      {pageCopy.actionError}
+                    </p>
+                  ) : null}
+                  {authorArticles.map((article) => {
+                    const isExpanded = expandedArticleId === article.id;
+                    const isBusy = busyArticleId === article.id;
+                    return (
+                      <Card key={article.id}>
+                        <CardContent className="p-5">
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs font-semibold text-muted-foreground">#{article.number}</span>
+                                <Badge className={statusStyles[article.status]}>
+                                  {pageCopy.statuses[article.status]}
+                                </Badge>
+                              </div>
+                              <h3 className="mt-3 text-base font-semibold text-foreground">{article.title}</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {formatDate(article.updated_at, language)}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 flex-wrap gap-2">
+                              {article.status !== "draft" ? (
+                                <Button
+                                  className="h-9 px-3 text-xs"
+                                  disabled={isBusy}
+                                  onClick={() =>
+                                    onNavigate(`${basePath}/review?articleId=${article.id}`)
+                                  }
+                                >
+                                  {pageCopy.goToReview}
+                                </Button>
+                              ) : null}
+                              <Button
+                                className="h-9 px-3 text-xs text-rose-400"
+                                disabled={isBusy}
+                                onClick={() => void deleteArticle(article)}
+                                variant="outline"
+                              >
+                                <Trash2 className="mr-1.5 size-3.5" />
+                                {pageCopy.deleteArticle}
+                              </Button>
+                            </div>
+                          </div>
+                          <button
+                            className="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-blue-400 transition-colors hover:text-blue-300"
+                            onClick={() => setExpandedArticleId(isExpanded ? null : article.id)}
+                            type="button"
+                          >
+                            {isExpanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                            {isExpanded ? pageCopy.hideContent : pageCopy.showContent}
+                          </button>
+                          {isExpanded ? (
+                            <div className="mt-4 border-t border-border pt-5">
+                              <div className="mx-auto max-w-2xl">
+                                <LiveArticlePreview
+                                  article={toPreviewArticle(article)}
+                                  language={language}
+                                  readOnly
+                                />
+                              </div>
+                            </div>
+                          ) : null}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          ) : (
+            <section className="mt-7">
+              <div className="relative max-w-sm">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={pageCopy.search}
+                  value={query}
+                />
+              </div>
+              <Card className="mt-4 overflow-hidden">
+                {authors.length === 0 || filteredAuthors.length === 0 ? (
+                  <div className="flex min-h-64 flex-col items-center justify-center text-center">
+                    <Users className="size-6 text-muted-foreground" />
+                    <p className="mt-4 text-sm text-muted-foreground">
+                      {authors.length === 0 ? pageCopy.noAuthors : pageCopy.noResults}
+                    </p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{pageCopy.name}</TableHead>
+                        <TableHead>{pageCopy.articles}</TableHead>
+                        <TableHead>{pageCopy.latest}</TableHead>
+                        <TableHead>{pageCopy.updated}</TableHead>
+                        <TableHead className="text-right">{pageCopy.actions}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredAuthors.map((author) => {
+                        const preview = previews.get(author.id);
+                        const latest = preview?.latest_article;
+                        return (
+                          <TableRow key={author.id}>
+                            <TableCell className="font-medium">
+                              <button
+                                className="text-left text-foreground underline-offset-4 hover:text-blue-400 hover:underline"
+                                onClick={() => openAuthor(author)}
+                                type="button"
+                              >
+                                {author.name}
+                              </button>
+                            </TableCell>
+                            <TableCell>
+                              <Badge className="border border-border bg-transparent text-foreground">
+                                {preview?.article_count ?? 0}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {latest?.title ?? (
+                                <span className="text-muted-foreground">{pageCopy.noArticle}</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {formatDate(latest?.updated_at ?? author.updated_at, language)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger
+                                  aria-label={pageCopy.actions}
+                                  className="inline-flex size-8 items-center justify-center rounded-md hover:bg-muted"
+                                >
+                                  <MoreHorizontal className="size-4" />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent>
+                                  <DropdownMenuItem onClick={() => openAuthor(author)}>
+                                    {pageCopy.viewArticles}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-rose-400"
+                                    onClick={() => void removeAuthor(author)}
+                                  >
+                                    {pageCopy.remove}
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </Card>
+            </section>
+          )}
+        </>
+      )}
     </DashboardLayout>
   );
 }

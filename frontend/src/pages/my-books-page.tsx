@@ -4,8 +4,10 @@ import {
   ArrowRight,
   BookOpen,
   CalendarDays,
+  LoaderCircle,
   Plus,
   RefreshCw,
+  Trash2,
   Users,
 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
@@ -41,6 +43,11 @@ const copy = {
     authors: (count: number) => `${count} ${count === 1 ? "author" : "authors"}`,
     updated: "Updated",
     openDashboard: "Open Dashboard",
+    deleteBook: "Delete",
+    deleting: "Deleting",
+    deleteConfirm: (title: string) =>
+      `Delete “${title}”? This will permanently delete the book and its content.`,
+    deleteError: "Unable to delete this book. Please try again.",
     newlyCreated: "Newly created",
     statuses: {
       collecting: "Accepting Submissions",
@@ -64,6 +71,11 @@ const copy = {
     authors: (count: number) => `${count} 位作者`,
     updated: "更新于",
     openDashboard: "打开 Dashboard",
+    deleteBook: "删除",
+    deleting: "正在删除",
+    deleteConfirm: (title: string) =>
+      `确定删除《${title}》吗？书籍及其内容将被永久删除。`,
+    deleteError: "无法删除这本书，请重试。",
     newlyCreated: "刚刚创建",
     statuses: {
       collecting: "正在投稿",
@@ -112,6 +124,8 @@ export function MyBooksPage({
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [deletingBookId, setDeletingBookId] = useState<number | null>(null);
+  const [deleteErrorBookId, setDeleteErrorBookId] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -134,6 +148,21 @@ export function MyBooksPage({
       active = false;
     };
   }, [reloadKey]);
+
+  const deleteBook = async (book: Book) => {
+    if (!window.confirm(pageCopy.deleteConfirm(book.title))) return;
+
+    setDeletingBookId(book.id);
+    setDeleteErrorBookId(null);
+    try {
+      await bookRepository.delete(book.id);
+      setBooks((current) => current.filter((item) => item.id !== book.id));
+    } catch {
+      setDeleteErrorBookId(book.id);
+    } finally {
+      setDeletingBookId(null);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -290,16 +319,46 @@ export function MyBooksPage({
                         </span>
                       </div>
 
-                      <button
-                        className="group/link mt-auto flex items-center self-start pt-5 text-sm font-medium text-blue-600 transition-colors hover:text-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
-                        onClick={() =>
-                          onNavigate(`/book/${book.id}/dashboard`)
-                        }
-                        type="button"
-                      >
-                        {pageCopy.openDashboard}
-                        <ArrowRight className="ml-2 size-4 transition-transform group-hover/link:translate-x-0.5" />
-                      </button>
+                      <div className="mt-auto pt-5">
+                        {deleteErrorBookId === book.id ? (
+                          <p
+                            aria-live="polite"
+                            className="mb-3 text-xs text-rose-600 dark:text-rose-400"
+                            role="status"
+                          >
+                            {pageCopy.deleteError}
+                          </p>
+                        ) : null}
+                        <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+                          <button
+                            className="group/link flex items-center text-sm font-medium text-blue-600 transition-colors hover:text-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+                            onClick={() =>
+                              onNavigate(`/book/${book.id}/dashboard`)
+                            }
+                            type="button"
+                          >
+                            {pageCopy.openDashboard}
+                            <ArrowRight className="ml-2 size-4 transition-transform group-hover/link:translate-x-0.5" />
+                          </button>
+                          <Button
+                            aria-label={`${pageCopy.deleteBook}: ${book.title}`}
+                            className="h-8 rounded-md border-rose-500/20 px-2.5 text-xs text-rose-600 hover:border-rose-500/35 hover:bg-rose-500/10 dark:text-rose-400"
+                            disabled={deletingBookId !== null}
+                            onClick={() => void deleteBook(book)}
+                            type="button"
+                            variant="outline"
+                          >
+                            {deletingBookId === book.id ? (
+                              <LoaderCircle className="mr-1.5 size-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="mr-1.5 size-3.5" />
+                            )}
+                            {deletingBookId === book.id
+                              ? pageCopy.deleting
+                              : pageCopy.deleteBook}
+                          </Button>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
                 );

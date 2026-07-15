@@ -32,7 +32,6 @@ def get_join(invite_code: str, service: JoinServiceDep) -> JoinBookResponse:
 @router.post(
     "/{invite_code}",
     response_model=JoinResponse,
-    status_code=status.HTTP_201_CREATED,
     summary="Join a book / 加入一本书",
 )
 def join_book(
@@ -40,7 +39,8 @@ def join_book(
     data: JoinCreate,
     service: JoinServiceDep,
 ) -> JoinResponse:
-    author = service.join(invite_code, data)
-    if author is None:
+    result = service.join(invite_code, data)
+    if result is None:
         raise invitation_not_found()
-    return JoinResponse(author_id=author.id)
+    mode, author = result
+    return JoinResponse(mode=mode, author_id=author.id if author else None)

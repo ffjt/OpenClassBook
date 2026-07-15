@@ -13,6 +13,7 @@ from app.schemas.common import HealthResponse, MessageResponse
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_db()
+    settings.storage_dir.mkdir(parents=True, exist_ok=True)
     yield
 
 
@@ -29,6 +30,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[
+        "Content-Disposition",
+        "Content-Length",
+        "Last-Modified",
+        "X-File-Path",
+    ],
 )
 app.include_router(api_router, prefix=settings.api_v1_prefix)
 

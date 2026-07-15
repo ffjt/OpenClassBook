@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import { Toaster } from "sonner";
 
 import { TemplateProvider } from "@/context/TemplateContext";
 import { ThemeProvider } from "@/context/ThemeContext";
@@ -13,6 +14,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <ThemeProvider>
         <TemplateProvider>
           <App />
+          <Toaster position="top-right" richColors />
         </TemplateProvider>
       </ThemeProvider>
     </BrowserRouter>

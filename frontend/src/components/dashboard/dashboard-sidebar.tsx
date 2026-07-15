@@ -2,6 +2,7 @@ import {
   BookOpen,
   FileCheck2,
   FileOutput,
+  LibraryBig,
   LayoutDashboard,
   Settings,
   SlidersHorizontal,
@@ -122,6 +123,31 @@ export function DashboardSidebar({
       </nav>
 
       <div className="border-t border-border p-3 lg:p-4">
+        <a
+          aria-label={language === "zh" ? "我的书籍" : "My Books"}
+          className="group mb-3 flex h-10 items-center justify-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:justify-start"
+          href="/book"
+          onClick={(event) => {
+            if (
+              event.button !== 0 ||
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey
+            ) {
+              return;
+            }
+
+            event.preventDefault();
+            onNavigate("/book");
+          }}
+          title={language === "zh" ? "我的书籍" : "My Books"}
+        >
+          <LibraryBig className="size-[17px] shrink-0 text-muted-foreground group-hover:text-foreground" />
+          <span className="hidden lg:block">
+            {language === "zh" ? "我的书籍" : "My Books"}
+          </span>
+        </a>
         <div className="hidden rounded-lg border border-border bg-muted/30 px-3 py-3 lg:block">
           {bookTitle ? (
             <p className="truncate text-xs font-medium text-foreground">

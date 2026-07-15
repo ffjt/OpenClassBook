@@ -1,17 +1,11 @@
 import { apiRequest } from "@/repositories/apiClient";
 import type { Book } from "@/repositories/bookRepository";
 
-export type AuthorStatus = "invited" | "joined" | "not_joined";
-export type AuthorArticleStatus = "not_started" | "draft" | "submitted";
-
 export interface Author {
   id: number;
   book_id: number;
-  number: string;
   name: string;
-  status: AuthorStatus;
-  article_status: AuthorArticleStatus;
-  joined_at: string | null;
+  created_at: string;
   updated_at: string;
 }
 
@@ -20,11 +14,19 @@ export interface AuthorDetail extends Author {
 }
 
 export interface AuthorCreateInput {
-  number: string;
   name: string;
-  status?: AuthorStatus;
-  article_status?: AuthorArticleStatus;
-  joined_at?: string | null;
+}
+
+export interface LatestArticlePreview {
+  title: string;
+  excerpt: string;
+  status: "draft" | "pending" | "approved" | "rejected";
+  updated_at: string;
+}
+
+export interface AuthorPreview {
+  article_count: number;
+  latest_article: LatestArticlePreview | null;
 }
 
 export type AuthorUpdateInput = Partial<AuthorCreateInput>;
@@ -34,12 +36,21 @@ export const authorRepository = {
     return apiRequest<Author[]>(`/books/${bookId}/authors`);
   },
 
+  search(bookId: number, name: string) {
+    const query = new URLSearchParams({ name });
+    return apiRequest<Author[]>(`/books/${bookId}/authors/search?${query}`);
+  },
+
   listByBook(bookId: number) {
     return this.list(bookId);
   },
 
   get(id: number) {
     return apiRequest<AuthorDetail>(`/authors/${id}`);
+  },
+
+  preview(id: number) {
+    return apiRequest<AuthorPreview>(`/authors/${id}/preview`);
   },
 
   create(bookId: number, data: AuthorCreateInput) {

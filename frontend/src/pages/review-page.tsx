@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { LiveArticlePreview } from "@/components/author-editor/live-article-preview";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
@@ -28,6 +29,10 @@ import {
 } from "@/repositories/authorRepository";
 import type { PreviewArticle } from "@/types/article";
 
+type ReviewStatus = Exclude<ArticleStatus, "draft">;
+
+const reviewStatuses: ReviewStatus[] = ["pending", "approved", "rejected"];
+
 const copy = {
   en: {
     eyebrow: "Editorial desk",
@@ -44,7 +49,7 @@ const copy = {
       rejected: "Rejected",
     },
     articles: "articles",
-    updated: "Updated",
+    submitted: "Submitted",
     noMatches: "No articles match this view.",
     noArticles: "No submissions yet.",
     noArticlesDescription: "Waiting for authors to submit articles.",
@@ -79,7 +84,7 @@ const copy = {
       rejected: "已退回",
     },
     articles: "篇文章",
-    updated: "更新于",
+    submitted: "提交时间",
     noMatches: "没有符合当前条件的文章。",
     noArticles: "暂无投稿。",
     noArticlesDescription: "等待作者提交文章。",
@@ -116,10 +121,15 @@ interface ReviewPageProps {
 }
 
 function formatDate(value: string, language: Language) {
+  const timestamp = /(?:Z|[+-]\d{2}:\d{2})$/.test(value) ? value : `${value}Z`;
   return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en", {
-    day: "numeric",
-    month: language === "zh" ? "long" : "short",
-  }).format(new Date(value));
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(timestamp));
 }
 
 function toPreviewArticle(article: Article): PreviewArticle {
@@ -165,12 +175,18 @@ export function ReviewPage({
   onToggleLanguage,
 }: ReviewPageProps) {
   const pageCopy = copy[language];
+  const [searchParams] = useSearchParams();
+  const requestedArticleIdValue = searchParams.get("articleId");
+  const requestedArticleId =
+    requestedArticleIdValue && /^\d+$/.test(requestedArticleIdValue)
+      ? Number(requestedArticleIdValue)
+      : null;
   const [articles, setArticles] = useState<Article[]>([]);
   const [authors, setAuthors] = useState<Author[]>([]);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | ArticleStatus>(
+  const [statusFilter, setStatusFilter] = useState<"all" | ReviewStatus>(
     "all",
   );
   const [isLoading, setIsLoading] = useState(true);
@@ -190,11 +206,14 @@ export function ReviewPage({
       setHasError(false);
       try {
         const [loadedArticles, loadedAuthors] = await Promise.all([
-          articleRepository.list(bookId),
+          articleRepository.listSubmitted(bookId),
           authorRepository.list(bookId),
         ]);
-        const firstArticle = loadedArticles[0]
-          ? await articleRepository.get(loadedArticles[0].id)
+        const initialArticle =
+          loadedArticles.find((article) => article.id === requestedArticleId) ??
+          loadedArticles[0];
+        const firstArticle = initialArticle
+          ? await articleRepository.get(initialArticle.id)
           : null;
         if (!active) return;
         setArticles(loadedArticles);
@@ -212,7 +231,7 @@ export function ReviewPage({
     return () => {
       active = false;
     };
-  }, [bookId, reloadKey]);
+  }, [bookId, reloadKey, requestedArticleId]);
 
   const authorNames = useMemo(
     () => new Map(authors.map((author) => [author.id, author.name])),
@@ -261,7 +280,7 @@ export function ReviewPage({
       const status = action === "approve" ? "approved" : "rejected";
       await articleRepository.updateStatus(selectedArticle.id, status);
       const [refreshedArticles, refreshedArticle] = await Promise.all([
-        articleRepository.list(bookId),
+        articleRepository.listSubmitted(bookId),
         articleRepository.get(selectedArticle.id),
       ]);
       setArticles(refreshedArticles);
@@ -374,12 +393,12 @@ export function ReviewPage({
                 aria-label={pageCopy.filterLabel}
                 className="mt-2"
                 onChange={(event) =>
-                  setStatusFilter(event.target.value as "all" | ArticleStatus)
+                  setStatusFilter(event.target.value as "all" | ReviewStatus)
                 }
                 value={statusFilter}
               >
                 <option value="all">{pageCopy.allStatuses}</option>
-                {(Object.keys(statusStyles) as ArticleStatus[]).map((status) => (
+                {reviewStatuses.map((status) => (
                   <option key={status} value={status}>
                     {pageCopy.statuses[status]}
                   </option>
@@ -390,7 +409,7 @@ export function ReviewPage({
               <span>
                 {filteredArticles.length} {pageCopy.articles}
               </span>
-              <span>{pageCopy.updated}</span>
+              <span>{pageCopy.submitted}</span>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
               {filteredArticles.length ? (
@@ -417,7 +436,9 @@ export function ReviewPage({
                     <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                       <span className="truncate">{getAuthorName(article)}</span>
                       <span className="shrink-0">
-                        {formatDate(article.updated_at, language)}
+                        {article.submitted_at
+                          ? formatDate(article.submitted_at, language)
+                          : "—"}
                       </span>
                     </div>
                   </button>
@@ -457,6 +478,11 @@ export function ReviewPage({
                   </h2>
                   <p className="mt-2 text-xs text-muted-foreground">
                     {pageCopy.by} {getAuthorName(selectedArticle)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {pageCopy.submitted}: {selectedArticle.submitted_at
+                      ? formatDate(selectedArticle.submitted_at, language)
+                      : "—"}
                   </p>
                   {selectedArticle.image ? (
                     <img

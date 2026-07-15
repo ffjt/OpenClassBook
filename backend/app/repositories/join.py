@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -15,15 +16,27 @@ class JoinRepository:
         statement = select(Book).where(Book.invite_code == invite_code)
         return self.session.scalar(statement)
 
-    def create_author(self, book: Book, name: str, joined_at: datetime) -> Author:
+    def find_authors(self, book_id: int, name: str) -> list[Author]:
+        statement = (
+            select(Author)
+            .where(Author.book_id == book_id, Author.name == name)
+            .order_by(Author.updated_at.desc(), Author.id.desc())
+        )
+        return list(self.session.scalars(statement))
+
+    def create_author(
+        self,
+        book: Book,
+        name: str,
+        author_uuid: UUID,
+        now: datetime,
+    ) -> Author:
         author = Author(
             book_id=book.id,
             name=name,
-            number=self._next_author_number(book.id),
-            status="joined",
-            article_status="not_started",
-            joined_at=joined_at,
-            updated_at=joined_at,
+            uuid=author_uuid,
+            created_at=now,
+            updated_at=now,
         )
         self.session.add(author)
         self.session.commit()
@@ -37,12 +50,3 @@ class JoinRepository:
             .where(Author.id == author_id)
         )
         return self.session.execute(statement).one_or_none()
-
-    def _next_author_number(self, book_id: int) -> str:
-        statement = select(Author.number).where(Author.book_id == book_id)
-        numeric_numbers = [
-            int(number)
-            for number in self.session.scalars(statement)
-            if number.isdigit()
-        ]
-        return f"{max(numeric_numbers, default=0) + 1:03d}"

@@ -7,7 +7,8 @@ interface JoinBookResponse {
 }
 
 interface JoinResponse {
-  author_id: number;
+  mode: "created" | "restored" | "selection_required";
+  author_id: number | null;
 }
 
 export const joinRepository = {

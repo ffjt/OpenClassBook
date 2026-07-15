@@ -179,7 +179,12 @@ export function JoinBookPage({
     setJoinError(false);
     try {
       const response = await joinRepository.join(normalizedCode, authorName);
-      onNavigate(`/welcome/${response.author_id}`);
+      if (response.mode === "selection_required") {
+        const query = new URLSearchParams({ name: authorName });
+        onNavigate(`/join/${encodeURIComponent(normalizedCode)}/select?${query}`);
+      } else if (response.author_id) {
+        onNavigate(`/author/${response.author_id}/editor`);
+      }
     } catch (requestError) {
       if (requestError instanceof ApiError && requestError.status === 404) {
         setLoadError("invalid");

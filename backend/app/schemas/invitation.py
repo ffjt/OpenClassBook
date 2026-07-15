@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, StringConstraints
 
@@ -26,4 +26,5 @@ class JoinCreate(BaseModel):
 
 
 class JoinResponse(BaseModel):
-    author_id: int
+    mode: Literal["created", "restored", "selection_required"]
+    author_id: int | None = None

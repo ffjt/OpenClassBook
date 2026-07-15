@@ -78,6 +78,7 @@ OpenClassBook 围绕五个核心对象展开。
 - 书名
 - 简介
 - 邀请码
+- Layout 中的板块顺序与正文出版顺序
 - 创建时间
 
 一本 Book 拥有：
@@ -112,13 +113,19 @@ OpenClassBook 围绕五个核心对象展开。
 
 包含：
 
+- 数据库内部 UUID（不向用户展示）
 - 姓名
-- 编号
-- 加入状态
+- 所属书籍
+- 创建时间
+- 更新时间
 
 一个 Author：
 
 只能属于一本书。
+
+姓名只是 Display Name，不作为唯一身份。
+
+一个 Author 可以拥有多篇 Article。
 
 ---
 
@@ -138,6 +145,12 @@ Article 永远只保存内容。
 **Article 不保存任何排版信息。**
 
 排版全部来自 Template。
+
+编号规则由 Book 的编号模式决定：
+
+- 不使用编号：投稿时编号为空，管理员可在排版阶段按全书顺序统一编号
+- 自动生成编号：作者新建文章时输入想要认领的编号，编号在整本书内唯一
+- 导入已有编号：作者只能认领管理员已导入的编号
 
 ---
 
@@ -170,7 +183,7 @@ Author (1)
 
 ↓
 
-Article (1)
+Article (N)
 
 Article
 
@@ -227,13 +240,23 @@ Authors
 
 GET /books/{id}/authors
 
+GET /books/{id}/authors/search?name={name}
+
 POST /books/{id}/authors
 
 PATCH /authors/{id}
 
+GET /authors/{id}/preview
+
 Articles
 
 GET /books/{id}/articles
+
+GET /authors/{id}/articles
+
+PATCH /books/{id}/articles/numbers
+
+PATCH /books/{id}/articles/order
 
 POST /articles
 

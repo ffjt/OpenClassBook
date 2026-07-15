@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from app.models.author import Author
 from app.repositories.author import AuthorRepository
@@ -20,32 +21,31 @@ class AuthorService:
     def list_by_book(self, book_id: int) -> list[Author]:
         return self.repository.list_by_book(book_id)
 
+    def search_by_name(self, book_id: int, name: str) -> list[Author]:
+        return self.repository.search_by_name(book_id, name.strip())
+
+    def get_preview(self, author_id: int):
+        return self.repository.get_preview(author_id)
+
     def get(self, author_id: int) -> Author | None:
         return self.repository.get(author_id)
 
     def create(self, book_id: int, data: AuthorCreate) -> Author:
         now = datetime.now(UTC)
-        values = data.model_dump()
-        values["joined_at"] = (
-            values["joined_at"] or now if values["status"] == "joined" else None
-        )
         return self.repository.create(
-            AuthorCreateData(book_id=book_id, updated_at=now, **values)
+            AuthorCreateData(
+                book_id=book_id,
+                uuid=uuid4(),
+                created_at=now,
+                updated_at=now,
+                **data.model_dump(),
+            )
         )
 
     def update(self, author_id: int, data: AuthorUpdate) -> Author | None:
         changes = data.model_dump(exclude_unset=True)
         if not changes:
             raise ValueError("At least one field is required / 至少需要一个更新字段")
-
-        author = self.repository.get(author_id)
-        if author is None:
-            return None
-
-        if changes.get("status") == "joined" and not author.joined_at:
-            changes.setdefault("joined_at", datetime.now(UTC))
-        elif "status" in changes and changes["status"] != "joined":
-            changes["joined_at"] = None
 
         return self.repository.update(
             author_id,

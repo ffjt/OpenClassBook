@@ -21,7 +21,8 @@ const editorCopy = {
     title: "Article Editor",
     description: "Write your story. The book template controls its appearance.",
     number: "Article Number",
-    numberHint: "Assigned by the book template",
+    numberHint: "Unique within this book",
+    numberPending: "Assigned later in book layout",
     articleTitle: "Article Title",
     articleTitlePlaceholder: "Enter an article title",
     subtitle: "Subtitle",
@@ -50,7 +51,8 @@ const editorCopy = {
     title: "\u6587\u7ae0\u7f16\u8f91\u5668",
     description: "\u53ea\u9700\u4e13\u6ce8\u4e66\u5199\uff0c\u4e66\u7c4d\u6a21\u677f\u4f1a\u7edf\u4e00\u63a7\u5236\u6587\u7ae0\u6837\u5f0f\u3002",
     number: "\u6587\u7ae0\u7f16\u53f7",
-    numberHint: "\u7531\u4e66\u7c4d\u6a21\u677f\u5206\u914d",
+    numberHint: "\u5728\u6574\u672c\u4e66\u4e2d\u552f\u4e00",
+    numberPending: "\u5c06\u5728\u4e66\u7c4d\u6392\u7248\u65f6\u5206\u914d",
     articleTitle: "\u6587\u7ae0\u6807\u9898",
     articleTitlePlaceholder: "\u8f93\u5165\u6587\u7ae0\u6807\u9898",
     subtitle: "\u526f\u6807\u9898",
@@ -190,6 +192,7 @@ export function ArticleEditorForm({
             <Input
               className="h-10 rounded-lg border-input bg-background font-mono text-sm tracking-[0.14em] text-muted-foreground shadow-none"
               id="article-number"
+              placeholder={copy.numberPending}
               readOnly
               value={article.number}
             />

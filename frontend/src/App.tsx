@@ -80,6 +80,16 @@ const JoinSuccessPage = lazy(() =>
     default: module.JoinSuccessPage,
   })),
 );
+const ExportPage = lazy(() =>
+  import("@/pages/export-page").then((module) => ({
+    default: module.ExportPage,
+  })),
+);
+const AuthorSelectPage = lazy(() =>
+  import("@/pages/author-select-page").then((module) => ({
+    default: module.AuthorSelectPage,
+  })),
+);
 const InvitePage = lazy(() =>
   import("@/pages/invite-page").then((module) => ({
     default: module.InvitePage,
@@ -103,7 +113,7 @@ interface SharedPageProps {
 }
 
 interface DashboardRouteProps extends SharedPageProps {
-  page: "overview" | "authors" | "review" | "template" | "layout";
+  page: "overview" | "authors" | "review" | "template" | "layout" | "export";
 }
 
 function DashboardRoute({
@@ -134,6 +144,7 @@ function DashboardRoute({
     return <ReviewPage {...sharedProps} bookId={routeBookId} />;
   }
   if (page === "layout") return <BookLayoutPage {...sharedProps} bookId={routeBookId} />;
+  if (page === "export") return <ExportPage {...sharedProps} bookId={routeBookId} />;
   return (
     <DashboardOverviewPage
       {...sharedProps}
@@ -171,6 +182,15 @@ function InviteRoute(props: SharedPageProps) {
 function JoinRoute(props: SharedPageProps) {
   const { inviteCode } = useParams();
   return <JoinBookPage {...props} inviteCode={inviteCode} />;
+}
+
+function AuthorSelectRoute(props: SharedPageProps) {
+  const { inviteCode } = useParams();
+  const name = new URLSearchParams(useLocation().search).get("name")?.trim();
+  if (!inviteCode || !name) {
+    return <Navigate replace to={inviteCode ? `/join/${inviteCode}` : "/join"} />;
+  }
+  return <AuthorSelectPage {...props} inviteCode={inviteCode} name={name} />;
 }
 
 function WelcomeRoute(props: SharedPageProps) {
@@ -262,13 +282,14 @@ function App() {
         />
         <Route path="/book/new" element={<Navigate replace to="/book/create" />} />
         <Route path="/join" element={<JoinRoute {...sharedProps} />} />
+        <Route path="/join/:inviteCode/select" element={<AuthorSelectRoute {...sharedProps} />} />
         <Route path="/join/:inviteCode" element={<JoinRoute {...sharedProps} />} />
         <Route path="/welcome/:authorId" element={<WelcomeRoute {...sharedProps} />} />
         <Route path="/join/success" element={<Navigate replace to="/join" />} />
         <Route path="/author/:authorId/editor" element={<AuthorEditorRoute {...sharedProps} />} />
         <Route
           path="/submit/new"
-          element={<AuthorEditorPage {...sharedProps} />}
+          element={<Navigate replace to="/join" />}
         />
         <Route
           path="/book/:bookId/dashboard"
@@ -293,6 +314,10 @@ function App() {
         <Route
           path="/book/:bookId/dashboard/layout"
           element={<DashboardRoute {...sharedProps} page="layout" />}
+        />
+        <Route
+          path="/book/:bookId/dashboard/export"
+          element={<DashboardRoute {...sharedProps} page="export" />}
         />
         <Route path="/dashboard/*" element={<Navigate replace to="/book" />} />
         <Route path="/:bookId/dashboard/*" element={<LegacyDashboardRedirect />} />

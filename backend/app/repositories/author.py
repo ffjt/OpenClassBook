@@ -1,5 +1,6 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 
+from app.models.article import Article
 from app.models.author import Author
 from app.models.book import Book
 from app.repositories.base import BaseRepository
@@ -26,6 +27,29 @@ class AuthorRepository(BaseRepository[Author, AuthorCreateData, AuthorUpdateData
             .order_by(Author.updated_at.desc(), Author.id.desc())
         )
         return list(self.session.scalars(statement))
+
+    def search_by_name(self, book_id: int, name: str) -> list[Author]:
+        statement = (
+            select(Author)
+            .where(Author.book_id == book_id, Author.name == name)
+            .order_by(Author.updated_at.desc(), Author.id.desc())
+        )
+        return list(self.session.scalars(statement))
+
+    def get_preview(self, author_id: int) -> tuple[int, Article | None] | None:
+        if self.get(author_id) is None:
+            return None
+        articles = select(Article).where(Article.author_id == author_id)
+        article_count = (
+            self.session.scalar(
+                select(func.count(Article.id)).where(Article.author_id == author_id)
+            )
+            or 0
+        )
+        latest = self.session.scalar(
+            articles.order_by(Article.updated_at.desc(), Article.id.desc()).limit(1)
+        )
+        return article_count, latest
 
     def book_exists(self, book_id: int) -> bool:
         return self.session.get(Book, book_id) is not None

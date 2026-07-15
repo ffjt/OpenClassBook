@@ -1,16 +1,20 @@
 import re
 from datetime import UTC, datetime
+from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.core.config import settings
 from app.db.database import engine
 from app.models.article import Article
 from app.models.author import Author
 from app.models.book import Book
 from app.models.template import Template
+from app.services.pdf_renderer import _first_cjk_font
 
 
 def test_system_routes_and_swagger(client: TestClient) -> None:
@@ -80,6 +84,13 @@ def test_book_crud_persists_to_sqlite(
     assert created["owner_name"] == "Alex Chen"
     assert created["number_mode"] == "automatic"
     assert created["status"] == "collecting"
+    assert created["cover_file"] is None
+    assert created["preface_file"] is None
+    assert created["afterword_file"] is None
+    assert created["acknowledgement_file"] is None
+    assert created["back_cover_file"] is None
+    assert created["layout_sections"] is None
+    assert created["layout_article_order"] is None
     assert created["author_count"] == 0
     assert re.fullmatch(r"OCB-[A-Z0-9]{6}", created["invite_code"])
     assert created["created_at"]
@@ -100,14 +111,66 @@ def test_book_crud_persists_to_sqlite(
 
     update_response = client.patch(
         f"/api/v1/books/{created['id']}",
-        json={"title": "Updated Stories", "description": None},
+        json={
+            "title": "Updated Stories",
+            "description": None,
+            "cover_file": "cover.webp",
+            "preface_file": "preface.pdf",
+            "afterword_file": "afterword.docx",
+            "acknowledgement_file": "acknowledgements.pdf",
+            "back_cover_file": "back-cover.webp",
+            "layout_sections": [
+                {
+                    "id": "cover",
+                    "kind": "page",
+                    "preset": "cover",
+                    "name": None,
+                    "file": "cover.webp",
+                },
+                {
+                    "id": "articles",
+                    "kind": "articles",
+                    "preset": "articles",
+                    "name": None,
+                    "file": None,
+                },
+                {
+                    "id": "class_message",
+                    "kind": "page",
+                    "preset": None,
+                    "name": "A Message from Our Class",
+                    "file": None,
+                },
+            ],
+        },
     )
     assert update_response.status_code == 200
     updated = update_response.json()
     assert updated["title"] == "Updated Stories"
     assert updated["description"] is None
+    assert updated["cover_file"] == "cover.webp"
+    assert updated["preface_file"] == "preface.pdf"
+    assert updated["afterword_file"] == "afterword.docx"
+    assert updated["acknowledgement_file"] == "acknowledgements.pdf"
+    assert updated["back_cover_file"] == "back-cover.webp"
+    assert [section["id"] for section in updated["layout_sections"]] == [
+        "cover",
+        "articles",
+        "class_message",
+    ]
     assert updated["owner_name"] == created["owner_name"]
     assert updated["invite_code"] == created["invite_code"]
+
+    with test_session_factory() as session:
+        persisted = session.get(Book, created["id"])
+        assert persisted is not None
+        assert persisted.cover_file == "cover.webp"
+        assert persisted.preface_file == "preface.pdf"
+        assert persisted.afterword_file == "afterword.docx"
+        assert persisted.acknowledgement_file == "acknowledgements.pdf"
+        assert persisted.back_cover_file == "back-cover.webp"
+        assert persisted.layout_sections is not None
+        assert persisted.layout_sections[2]["name"] == "A Message from Our Class"
 
     delete_response = client.delete(f"/api/v1/books/{created['id']}")
     assert delete_response.status_code == 204
@@ -132,13 +195,63 @@ def test_book_create_validation_returns_422(
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize(
+    "sections",
+    [
+        [
+            {
+                "id": "preface",
+                "kind": "page",
+                "preset": "preface",
+            }
+        ],
+        [
+            {
+                "id": "articles",
+                "kind": "articles",
+                "preset": "articles",
+            },
+            {
+                "id": "articles-copy",
+                "kind": "articles",
+                "preset": "articles",
+            },
+        ],
+        [
+            {
+                "id": "articles",
+                "kind": "articles",
+                "preset": "articles",
+                "name": "Renamed body",
+            }
+        ],
+    ],
+)
+def test_book_layout_requires_one_fixed_main_content_section(
+    client: TestClient,
+    sections: list[dict[str, object]],
+) -> None:
+    response = client.post(
+        "/api/v1/books",
+        json={
+            "title": "Layout validation",
+            "owner_name": "Alex",
+            "layout_sections": sections,
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_book_errors_use_correct_status_codes(client: TestClient) -> None:
     assert client.get("/api/v1/books/999").status_code == 404
     assert client.patch("/api/v1/books/999", json={}).status_code == 400
-    assert client.patch(
-        "/api/v1/books/999",
-        json={"title": None},
-    ).status_code == 422
+    assert (
+        client.patch(
+            "/api/v1/books/999",
+            json={"title": None},
+        ).status_code
+        == 422
+    )
     assert client.delete("/api/v1/books/999").status_code == 404
 
 
@@ -176,20 +289,16 @@ def test_dashboard_collections_are_read_from_sqlite(
 
         author = Author(
             book_id=book.id,
+            uuid=uuid4(),
             name="Avery",
-            number="001",
-            status="joined",
-            article_status="submitted",
-            joined_at=now,
+            created_at=now,
             updated_at=now,
         )
         other_author = Author(
             book_id=other_book.id,
+            uuid=uuid4(),
             name="Jordan",
-            number="002",
-            status="joined",
-            article_status="submitted",
-            joined_at=now,
+            created_at=now,
             updated_at=now,
         )
         session.add_all([author, other_author])
@@ -308,10 +417,13 @@ def test_template_settings_are_created_and_updated(client: TestClient) -> None:
     assert updated["page_rules"] == created["page_rules"]
     assert client.get(endpoint).json() == updated
 
-    assert client.patch(
-        "/api/v1/books/999/template",
-        json={"title_format": {"size": 24}},
-    ).status_code == 404
+    assert (
+        client.patch(
+            "/api/v1/books/999/template",
+            json={"title_format": {"size": 24}},
+        ).status_code
+        == 404
+    )
 
 
 def test_author_crud_persists_to_sqlite(
@@ -331,22 +443,20 @@ def test_author_crud_persists_to_sqlite(
 
     create_response = client.post(
         collection,
-        json={"number": " 001 ", "name": " Avery ", "status": "joined"},
+        json={"name": " Avery "},
     )
     assert create_response.status_code == 201
     created = create_response.json()
     assert created["book_id"] == book["id"]
-    assert created["number"] == "001"
     assert created["name"] == "Avery"
-    assert created["status"] == "joined"
-    assert created["article_status"] == "not_started"
-    assert created["joined_at"]
+    assert created["created_at"]
     assert created["updated_at"]
+    assert "uuid" not in created
 
     with test_session_factory() as session:
         persisted = session.get(Author, created["id"])
         assert persisted is not None
-        assert persisted.status == "joined"
+        assert persisted.uuid is not None
 
     assert client.get(collection).json() == [created]
     author_detail = client.get(f"/api/v1/authors/{created['id']}").json()
@@ -356,13 +466,11 @@ def test_author_crud_persists_to_sqlite(
 
     update_response = client.patch(
         f"/api/v1/authors/{created['id']}",
-        json={"name": "Avery Lee", "status": "not_joined"},
+        json={"name": "Avery Lee"},
     )
     assert update_response.status_code == 200
     updated = update_response.json()
     assert updated["name"] == "Avery Lee"
-    assert updated["status"] == "not_joined"
-    assert updated["joined_at"] is None
 
     assert client.patch(f"/api/v1/authors/{created['id']}", json={}).status_code == 400
     assert client.delete(f"/api/v1/authors/{created['id']}").status_code == 204
@@ -399,7 +507,8 @@ def test_invitation_join_and_welcome_flow_persists_to_sqlite(
     assert invitation_response.json()["book"] == book
 
     join_response = client.post(join_path, json={"name": "  Zhang San  "})
-    assert join_response.status_code == 201
+    assert join_response.status_code == 200
+    assert join_response.json()["mode"] == "created"
     author_id = join_response.json()["author_id"]
 
     with test_session_factory() as session:
@@ -407,9 +516,8 @@ def test_invitation_join_and_welcome_flow_persists_to_sqlite(
         assert author is not None
         assert author.book_id == book["id"]
         assert author.name == "Zhang San"
-        assert author.number == "001"
-        assert author.status == "joined"
-        assert author.joined_at is not None
+        assert author.uuid is not None
+        assert author.created_at is not None
 
     welcome_response = client.get(f"/api/v1/authors/{author_id}")
     assert welcome_response.status_code == 200
@@ -425,10 +533,13 @@ def test_invitation_join_and_welcome_flow_persists_to_sqlite(
 def test_invalid_invitation_returns_404(client: TestClient) -> None:
     assert client.get("/api/v1/books/999/invite").status_code == 404
     assert client.get("/api/v1/join/OCB-NOT123").status_code == 404
-    assert client.post(
-        "/api/v1/join/OCB-NOT123",
-        json={"name": "Alex"},
-    ).status_code == 404
+    assert (
+        client.post(
+            "/api/v1/join/OCB-NOT123",
+            json={"name": "Alex"},
+        ).status_code
+        == 404
+    )
 
 
 def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) -> None:
@@ -443,7 +554,7 @@ def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) ->
     ).json()
     author = client.post(
         f"/api/v1/books/{book['id']}/authors",
-        json={"number": "001", "name": "Avery", "status": "joined"},
+        json={"name": "Avery"},
     ).json()
     collection = f"/api/v1/books/{book['id']}/articles"
 
@@ -462,10 +573,18 @@ def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) ->
     created = create_response.json()
     assert created["book_id"] == book["id"]
     assert created["status"] == "draft"
+    assert created["submitted_at"] is None
     assert created["image"] == "https://example.com/image.jpg"
-    assert client.get(f"/api/v1/authors/{author['id']}").json()[
-        "article_status"
-    ] == "draft"
+    assert (
+        client.get(
+            collection,
+            params={"include_drafts": "false"},
+        ).json()
+        == []
+    )
+    preview = client.get(f"/api/v1/authors/{author['id']}/preview").json()
+    assert preview["article_count"] == 1
+    assert preview["latest_article"]["status"] == "draft"
 
     assert client.get(collection).json() == [created]
     assert client.get(f"/api/v1/articles/{created['id']}").json() == created
@@ -477,6 +596,12 @@ def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) ->
     assert update_response.status_code == 200
     assert update_response.json()["title"] == "A real submission"
     assert update_response.json()["status"] == "pending"
+    submitted_at = update_response.json()["submitted_at"]
+    assert submitted_at is not None
+    assert client.get(
+        collection,
+        params={"include_drafts": "false"},
+    ).json() == [update_response.json()]
 
     approve_response = client.patch(
         f"/api/v1/articles/{created['id']}/status",
@@ -484,17 +609,422 @@ def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) ->
     )
     assert approve_response.status_code == 200
     assert approve_response.json()["status"] == "approved"
-    assert client.get(f"/api/v1/authors/{author['id']}").json()[
-        "article_status"
-    ] == "submitted"
+    assert approve_response.json()["submitted_at"] == submitted_at
+    assert (
+        client.get(f"/api/v1/authors/{author['id']}/preview").json()["latest_article"][
+            "status"
+        ]
+        == "approved"
+    )
 
-    assert client.patch(
-        f"/api/v1/articles/{created['id']}/status",
-        json={"status": "invalid"},
-    ).status_code == 422
+    assert (
+        client.patch(
+            f"/api/v1/articles/{created['id']}/status",
+            json={"status": "invalid"},
+        ).status_code
+        == 422
+    )
     assert client.delete(f"/api/v1/articles/{created['id']}").status_code == 204
     assert client.get(f"/api/v1/articles/{created['id']}").status_code == 404
     assert client.get(collection).json() == []
-    assert client.get(f"/api/v1/authors/{author['id']}").json()[
-        "article_status"
-    ] == "not_started"
+    assert client.get(f"/api/v1/authors/{author['id']}/preview").json() == {
+        "article_count": 0,
+        "latest_article": None,
+    }
+
+
+def test_join_restores_unique_name_and_requires_selection_for_duplicates(
+    client: TestClient,
+) -> None:
+    book = client.post(
+        "/api/v1/books",
+        json={
+            "title": "Identity Test",
+            "owner_name": "Editor",
+            "number_mode": "none",
+        },
+    ).json()
+    join_path = f"/api/v1/join/{book['invite_code']}"
+
+    first = client.post(join_path, json={"name": "张三"}).json()
+    assert first["mode"] == "created"
+    restored = client.post(join_path, json={"name": "张三"}).json()
+    assert restored == {"mode": "restored", "author_id": first["author_id"]}
+
+    duplicate = client.post(
+        f"/api/v1/books/{book['id']}/authors",
+        json={"name": "张三"},
+    ).json()
+    selection = client.post(join_path, json={"name": "张三"}).json()
+    assert selection == {"mode": "selection_required", "author_id": None}
+
+    matches = client.get(
+        f"/api/v1/books/{book['id']}/authors/search",
+        params={"name": "张三"},
+    ).json()
+    assert {author["id"] for author in matches} == {
+        first["author_id"],
+        duplicate["id"],
+    }
+    assert all("uuid" not in author for author in matches)
+
+
+def test_author_can_manage_multiple_articles_and_preview_latest(
+    client: TestClient,
+) -> None:
+    book = client.post(
+        "/api/v1/books",
+        json={
+            "title": "Multiple Articles",
+            "owner_name": "Editor",
+            "number_mode": "automatic",
+        },
+    ).json()
+    author = client.post(
+        f"/api/v1/books/{book['id']}/authors",
+        json={"name": "Avery"},
+    ).json()
+
+    first = client.post(
+        f"/api/v1/books/{book['id']}/articles",
+        json={
+            "author_id": author["id"],
+            "number": "017",
+            "title": "First",
+            "content": "A" * 140,
+        },
+    ).json()
+    second = client.post(
+        f"/api/v1/books/{book['id']}/articles",
+        json={
+            "author_id": author["id"],
+            "number": "003",
+            "title": "Second",
+            "content": "Latest article",
+            "status": "pending",
+        },
+    ).json()
+
+    articles = client.get(f"/api/v1/authors/{author['id']}/articles").json()
+    assert {article["id"] for article in articles} == {first["id"], second["id"]}
+    assert first["number"] == "017"
+    assert second["number"] == "003"
+
+    missing_number = client.post(
+        f"/api/v1/books/{book['id']}/articles",
+        json={"author_id": author["id"], "title": "Missing number"},
+    )
+    assert missing_number.status_code == 409
+
+    preview = client.get(f"/api/v1/authors/{author['id']}/preview").json()
+    assert preview["article_count"] == 2
+    assert preview["latest_article"]["title"] == "Second"
+    assert preview["latest_article"]["excerpt"] == "Latest article"
+    assert preview["latest_article"]["status"] == "pending"
+
+    other_author = client.post(
+        f"/api/v1/books/{book['id']}/authors",
+        json={"name": "Blake"},
+    ).json()
+    duplicate = client.post(
+        f"/api/v1/books/{book['id']}/articles",
+        json={
+            "author_id": other_author["id"],
+            "number": "017",
+            "title": "Duplicate number",
+        },
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"]["message_zh"] == "这个文章编号已被认领"
+
+
+def test_layout_assigns_book_wide_numbers_only_when_numbering_is_disabled(
+    client: TestClient,
+) -> None:
+    book = client.post(
+        "/api/v1/books",
+        json={
+            "title": "Layout Numbering",
+            "owner_name": "Editor",
+            "number_mode": "none",
+        },
+    ).json()
+    first_author = client.post(
+        f"/api/v1/books/{book['id']}/authors",
+        json={"name": "Avery"},
+    ).json()
+    second_author = client.post(
+        f"/api/v1/books/{book['id']}/authors",
+        json={"name": "Blake"},
+    ).json()
+    first = client.post(
+        f"/api/v1/books/{book['id']}/articles",
+        json={
+            "author_id": first_author["id"],
+            "number": "999",
+            "title": "First",
+            "status": "approved",
+        },
+    ).json()
+    second = client.post(
+        f"/api/v1/books/{book['id']}/articles",
+        json={
+            "author_id": second_author["id"],
+            "number": "999",
+            "title": "Second",
+            "status": "approved",
+        },
+    ).json()
+    assert first["number"] == second["number"] == ""
+
+    assigned = client.patch(
+        f"/api/v1/books/{book['id']}/articles/numbers",
+        json={"article_ids": [second["id"], first["id"]]},
+    )
+    assert assigned.status_code == 200
+    assert [article["number"] for article in assigned.json()] == ["001", "002"]
+    assert [article["author_id"] for article in assigned.json()] == [
+        second_author["id"],
+        first_author["id"],
+    ]
+    assert client.get(f"/api/v1/books/{book['id']}").json()[
+        "layout_article_order"
+    ] == [second["id"], first["id"]]
+    reassigned = client.patch(
+        f"/api/v1/books/{book['id']}/articles/numbers",
+        json={"article_ids": [first["id"], second["id"]]},
+    )
+    assert reassigned.status_code == 200
+    assert [article["number"] for article in reassigned.json()] == ["001", "002"]
+
+    automatic_book = client.post(
+        "/api/v1/books",
+        json={
+            "title": "Claim Numbering",
+            "owner_name": "Editor",
+            "number_mode": "automatic",
+        },
+    ).json()
+    assert (
+        client.patch(
+            f"/api/v1/books/{automatic_book['id']}/articles/numbers",
+            json={"article_ids": [first["id"]]},
+        ).status_code
+        == 400
+    )
+
+
+def test_layout_reorders_articles_without_overwriting_claimed_numbers(
+    client: TestClient,
+) -> None:
+    book = client.post(
+        "/api/v1/books",
+        json={
+            "title": "Custom publication order",
+            "owner_name": "Editor",
+            "number_mode": "automatic",
+        },
+    ).json()
+    author = client.post(
+        f"/api/v1/books/{book['id']}/authors",
+        json={"name": "Avery"},
+    ).json()
+    first = client.post(
+        f"/api/v1/books/{book['id']}/articles",
+        json={
+            "author_id": author["id"],
+            "number": "010",
+            "title": "First by number",
+            "status": "approved",
+        },
+    ).json()
+    second = client.post(
+        f"/api/v1/books/{book['id']}/articles",
+        json={
+            "author_id": author["id"],
+            "number": "020",
+            "title": "Second by number",
+            "status": "approved",
+        },
+    ).json()
+
+    reordered = client.patch(
+        f"/api/v1/books/{book['id']}/articles/order",
+        json={"article_ids": [second["id"], first["id"]]},
+    )
+    assert reordered.status_code == 200
+    assert [article["id"] for article in reordered.json()] == [
+        second["id"],
+        first["id"],
+    ]
+    assert [article["number"] for article in reordered.json()] == ["020", "010"]
+    assert client.get(f"/api/v1/books/{book['id']}").json()[
+        "layout_article_order"
+    ] == [second["id"], first["id"]]
+
+    preview = client.get(f"/api/v1/books/{book['id']}/export").json()
+    article_pages = [
+        page["label_en"]
+        for page in preview["preview_pages"]
+        if page["kind"] == "article"
+    ]
+    assert article_pages == ["Second by number", "First by number"]
+
+    invalid = client.patch(
+        f"/api/v1/books/{book['id']}/articles/order",
+        json={"article_ids": [first["id"]]},
+    )
+    assert invalid.status_code == 400
+
+
+def test_export_is_blocked_without_approved_articles(client: TestClient) -> None:
+    book = client.post(
+        "/api/v1/books",
+        json={
+            "title": "Empty Export",
+            "owner_name": "Editor",
+            "number_mode": "automatic",
+        },
+    ).json()
+
+    preview = client.get(f"/api/v1/books/{book['id']}/export")
+    assert preview.status_code == 200
+    assert preview.json()["can_export"] is False
+    assert preview.json()["stats"]["article_count"] == 0
+    assert preview.json()["warnings_zh"] == ["未设置封面。将使用默认封面。"]
+
+    generated = client.post(f"/api/v1/books/{book['id']}/export")
+    assert generated.status_code == 409
+    assert generated.json()["detail"] == {
+        "code": "no_publishable_content",
+        "message": "There is no publishable content.",
+        "message_zh": "暂无可出版内容。",
+    }
+
+
+def test_pdf_font_selection_rejects_ext_b_only_font() -> None:
+    font_root = Path("C:/Windows/Fonts")
+    ext_b = font_root / "simsunb.ttf"
+    common_chinese = font_root / "msyhbd.ttc"
+    if not ext_b.exists() or not common_chinese.exists():
+        pytest.skip("Windows Chinese fonts are not installed")
+    assert _first_cjk_font([ext_b, common_chinese]) == common_chinese
+
+
+def test_export_generates_and_downloads_printable_pdf(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings, "export_dir", tmp_path)
+    book = client.post(
+        "/api/v1/books",
+        json={
+            "title": "我们的班级故事",
+            "description": "A bilingual class book",
+            "owner_name": "陈老师",
+            "number_mode": "automatic",
+        },
+    ).json()
+    book_id = book["id"]
+    client.patch(
+        f"/api/v1/books/{book_id}",
+        json={
+            "layout_sections": [
+                {
+                    "id": "cover",
+                    "kind": "page",
+                    "preset": "cover",
+                    "name": None,
+                    "file": None,
+                },
+                {
+                    "id": "articles",
+                    "kind": "articles",
+                    "preset": "articles",
+                    "name": None,
+                    "file": None,
+                },
+                {
+                    "id": "thanks",
+                    "kind": "page",
+                    "preset": "acknowledgement",
+                    "name": None,
+                    "file": None,
+                },
+            ]
+        },
+    )
+    template = client.patch(
+        f"/api/v1/books/{book_id}/template",
+        json={
+            "title_format": {"size": 22, "align": "center", "bold": True},
+            "body_format": {
+                "font": {"family": "serif", "fullName": "System Serif"},
+                "size": 13,
+                "line_height": 1.6,
+                "first_line_indent": 2,
+                "justify": True,
+            },
+            "image_rules": {"max_width": 68},
+            "numbering_rules": {"show": True, "position": "above"},
+            "page_rules": {
+                "size": "a5",
+                "margin": "normal",
+                "number_position": "center",
+            },
+        },
+    )
+    assert template.status_code == 200
+    author = client.post(
+        f"/api/v1/books/{book_id}/authors",
+        json={"name": "林同学"},
+    ).json()
+    for number, title in [("10", "第十篇"), ("2", "第二篇")]:
+        response = client.post(
+            f"/api/v1/books/{book_id}/articles",
+            json={
+                "author_id": author["id"],
+                "number": number,
+                "title": title,
+                "content": "这是审核通过的正文。\n\nThis article is ready to print.",
+                "status": "approved",
+            },
+        )
+        assert response.status_code == 201
+
+    preview = client.get(f"/api/v1/books/{book_id}/export")
+    assert preview.status_code == 200
+    preview_data = preview.json()
+    assert preview_data["can_export"] is True
+    assert preview_data["template"]["page_size"] == "a5"
+    assert preview_data["stats"]["article_count"] == 2
+    assert [section["preset"] for section in preview_data["sections"]] == [
+        "cover",
+        "articles",
+        "acknowledgement",
+    ]
+    article_pages = [
+        page["label_zh"]
+        for page in preview_data["preview_pages"]
+        if page["kind"] == "article"
+    ]
+    assert article_pages == ["第二篇", "第十篇"]
+
+    generated = client.post(f"/api/v1/books/{book_id}/export")
+    assert generated.status_code == 200
+    result = generated.json()
+    assert result["status"] == "success"
+    assert re.fullmatch(r"[a-f0-9]{32}", result["task_id"])
+    assert result["page_count"] >= 4
+    artifact = tmp_path / f"book-{book_id}-{result['task_id']}.pdf"
+    assert artifact.read_bytes().startswith(b"%PDF")
+
+    download = client.get(result["download_url"])
+    assert download.status_code == 200
+    assert download.headers["content-type"] == "application/pdf"
+    assert download.content.startswith(b"%PDF")
+    assert (
+        client.get(f"/api/v1/books/{book_id}/export/not-a-task/download").status_code
+        == 404
+    )

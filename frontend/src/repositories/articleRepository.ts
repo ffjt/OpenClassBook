@@ -12,6 +12,7 @@ export interface Article {
   image: string | null;
   status: ArticleStatus;
   review_status: Exclude<ArticleStatus, "draft">;
+  submitted_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -30,6 +31,12 @@ export type ArticleUpdateInput = Partial<ArticleCreateInput>;
 export const articleRepository = {
   list(bookId: number) {
     return apiRequest<Article[]>(`/books/${bookId}/articles`);
+  },
+
+  listSubmitted(bookId: number) {
+    return apiRequest<Article[]>(
+      `/books/${bookId}/articles?include_drafts=false`,
+    );
   },
 
   listByAuthor(authorId: number) {
@@ -66,6 +73,20 @@ export const articleRepository = {
   updateStatus(id: number, status: ArticleStatus) {
     return apiRequest<Article>(`/articles/${id}/status`, {
       body: JSON.stringify({ status }),
+      method: "PATCH",
+    });
+  },
+
+  assignNumbers(bookId: number, articleIds: number[]) {
+    return apiRequest<Article[]>(`/books/${bookId}/articles/numbers`, {
+      body: JSON.stringify({ article_ids: articleIds }),
+      method: "PATCH",
+    });
+  },
+
+  saveLayoutOrder(bookId: number, articleIds: number[]) {
+    return apiRequest<Article[]>(`/books/${bookId}/articles/order`, {
+      body: JSON.stringify({ article_ids: articleIds }),
       method: "PATCH",
     });
   },

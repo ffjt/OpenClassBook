@@ -42,9 +42,7 @@ class BookService:
 
     def _create_invite_code(self) -> str:
         while True:
-            suffix = "".join(
-                secrets.choice(INVITE_CODE_ALPHABET) for _ in range(6)
-            )
+            suffix = "".join(secrets.choice(INVITE_CODE_ALPHABET) for _ in range(6))
             invite_code = f"OCB-{suffix}"
             if self.repository.get_by_invite_code(invite_code) is None:
                 return invite_code
