@@ -78,6 +78,10 @@ OpenClassBook 围绕五个核心对象展开。
 - 书名
 - 简介
 - 邀请码
+- 投稿截止时间
+- 每位作者投稿上限（仅一篇、多篇指定上限或不限制）
+- 投稿后的修改与删除规则
+- 编号模式、自动编号格式与导入编号池
 - Layout 中的板块顺序与正文出版顺序
 - 创建时间
 
@@ -127,6 +131,10 @@ OpenClassBook 围绕五个核心对象展开。
 
 一个 Author 可以拥有多篇 Article。
 
+Join 时若姓名尚未存在，则创建 Author；若已存在一个或多个同名 Author，必须先进入身份确认页，由用户明确选择自己的投稿记录后再进入编辑器，不得自动恢复。
+
+On join, a new Author is created only when the name is unused. If one or more matching Authors already exist, the user must explicitly confirm their record before entering the editor.
+
 ---
 
 ## Article
@@ -138,19 +146,23 @@ Article 永远只保存内容。
 包括：
 
 - 标题
+- 副标题
 - 正文
 - 图片
+- 单张配图的页码、环绕、位置与尺寸元数据
 - 编号
 
-**Article 不保存任何排版信息。**
+**Article 不保存字体、字号、行距等全书格式；这些排版规则统一来自 Template。**
+
+**Article stores content-specific image placement metadata, but book-wide typography and page rules always come from Template.**
 
 排版全部来自 Template。
 
 编号规则由 Book 的编号模式决定：
 
-- 不使用编号：投稿时编号为空，管理员可在排版阶段按全书顺序统一编号
-- 自动生成编号：作者新建文章时输入想要认领的编号，编号在整本书内唯一
-- 导入已有编号：作者只能认领管理员已导入的编号
+- 不使用编号（`none`）：投稿和审核阶段不分配编号，管理员可在排版阶段按顺序统一编号
+- 自动生成编号（`automatic`）：系统在作者新建文章时按全书顺序、前缀和位数生成唯一编号
+- 导入编号池（`import`）：作者只能认领管理员导入编号池中的编号，编号始终在整本书内唯一
 
 ---
 
@@ -343,8 +355,10 @@ Article 永远只保存内容。
 包括：
 
 - 标题
+- 副标题
 - 正文
 - 图片
+- 单张配图的位置元数据
 
 不得保存：
 

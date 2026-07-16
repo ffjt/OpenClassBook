@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, status
 from app.api.dependencies import JoinServiceDep
 from app.schemas.book import BookResponse
 from app.schemas.invitation import JoinBookResponse, JoinCreate, JoinResponse
+from app.services.join import JoinUnavailableError
 
 router = APIRouter(prefix="/join", tags=["Join / 加入书籍"])
 
@@ -17,13 +18,36 @@ def invitation_not_found() -> HTTPException:
     )
 
 
+def join_unavailable(error: JoinUnavailableError) -> HTTPException:
+    if error.code == "invite_disabled":
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": error.code,
+                "message": "This book is not accepting new authors.",
+                "message_zh": "当前书籍暂不接受新的作者加入。",
+            },
+        )
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": error.code,
+            "message": "This book has stopped accepting submissions.",
+            "message_zh": "当前书籍已停止接收投稿。",
+        },
+    )
+
+
 @router.get(
     "/{invite_code}",
     response_model=JoinBookResponse,
     summary="Read an invitation / 读取邀请信息",
 )
 def get_join(invite_code: str, service: JoinServiceDep) -> JoinBookResponse:
-    book = service.get_book(invite_code)
+    try:
+        book = service.get_book(invite_code)
+    except JoinUnavailableError as error:
+        raise join_unavailable(error) from error
     if book is None:
         raise invitation_not_found()
     return JoinBookResponse(book=BookResponse.model_validate(book))
@@ -39,7 +63,10 @@ def join_book(
     data: JoinCreate,
     service: JoinServiceDep,
 ) -> JoinResponse:
-    result = service.join(invite_code, data)
+    try:
+        result = service.join(invite_code, data)
+    except JoinUnavailableError as error:
+        raise join_unavailable(error) from error
     if result is None:
         raise invitation_not_found()
     mode, author = result

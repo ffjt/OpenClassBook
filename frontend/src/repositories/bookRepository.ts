@@ -1,6 +1,7 @@
 import { apiRequest } from "@/repositories/apiClient";
 
-export type NumberMode = "none" | "automatic" | "import";
+export type NumberMode = "none" | "automatic" | "existing";
+export type ExistingNumberMode = "claim" | "import";
 export type BookStatus = "collecting" | "reviewing" | "published";
 export type LayoutSectionKind = "page" | "articles";
 export type LayoutSectionPreset =
@@ -25,11 +26,27 @@ export interface BookLayoutSection {
 export interface Book {
   id: number;
   title: string;
+  subtitle: string | null;
   description: string | null;
   owner_name: string;
+  school: string | null;
+  publisher: string | null;
   invite_code: string;
+  invite_enabled: boolean;
+  submission_enabled: boolean;
+  submission_deadline: string | null;
+  allow_multiple_articles: boolean;
+  limit_articles_per_author: boolean;
+  max_articles_per_author: number;
+  allow_edit_after_submit: boolean;
+  allow_delete_article: boolean;
   number_mode: NumberMode;
+  existing_number_mode: ExistingNumberMode | null;
+  number_pool: string[];
+  number_prefix: string;
+  number_digits: number;
   status: BookStatus;
+  setup_completed: boolean;
   cover_file: string | null;
   preface_file: string | null;
   afterword_file: string | null;
@@ -38,6 +55,9 @@ export interface Book {
   layout_sections: BookLayoutSection[] | null;
   layout_article_order: number[] | null;
   author_count: number;
+  article_count: number;
+  approved_article_count: number;
+  claimed_number_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -46,17 +66,37 @@ export interface BookCreateInput {
   title: string;
   description: string | null;
   owner_name: string;
-  number_mode: NumberMode;
+  number_mode?: NumberMode;
+  existing_number_mode?: ExistingNumberMode | null;
+  number_pool?: string[];
+  number_prefix?: string;
+  number_digits?: number;
 }
 
 export type BookUpdateInput = Partial<
   Pick<
     Book,
     | "title"
+    | "subtitle"
     | "description"
     | "owner_name"
+    | "school"
+    | "publisher"
+    | "submission_enabled"
+    | "submission_deadline"
+    | "allow_multiple_articles"
+    | "limit_articles_per_author"
+    | "max_articles_per_author"
+    | "allow_edit_after_submit"
+    | "allow_delete_article"
+    | "invite_enabled"
     | "number_mode"
+    | "existing_number_mode"
+    | "number_pool"
+    | "number_prefix"
+    | "number_digits"
     | "status"
+    | "setup_completed"
     | "cover_file"
     | "preface_file"
     | "afterword_file"
@@ -93,5 +133,23 @@ export const bookRepository = {
     return apiRequest<void>(`/books/${id}`, {
       method: "DELETE",
     });
+  },
+
+  regenerateInviteCode(id: number) {
+    return apiRequest<Book>(`/books/${id}/invite-code`, {
+      method: "POST",
+    });
+  },
+
+  deleteDrafts(id: number) {
+    return apiRequest<Book>(`/books/${id}/drafts`, { method: "DELETE" });
+  },
+
+  deleteArticles(id: number) {
+    return apiRequest<Book>(`/books/${id}/articles`, { method: "DELETE" });
+  },
+
+  deleteAuthors(id: number) {
+    return apiRequest<Book>(`/books/${id}/authors`, { method: "DELETE" });
   },
 };

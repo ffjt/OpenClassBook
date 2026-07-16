@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
 
 from app.models.article import Article
+from app.models.book import Book
 from app.repositories.article import ArticleRepository
 from app.schemas.article import (
     ArticleCreate,
     ArticleCreateData,
+    ArticleEditRequestDecision,
     ArticleNumberAssignment,
     ArticleOrderAssignment,
     ArticleStatusUpdate,
@@ -49,13 +51,27 @@ class ArticleService:
         book = self.repository.get_book(book_id)
         if book is None:
             raise LookupError("book_not_found")
-        if book.number_mode == "automatic":
+        self._ensure_submission_open(book, now)
+        article_limit = 1 if not book.allow_multiple_articles else (
+            book.max_articles_per_author if book.limit_articles_per_author else None
+        )
+        if (
+            article_limit is not None
+            and self.repository.count_by_author(data.author_id) >= article_limit
+        ):
+            raise ValueError("article_limit_reached")
+        if book.number_mode == "existing":
             number = values["number"]
             if not number:
                 raise ValueError("article_number_required")
+            if (
+                book.existing_number_mode == "import"
+                and number not in book.number_pool
+            ):
+                raise ValueError("article_number_not_available")
             if self.repository.number_exists(book_id, number):
                 raise ValueError("article_number_already_claimed")
-        elif book.number_mode == "none":
+        else:
             values["number"] = ""
         submitted_at = now if values["status"] == "pending" else None
         return self.repository.create(
@@ -76,7 +92,7 @@ class ArticleService:
         book = self.repository.get_book(book_id)
         if book is None:
             raise LookupError("book_not_found")
-        if book.number_mode != "none":
+        if book.number_mode != "automatic":
             raise ValueError("layout_numbering_required")
 
         book_articles, ordered_articles = self._resolve_approved_order(book_id, data)
@@ -95,7 +111,7 @@ class ArticleService:
         if book is None:
             raise LookupError("book_not_found")
         book_articles, ordered_articles = self._resolve_approved_order(book_id, data)
-        if book.number_mode == "none":
+        if book.number_mode == "automatic":
             return self.repository.save_number_assignments(
                 book,
                 book_articles,
@@ -125,13 +141,52 @@ class ArticleService:
         if not changes:
             raise ValueError("At least one field is required / 至少需要一个更新字段")
 
+        current = self.repository.get(article_id)
+        if current is None:
+            return None
+        book = self.repository.get_book(current.book_id)
+        if book is None:
+            raise LookupError("book_not_found")
         now = datetime.now(UTC)
+        self._ensure_submission_open(book, now)
+        if current.status == "approved":
+            raise ValueError("article_reviewed_locked")
+        if current.status != "draft" and not book.allow_edit_after_submit:
+            raise ValueError("article_submission_locked")
+        if "number" in changes:
+            number = changes["number"]
+            if book.number_mode in {"none", "automatic"}:
+                changes["number"] = ""
+            elif (
+                book.existing_number_mode == "import"
+                and number not in book.number_pool
+            ):
+                raise ValueError("article_number_not_available")
+            elif self.repository.number_exists(
+                current.book_id,
+                number,
+                exclude_article_id=article_id,
+            ):
+                raise ValueError("article_number_already_claimed")
+
         if changes.get("status") == "pending":
             changes["submitted_at"] = now
         return self.repository.update(
             article_id,
             ArticleUpdateData(**changes, updated_at=now),
         )
+
+    @staticmethod
+    def _ensure_submission_open(book: Book, now: datetime) -> None:
+        if not book.submission_enabled:
+            raise ValueError("submission_disabled")
+        deadline = book.submission_deadline
+        if deadline is None:
+            return
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=UTC)
+        if now > deadline:
+            raise ValueError("submission_deadline_passed")
 
     def update_status(
         self,
@@ -140,8 +195,45 @@ class ArticleService:
     ) -> Article | None:
         return self.repository.update(
             article_id,
-            ArticleUpdateData(status=data.status, updated_at=datetime.now(UTC)),
+            ArticleUpdateData(
+                status=data.status,
+                edit_requested_at=None,
+                updated_at=datetime.now(UTC),
+            ),
         )
+
+    def request_edit(self, article_id: int) -> Article | None:
+        article = self.repository.get(article_id)
+        if article is None:
+            return None
+        if article.status != "approved":
+            raise ValueError("article_edit_request_unavailable")
+        if article.edit_requested_at is not None:
+            raise ValueError("article_edit_request_pending")
+        now = datetime.now(UTC)
+        return self.repository.update(
+            article_id,
+            ArticleUpdateData(edit_requested_at=now, updated_at=now),
+        )
+
+    def resolve_edit_request(
+        self,
+        article_id: int,
+        data: ArticleEditRequestDecision,
+    ) -> Article | None:
+        article = self.repository.get(article_id)
+        if article is None:
+            return None
+        if article.edit_requested_at is None:
+            raise ValueError("article_edit_request_not_found")
+        now = datetime.now(UTC)
+        changes: dict[str, object] = {
+            "edit_requested_at": None,
+            "updated_at": now,
+        }
+        if data.action == "approve":
+            changes.update(status="draft", submitted_at=None)
+        return self.repository.update(article_id, ArticleUpdateData(**changes))
 
     def delete(self, article_id: int) -> bool:
         return self.repository.delete(article_id)

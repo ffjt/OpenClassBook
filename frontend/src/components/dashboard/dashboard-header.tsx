@@ -1,4 +1,4 @@
-import { Settings, UserRound } from "lucide-react";
+import { UserRound } from "lucide-react";
 
 import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -19,7 +19,7 @@ const sectionTitles: Record<DashboardSection, Record<Language, string>> = {
   Template: { en: "Format Settings", zh: "格式设置" },
   Layout: { en: "Book Layout", zh: "书籍排版" },
   Export: { en: "Export", zh: "导出" },
-  Settings: { en: "Settings", zh: "设置" },
+  Settings: { en: "Book Settings", zh: "书籍设置" },
 };
 
 export function DashboardHeader({
@@ -42,7 +42,7 @@ export function DashboardHeader({
         <span aria-hidden="true" className="text-lg">
           📚
         </span>
-        <span className="text-sm font-semibold tracking-[-0.015em] text-foreground sm:text-[15px]">
+        <span className="hidden text-sm font-semibold tracking-[-0.015em] text-foreground sm:inline sm:text-[15px]">
           OpenClassBook
         </span>
         <span className="hidden text-border sm:inline">/</span>
@@ -54,21 +54,13 @@ export function DashboardHeader({
       <div className="flex items-center gap-2">
         <LanguageToggle language={language} onToggle={onToggleLanguage} />
         <ThemeToggle language={language} />
-        <button
-          aria-label={language === "zh" ? "设置" : "Settings"}
-          className="hidden size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:flex"
-          type="button"
-        >
-          <Settings className="size-[17px]" />
-        </button>
-        <div className="mx-1 hidden h-5 w-px bg-border sm:block" />
-        <button
-          aria-label={language === "zh" ? "打开用户菜单" : "Open user menu"}
-          className="flex size-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-xs font-semibold text-white shadow-sm ring-2 ring-white/10 focus-visible:outline-none focus-visible:ring-blue-400"
-          type="button"
+        <div
+          aria-label={ownerName ? `${language === "zh" ? "负责人" : "Owner"}: ${ownerName}` : undefined}
+          className="flex size-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-xs font-semibold text-white shadow-sm ring-2 ring-white/10"
+          role="img"
         >
           {ownerInitials || <UserRound className="size-4" />}
-        </button>
+        </div>
       </div>
     </header>
   );

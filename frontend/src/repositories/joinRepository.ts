@@ -7,7 +7,7 @@ interface JoinBookResponse {
 }
 
 interface JoinResponse {
-  mode: "created" | "restored" | "selection_required";
+  mode: "created" | "selection_required";
   author_id: number | null;
 }
 

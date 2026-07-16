@@ -191,6 +191,8 @@ export function ExportPage({
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20_000);
     setIsLoading(true);
     setHasLoadError(false);
     setResult(null);
@@ -198,7 +200,7 @@ export function ExportPage({
     setGenerationStatus("idle");
     Promise.all([
       bookRepository.get(bookId),
-      exportRepository.getPreview(bookId),
+      exportRepository.getPreview(bookId, controller.signal),
     ])
       .then(([loadedBook, loadedPreview]) => {
         if (!active) return;
@@ -206,9 +208,14 @@ export function ExportPage({
         setPreview(loadedPreview);
       })
       .catch(() => active && setHasLoadError(true))
-      .finally(() => active && setIsLoading(false));
+      .finally(() => {
+        window.clearTimeout(timeout);
+        if (active) setIsLoading(false);
+      });
     return () => {
       active = false;
+      window.clearTimeout(timeout);
+      controller.abort();
     };
   }, [bookId, reloadKey]);
 

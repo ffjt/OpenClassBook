@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Clock3,
   FileCheck2,
+  FilePenLine,
   FileOutput,
   FileText,
   Hash,
@@ -66,8 +67,8 @@ const copy = {
     numberMode: "Number assignment mode",
     numberModes: {
       none: "No article numbers",
-      automatic: "Generate numbers automatically",
-      import: "Import existing numbers",
+      automatic: "Automatic at layout",
+      existing: "Existing article numbers",
     },
     stats: {
       authors: "Authors",
@@ -82,8 +83,22 @@ const copy = {
     remaining: (count: number) => `${count} remaining`,
     progressLabel: (submitted: number, authors: number) =>
       `Submission progress: ${submitted} submitted out of ${authors} authors`,
+    claimProgress: "Number claim progress",
+    claimProgressDescription: "Claimed existing numbers compared with the available claim scope",
+    claimCount: (claimed: number, total: number) => `${claimed} claimed / ${total} available`,
+    unclaimed: (count: number) => `${count} unclaimed`,
+    claimProgressLabel: (claimed: number, total: number) =>
+      `Number claim progress: ${claimed} claimed out of ${total}`,
+    noNumbers: "No claimable numbers yet",
     noAuthors: "No authors yet",
     noArticles: "No articles yet",
+    setupGuide: {
+      title: "First-time setup is not complete",
+      description:
+        "We recommend confirming the book information and body format before inviting authors.",
+      note: "You can still use every Dashboard feature and update these choices later.",
+      action: "Continue Setup",
+    },
     nextStep: "Next Step",
     next: {
       template: {
@@ -105,6 +120,11 @@ const copy = {
         title: "Review pending submissions",
         description: (count: number) => `${count} submission${count === 1 ? "" : "s"} waiting for review.`,
         action: "Start Review",
+      },
+      editRequests: {
+        title: "Review modification requests",
+        description: (count: number) => `${count} modification request${count === 1 ? "" : "s"} waiting for review.`,
+        action: "View Requests",
       },
       complete: {
         title: "All submissions are reviewed",
@@ -138,9 +158,9 @@ const copy = {
     owner: "负责人",
     numberMode: "编号分配模式",
     numberModes: {
-      none: "不使用编号",
-      automatic: "自动生成编号",
-      import: "导入已有编号",
+      none: "我不需要编号",
+      automatic: "排版时自动生成编号",
+      existing: "我已经有编号",
     },
     stats: {
       authors: "作者人数",
@@ -155,8 +175,21 @@ const copy = {
     remaining: (count: number) => `剩余 ${count} 位`,
     progressLabel: (submitted: number, authors: number) =>
       `投稿进度：${authors} 位作者中已有 ${submitted} 篇投稿`,
+    claimProgress: "编号认领进度",
+    claimProgressDescription: "按已有编号的实际认领情况统计投稿进度",
+    claimCount: (claimed: number, total: number) => `已认领 ${claimed} / 可认领 ${total}`,
+    unclaimed: (count: number) => `剩余 ${count} 个`,
+    claimProgressLabel: (claimed: number, total: number) =>
+      `编号认领进度：${total} 个可认领编号中已认领 ${claimed} 个`,
+    noNumbers: "暂无可认领编号",
     noAuthors: "暂无作者",
     noArticles: "暂无文章",
+    setupGuide: {
+      title: "尚未完成首次配置",
+      description: "建议先完成书籍信息和正文格式配置，再邀请作者投稿。",
+      note: "你仍可正常使用 Dashboard，并可随时修改这些配置。",
+      action: "继续配置",
+    },
     nextStep: "下一步",
     next: {
       template: {
@@ -178,6 +211,11 @@ const copy = {
         title: "审核待处理投稿",
         description: (count: number) => `有 ${count} 篇投稿等待审核。`,
         action: "开始审核",
+      },
+      editRequests: {
+        title: "处理修改申请",
+        description: (count: number) => `有 ${count} 个修改申请等待处理。`,
+        action: "查看申请",
       },
       complete: {
         title: "所有投稿均已审核",
@@ -351,10 +389,33 @@ export function DashboardOverviewPage({
   const approved = articles.filter(
     (article) => article.status === "approved",
   ).length;
-  const progress = authors.length
+  const editRequests = articles.filter(
+    (article) => article.edit_requested_at !== null,
+  ).length;
+  const submissionProgress = authors.length
     ? Math.min(100, Math.round((submitted / authors.length) * 100))
     : 0;
-  const remaining = Math.max(authors.length - submitted, 0);
+  const submissionRemaining = Math.max(authors.length - submitted, 0);
+  const claimedAuthors = new Set(
+    articles
+      .filter((article) => article.number)
+      .map((article) => article.author_id),
+  ).size;
+  const showingClaimProgress = book.number_mode === "existing";
+  const claimTotal = book.existing_number_mode === "import"
+    ? book.number_pool.length
+    : authors.length;
+  const claimed = book.existing_number_mode === "import"
+    ? Math.min(book.claimed_number_count, claimTotal)
+    : Math.min(claimedAuthors, claimTotal);
+  const progress = showingClaimProgress
+    ? claimTotal
+      ? Math.round((claimed / claimTotal) * 100)
+      : 0
+    : submissionProgress;
+  const remaining = showingClaimProgress
+    ? Math.max(claimTotal - claimed, 0)
+    : submissionRemaining;
   const statValues = {
     authors: authors.length,
     submitted,
@@ -366,9 +427,16 @@ export function DashboardOverviewPage({
     { dateStyle: "medium" },
   ).format(new Date(book.created_at));
 
-  const nextStep = !template
-    ? { ...pageCopy.next.template, icon: Settings2, path: "/template" }
-    : authors.length === 0
+  const nextStep = editRequests > 0
+    ? {
+        ...pageCopy.next.editRequests,
+        description: pageCopy.next.editRequests.description(editRequests),
+        icon: FilePenLine,
+        path: "/review?view=editRequests",
+      }
+    : !template
+      ? { ...pageCopy.next.template, icon: Settings2, path: "/template" }
+      : authors.length === 0
       ? { ...pageCopy.next.authors, icon: UserPlus, path: "/authors" }
       : submitted === 0
         ? { ...pageCopy.next.submissions, icon: Clock3, path: "/authors" }
@@ -392,6 +460,35 @@ export function DashboardOverviewPage({
       onToggleLanguage={onToggleLanguage}
       ownerName={book.owner_name}
     >
+      {!book.setup_completed && (
+        <Card className="mb-6 border-blue-500/25 bg-blue-500/[0.04] shadow-none">
+          <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div className="flex gap-4">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-500">
+                <Settings2 className="size-[18px]" />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">{pageCopy.setupGuide.title}</h2>
+                <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
+                  {pageCopy.setupGuide.description}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {pageCopy.setupGuide.note}
+                </p>
+              </div>
+            </div>
+            <Button
+              className="h-9 shrink-0 bg-blue-600 px-4 text-xs text-white hover:bg-blue-700"
+              onClick={() => onNavigate(`/book/${book.id}/setup/settings`)}
+              type="button"
+            >
+              {pageCopy.setupGuide.action}
+              <ArrowRight className="ml-2 size-3.5" />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <section className="flex flex-col gap-5 border-b border-border pb-8 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-3xl">
           <h1 className="text-2xl font-semibold tracking-[-0.035em] text-foreground sm:text-3xl">
@@ -447,9 +544,9 @@ export function DashboardOverviewPage({
           <Card className="border-border bg-card shadow-none">
             <CardHeader className="flex-row items-center justify-between space-y-0 p-5 pb-4">
               <div>
-                <CardTitle className="text-foreground">{pageCopy.submissionProgress}</CardTitle>
+                <CardTitle className="text-foreground">{showingClaimProgress ? pageCopy.claimProgress : pageCopy.submissionProgress}</CardTitle>
                 <p className="mt-1.5 text-xs text-muted-foreground">
-                  {pageCopy.submissionProgressDescription}
+                  {showingClaimProgress ? pageCopy.claimProgressDescription : pageCopy.submissionProgressDescription}
                 </p>
               </div>
               <span className="text-2xl font-semibold tracking-[-0.03em] text-foreground">
@@ -459,24 +556,33 @@ export function DashboardOverviewPage({
             <CardContent className="p-5 pt-1">
               <div className="mb-3 flex items-center justify-between gap-4 text-xs">
                 <span className="font-medium text-foreground">
-                  {pageCopy.progressCount(submitted, authors.length)}
+                  {showingClaimProgress
+                    ? pageCopy.claimCount(claimed, claimTotal)
+                    : pageCopy.progressCount(submitted, authors.length)}
                 </span>
                 <span className="shrink-0 text-muted-foreground">
-                  {pageCopy.remaining(remaining)}
+                  {showingClaimProgress
+                    ? pageCopy.unclaimed(remaining)
+                    : pageCopy.remaining(remaining)}
                 </span>
               </div>
               <Progress
-                aria-label={pageCopy.progressLabel(submitted, authors.length)}
+                aria-label={showingClaimProgress
+                  ? pageCopy.claimProgressLabel(claimed, claimTotal)
+                  : pageCopy.progressLabel(submitted, authors.length)}
                 className="h-2 bg-muted [&>div]:bg-blue-500"
                 value={progress}
               />
-              {authors.length === 0 || articles.length === 0 ? (
+              {authors.length === 0 || articles.length === 0 || (showingClaimProgress && claimTotal === 0) ? (
                 <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4 text-xs text-muted-foreground">
                   {authors.length === 0 ? (
                     <span className="rounded-md bg-muted/60 px-2.5 py-1.5">{pageCopy.noAuthors}</span>
                   ) : null}
                   {articles.length === 0 ? (
                     <span className="rounded-md bg-muted/60 px-2.5 py-1.5">{pageCopy.noArticles}</span>
+                  ) : null}
+                  {showingClaimProgress && claimTotal === 0 ? (
+                    <span className="rounded-md bg-muted/60 px-2.5 py-1.5">{pageCopy.noNumbers}</span>
                   ) : null}
                 </div>
               ) : null}

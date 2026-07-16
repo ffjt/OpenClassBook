@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Response, status
 from app.api.dependencies import ArticleServiceDep
 from app.schemas.article import (
     ArticleCreate,
+    ArticleEditRequestDecision,
     ArticleNumberAssignment,
     ArticleOrderAssignment,
     ArticleResponse,
@@ -96,10 +97,9 @@ def assign_article_numbers(
         if str(error) == "layout_numbering_required":
             detail = {
                 "message": (
-                    "Layout numbering is only available when article numbering "
-                    "is disabled"
+                    "Layout numbering is only available in automatic-numbering mode"
                 ),
-                "message_zh": "只有不使用文章编号的书籍才能在排版时统一添加编号",
+                "message_zh": "只有自动生成编号模式才能在排版时统一添加编号",
             }
         else:
             detail = {
@@ -157,13 +157,43 @@ def create_article(
     try:
         article = service.create(book_id, data)
     except ValueError as error:
-        if str(error) == "article_number_required":
+        error_code = str(error)
+        if error_code in {
+            "submission_disabled",
+            "submission_deadline_passed",
+            "article_limit_reached",
+        }:
+            messages = {
+                "submission_disabled": (
+                    "This book is not accepting submissions",
+                    "当前书籍已停止接收投稿",
+                ),
+                "submission_deadline_passed": (
+                    "The submission deadline has passed",
+                    "投稿截止时间已过",
+                ),
+                "article_limit_reached": (
+                    "This author has reached the article limit",
+                    "该作者已达到投稿数量上限",
+                ),
+            }
+            message, message_zh = messages[error_code]
+            detail = {"code": error_code, "message": message, "message_zh": message_zh}
+        elif error_code == "article_number_required":
             detail = {
+                "code": error_code,
                 "message": "Claim an article number before creating the article",
                 "message_zh": "创建文章前请先认领编号",
             }
+        elif error_code == "article_number_not_available":
+            detail = {
+                "code": error_code,
+                "message": "Choose a number from this book's available list",
+                "message_zh": "请选择本书编号列表中的可用编号",
+            }
         else:
             detail = {
+                "code": "article_number_already_claimed",
                 "message": "This article number has already been claimed",
                 "message_zh": "这个文章编号已被认领",
             }
@@ -208,6 +238,58 @@ def update_article(
     try:
         article = service.update(article_id, data)
     except ValueError as error:
+        error_code = str(error)
+        if error_code in {
+            "submission_disabled",
+            "submission_deadline_passed",
+            "article_submission_locked",
+            "article_reviewed_locked",
+        }:
+            messages = {
+                "submission_disabled": (
+                    "This book is not accepting changes",
+                    "当前书籍已停止接收修改",
+                ),
+                "submission_deadline_passed": (
+                    "The submission deadline has passed",
+                    "投稿截止时间已过，不能继续修改",
+                ),
+                "article_submission_locked": (
+                    "This article was locked when it was submitted",
+                    "该文章已在提交后锁定",
+                ),
+                "article_reviewed_locked": (
+                    "Reviewed articles cannot be changed by authors",
+                    "已审核文章不能由作者继续修改",
+                ),
+            }
+            message, message_zh = messages[error_code]
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": error_code,
+                    "message": message,
+                    "message_zh": message_zh,
+                },
+            ) from error
+        if error_code.startswith("article_number_"):
+            detail = {
+                "code": error_code,
+                "message": (
+                    "Choose an available number from this book"
+                    if error_code == "article_number_not_available"
+                    else "This article number has already been claimed"
+                ),
+                "message_zh": (
+                    "请选择本书编号列表中的可用编号"
+                    if error_code == "article_number_not_available"
+                    else "这个文章编号已被认领"
+                ),
+            }
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=detail,
+            ) from error
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -241,6 +323,69 @@ def update_article_status(
     service: ArticleServiceDep,
 ) -> ArticleResponse:
     article = service.update_status(article_id, data)
+    if article is None:
+        raise article_not_found()
+    return ArticleResponse.model_validate(article)
+
+
+@router.post(
+    "/articles/{article_id}/edit-request",
+    response_model=ArticleResponse,
+    summary="Request changes to an approved article / 申请修改已通过文章",
+)
+def request_article_edit(
+    article_id: int,
+    service: ArticleServiceDep,
+) -> ArticleResponse:
+    try:
+        article = service.request_edit(article_id)
+    except ValueError as error:
+        error_code = str(error)
+        messages = {
+            "article_edit_request_unavailable": (
+                "Only approved articles can request changes",
+                "只有已通过审核的文章可以申请修改",
+            ),
+            "article_edit_request_pending": (
+                "A change request is already pending",
+                "该文章已有待处理的修改申请",
+            ),
+        }
+        message, message_zh = messages[error_code]
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": error_code,
+                "message": message,
+                "message_zh": message_zh,
+            },
+        ) from error
+    if article is None:
+        raise article_not_found()
+    return ArticleResponse.model_validate(article)
+
+
+@router.patch(
+    "/articles/{article_id}/edit-request",
+    response_model=ArticleResponse,
+    summary="Resolve an article change request / 处理文章修改申请",
+)
+def resolve_article_edit_request(
+    article_id: int,
+    data: ArticleEditRequestDecision,
+    service: ArticleServiceDep,
+) -> ArticleResponse:
+    try:
+        article = service.resolve_edit_request(article_id, data)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "article_edit_request_not_found",
+                "message": "This article has no pending change request",
+                "message_zh": "该文章没有待处理的修改申请",
+            },
+        ) from error
     if article is None:
         raise article_not_found()
     return ArticleResponse.model_validate(article)

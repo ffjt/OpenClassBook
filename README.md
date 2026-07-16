@@ -1,135 +1,134 @@
-﻿# ClassBook CMS
+# OpenClassBook
 
-ClassBook CMS is an open-source content management system for schools to collect essays, manage submissions, and generate print-ready PDF books.
+[![CI](https://github.com/ffjt/OpenClassBook/actions/workflows/ci.yml/badge.svg)](https://github.com/ffjt/OpenClassBook/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-ClassBook CMS 是一个面向学校的开源内容管理系统项目骨架，用于后续支持作文收集、投稿管理，以及生成可直接印刷的 PDF 图书。
+OpenClassBook is a local-first, open-source publishing workflow for collecting essays, reviewing submissions, arranging a book, and exporting a print-ready PDF.
 
-当前版本只完成项目结构搭建，不包含任何业务功能。
+OpenClassBook 是一个本地优先的开源出版工作流，用于收集文章、审核投稿、编排书籍并导出可直接印刷的 PDF。
 
-## 技术栈
+## V1.0 features / V1.0 功能
 
-- 前端：React + Vite + TypeScript + Tailwind CSS + shadcn/ui
-- 后端：FastAPI
-- 数据库：SQLite
-- 包管理器：pnpm
-- 容器化：Docker + Docker Compose
+- Create and manage multiple books / 创建并管理多本书籍
+- Invite authors with a book-specific code / 使用每本书独立的邀请码邀请作者
+- Generate or import claimable article numbers from XLSX, CSV, or TXT / 自动生成编号，或从 XLSX、CSV、TXT 导入可认领编号
+- Author submission workspace with drafts, images, and live preview / 作者投稿工作台，支持草稿、配图与实时预览
+- Review, approve, reject, and order submissions / 审核、通过、退回并排序投稿
+- Shared typography and page template persisted per book / 每本书持久化统一的字体与页面模板
+- Drag-and-drop book layout with uploaded front/back matter / 拖拽编排书籍，并上传封面、前言、后记等内容
+- Print-ready PDF preview, generation, and download / 预览、生成并下载可印刷 PDF
+- English, Simplified Chinese, light, and dark interfaces / 英文、简体中文、浅色与深色界面
+- Accessible route and interaction animation with reduced-motion support / 支持“减少动态效果”的无障碍页面与交互动效
 
-## 项目结构
+## Architecture / 架构
 
 ```text
-classbook-cms/
-├─ frontend/              # React 前端应用
-├─ backend/               # FastAPI 后端应用
-├─ .github/workflows/     # GitHub Actions 基础检查
-├─ docker-compose.yml     # 本地容器编排
-├─ pnpm-workspace.yaml    # pnpm 工作区配置
-└─ README.md              # 项目说明
+React + TypeScript + Vite
+            │
+            ▼
+FastAPI API → Service → Repository → SQLite
+            │
+            ├─ Local upload storage / 本地上传存储
+            └─ ReportLab PDF renderer / PDF 渲染
 ```
 
-## 环境准备
+The backend keeps business rules out of API handlers and database access behind repositories. A book-scoped template is the single source of truth for formatting; articles only store content.
 
-请先安装：
+后端将业务规则放在 Service 层，并通过 Repository 访问数据库。每本书的 Template 是格式的唯一来源，Article 只保存内容。
+
+## Requirements / 环境要求
 
 - Node.js 20+
-- pnpm 9+
+- pnpm 10+
 - Python 3.12+
-- Docker Desktop（可选，用于容器运行）
+- [uv](https://docs.astral.sh/uv/) (recommended / 推荐)
+- Docker Desktop (optional / 可选)
+- Microsoft Word (optional; enables native DOCX-to-PDF conversion on Windows and macOS) / Microsoft Word（可选；在 Windows 和 macOS 上启用原生 DOCX 转 PDF）
 
-## 本地开发
+DOCX page resources automatically use Microsoft Word through `docx2pdf` when Word is installed. If Word is unavailable or native conversion fails, OpenClassBook falls back to its cross-platform compatible renderer; Linux and Docker therefore require no Office installation.
 
-### 1. 安装前端依赖
+导入的 DOCX 页面资源会在已安装 Word 时自动通过 `docx2pdf` 使用 Word 原生转换。未安装 Word 或原生转换失败时，OpenClassBook 会自动回退到跨平台兼容渲染器，因此 Linux 与 Docker 无需安装 Office。
+
+## Local development / 本地开发
+
+Install dependencies / 安装依赖：
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
+cd backend
+uv sync --frozen --group dev
 ```
 
-### 2. 安装后端依赖
+Start the backend / 启动后端：
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+uv run uvicorn app.main:app --reload
 ```
 
-Windows PowerShell 可以使用：
-
-```powershell
-cd backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
-```
-
-### 3. 启动前端
+Start the frontend in another terminal / 在另一个终端启动前端：
 
 ```bash
-pnpm --filter frontend dev
+pnpm dev
 ```
 
-默认地址：
+Open / 访问：
 
-```text
-http://localhost:5173
-```
+- App / 应用: <http://localhost:5173>
+- API: <http://localhost:8000>
+- API docs / 接口文档: <http://localhost:8000/docs>
 
-### 4. 启动后端
+Configuration examples are available in [`.env.example`](.env.example) and [`backend/.env.example`](backend/.env.example). The default SQLite database and uploaded files stay on the local machine.
 
-```bash
-cd backend
-uvicorn app.main:app --reload
-```
+配置示例见 [`.env.example`](.env.example) 与 [`backend/.env.example`](backend/.env.example)。默认 SQLite 数据库和上传文件均保存在本机。
 
-默认地址：
-
-```text
-http://localhost:8000
-```
-
-FastAPI 自动文档：
-
-```text
-http://localhost:8000/docs
-```
-
-## 使用 Docker 启动
+## Docker
 
 ```bash
 docker compose up --build
 ```
 
-启动后：
+The production container serves the built frontend with Nginx and persists both SQLite data and uploads in Docker volumes.
 
-- 前端：http://localhost:5173
-- 后端：http://localhost:8000
+生产容器使用 Nginx 提供构建后的前端，并通过 Docker 卷持久化 SQLite 数据和上传文件。
 
-## 常用命令
+## Quality checks / 质量检查
 
 ```bash
-# 前端代码检查
-pnpm --filter frontend lint
+# Frontend / 前端
+pnpm check
 
-# 前端构建
-pnpm --filter frontend build
-
-# 后端代码检查
+# Backend / 后端
 cd backend
-ruff check .
+uv run ruff check app tests
+uv run pytest -q
 
-# 后端测试
-cd backend
-pytest
+# Containers / 容器配置
+docker compose config --quiet
 ```
 
-## 当前状态
+GitHub Actions runs the same lint, test, and build gates for pushes and pull requests.
 
-本项目目前只包含基础项目结构、配置文件和占位页面。
+GitHub Actions 会在推送和拉取请求中执行相同的代码检查、测试与构建门槛。
 
-下一步可以按需继续添加：
+The release decision, resolved blockers, evidence, and accepted limitations are documented in [`docs/V1_RELEASE_REVIEW.md`](docs/V1_RELEASE_REVIEW.md).
 
-- 用户登录
-- 作文收集
-- 投稿管理
-- 审稿流程
-- PDF 图书生成
-- 管理后台页面
+发布结论、已解决阻断项、验证证据与接受的限制记录在 [`docs/V1_RELEASE_REVIEW.md`](docs/V1_RELEASE_REVIEW.md)。
+
+## V1.0 scope and security / V1.0 范围与安全说明
+
+V1.0 is designed for trusted local or private-LAN use. It does not include accounts, authentication, authorization, cloud sync, or concurrent collaborative editing. Do not expose the backend directly to the public internet.
+
+V1.0 面向可信的本机或私有局域网使用，不包含账号、身份认证、权限系统、云同步或多人实时协作。请勿将后端直接暴露在公网。
+
+## Contributing / 参与贡献
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development rules and quality gates. Please report security issues using [SECURITY.md](SECURITY.md), not a public issue.
+
+开发规则与质量门槛见 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请按 [SECURITY.md](SECURITY.md) 私下报告，不要提交公开 Issue。
+
+## License / 许可证
+
+OpenClassBook is released under the [MIT License](LICENSE).
+
+OpenClassBook 使用 [MIT 许可证](LICENSE)发布。

@@ -5,7 +5,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/i18n";
 
-const githubUrl = "https://github.com/ffjt/ClassBook-CMS";
+const githubUrl = "https://github.com/ffjt/OpenClassBook";
 
 const landingCopy = {
   en: {
@@ -16,7 +16,6 @@ const landingCopy = {
     createBook: "Create a Book",
     viewMyBooks: "View My Books",
     join: "Join",
-    viewGithub: "View on GitHub",
     imageAlt:
       "Abstract editorial illustration of essays becoming a printed book",
   },
@@ -27,7 +26,6 @@ const landingCopy = {
     createBook: "创建一本书",
     viewMyBooks: "查看我的书籍",
     join: "\u52a0\u5165",
-    viewGithub: "在 GitHub 上查看",
     imageAlt: "文章汇集并出版成书的抽象编辑插画",
   },
 };
@@ -47,7 +45,7 @@ export function LandingPage({
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-background text-foreground transition-colors duration-300">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_72%_42%,rgba(37,99,235,0.08),transparent_28%)] dark:bg-[radial-gradient(circle_at_72%_42%,rgba(37,99,235,0.14),transparent_30%)]" />
+      <div className="ambient-glow pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_72%_42%,rgba(37,99,235,0.08),transparent_28%)] dark:bg-[radial-gradient(circle_at_72%_42%,rgba(37,99,235,0.14),transparent_30%)]" />
 
       <header className="relative z-10 mx-auto flex h-20 max-w-7xl items-center justify-between px-6 lg:px-10">
         <a className="text-[15px] font-semibold tracking-[-0.02em]" href="#top">
@@ -81,7 +79,7 @@ export function LandingPage({
         className="relative z-10 mx-auto grid min-h-[calc(100vh-5rem)] max-w-7xl items-center gap-14 px-6 pb-16 pt-10 lg:grid-cols-[0.9fr_1.1fr] lg:px-10 lg:pb-20 lg:pt-4"
         id="top"
       >
-        <div className="max-w-xl">
+        <div className="stagger-in max-w-xl">
           <div className="mb-8 flex items-center gap-3 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
             <span className="size-2 rounded-full bg-blue-600" />
             {copy.eyebrow}
@@ -119,15 +117,13 @@ export function LandingPage({
             >
               {copy.viewMyBooks}
             </Button>
-            <a
-              className="inline-flex h-12 items-center justify-center whitespace-nowrap rounded-full border border-border bg-background px-7 text-[15px] font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              href={githubUrl}
-              rel="noreferrer"
-              target="_blank"
+            <Button
+              className="bg-blue-600 text-white hover:bg-blue-700"
+              onClick={() => onNavigate("/join")}
+              size="lg"
             >
-              <Github className="mr-2 size-4" />
-              {copy.viewGithub}
-            </a>
+              {copy.join}
+            </Button>
           </div>
         </div>
 
@@ -135,7 +131,7 @@ export function LandingPage({
           <div className="absolute inset-[8%] rounded-[3rem] border border-zinc-200/70 bg-zinc-50/60 shadow-[0_40px_100px_-52px_rgba(15,23,42,0.28)] dark:border-zinc-800/80 dark:bg-zinc-900/60 dark:shadow-[0_40px_100px_-52px_rgba(0,0,0,0.9)]" />
           <img
             alt={copy.imageAlt}
-            className="relative z-10 w-full max-w-[680px] object-contain"
+            className="hero-float relative z-10 w-full max-w-[680px] object-contain"
             src="/openclassbook-hero.png"
           />
         </div>

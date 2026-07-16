@@ -166,6 +166,15 @@ class PdfRenderer:
                 story.append(Paragraph(escape(article.number), styles["number"]))
                 story.append(Spacer(1, 3 * mm))
             story.append(Paragraph(escape(article.title), styles["article_title"]))
+            subtitle = (
+                document.template.fixed_subtitle
+                if document.template.subtitle_mode == "fixed"
+                else article.subtitle
+                if document.template.subtitle_mode == "free"
+                else ""
+            )
+            if subtitle:
+                story.append(Paragraph(escape(subtitle), styles["subtitle"]))
             author = document.author_names.get(article.author_id)
             if author:
                 story.append(Spacer(1, 3 * mm))
@@ -264,6 +273,16 @@ def _styles(
             leading=max(template.title_size * 1.35, template.title_size + 6),
             alignment=alignment.get(template.title_align, TA_CENTER),
             spaceAfter=template.title_size,
+            wordWrap="CJK",
+        ),
+        "subtitle": ParagraphStyle(
+            "ArticleSubtitle",
+            fontName=normal_font,
+            fontSize=max(template.title_size * 0.5, 10),
+            leading=max(template.title_size * 0.7, 14),
+            alignment=alignment.get(template.subtitle_align, TA_CENTER),
+            textColor=colors.HexColor("#73777f"),
+            spaceAfter=8,
             wordWrap="CJK",
         ),
         "author": ParagraphStyle(

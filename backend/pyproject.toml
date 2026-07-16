@@ -1,10 +1,11 @@
 [project]
 name = "openclassbook-backend"
-version = "0.1.0"
-description = "OpenClassBook FastAPI backend scaffold."
+version = "1.0.0"
+description = "Local-first publishing backend for OpenClassBook."
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.14,<2.0",
+  "docx2pdf>=0.1.8,<1.0 ; sys_platform == 'darwin' or sys_platform == 'win32'",
   "fastapi>=0.115,<1.0",
   "mammoth>=1.12,<2.0",
   "nh3>=0.3,<0.4",
@@ -21,8 +22,8 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "httpx>=0.28,<1.0",
-  "pytest>=8.3,<9.0",
+  "httpx2>=2.7,<3.0",
+  "pytest>=9.0.3,<10.0",
   "python-docx>=1.2,<2.0",
   "ruff>=0.8,<1.0",
 ]

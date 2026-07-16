@@ -44,6 +44,7 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _upgrade_scaffold_book_table()
     _upgrade_author_identity_model()
+    _upgrade_article_content_fields()
     _ensure_article_number_uniqueness()
 
 
@@ -63,10 +64,79 @@ def _upgrade_scaffold_book_table() -> None:
                 "ALTER TABLE books ADD COLUMN number_mode VARCHAR(20) "
                 "NOT NULL DEFAULT 'none'"
             )
+        if "existing_number_mode" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE books ADD COLUMN existing_number_mode VARCHAR(20)"
+            )
+            connection.exec_driver_sql(
+                "UPDATE books SET existing_number_mode = CASE "
+                "WHEN number_mode = 'import' THEN 'import' "
+                "WHEN number_mode = 'automatic' THEN 'claim' "
+                "ELSE NULL END"
+            )
+            connection.exec_driver_sql(
+                "UPDATE books SET number_mode = CASE "
+                "WHEN number_mode = 'none' THEN 'automatic' "
+                "WHEN number_mode IN ('automatic', 'import') THEN 'existing' "
+                "ELSE number_mode END"
+            )
+        if "number_pool" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE books ADD COLUMN number_pool JSON "
+                "NOT NULL DEFAULT '[]'"
+            )
         if "status" not in columns:
             connection.exec_driver_sql(
                 "ALTER TABLE books ADD COLUMN status VARCHAR(20) "
                 "NOT NULL DEFAULT 'collecting'"
+            )
+        if "setup_completed" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE books ADD COLUMN setup_completed BOOLEAN "
+                "NOT NULL DEFAULT 0"
+            )
+        if "submission_deadline" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE books ADD COLUMN submission_deadline DATETIME"
+            )
+        if "max_articles_per_author" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE books ADD COLUMN max_articles_per_author INTEGER "
+                "NOT NULL DEFAULT 5"
+            )
+        if "limit_articles_per_author" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE books ADD COLUMN limit_articles_per_author BOOLEAN "
+                "NOT NULL DEFAULT 1"
+            )
+        optional_text_columns = ("subtitle", "school", "publisher")
+        for column in optional_text_columns:
+            if column not in columns:
+                connection.exec_driver_sql(
+                    f"ALTER TABLE books ADD COLUMN {column} VARCHAR(255)"
+                )
+        boolean_columns = (
+            "invite_enabled",
+            "submission_enabled",
+            "allow_multiple_articles",
+            "allow_edit_after_submit",
+            "allow_delete_article",
+        )
+        for column in boolean_columns:
+            if column not in columns:
+                connection.exec_driver_sql(
+                    f"ALTER TABLE books ADD COLUMN {column} BOOLEAN "
+                    "NOT NULL DEFAULT 1"
+                )
+        if "number_prefix" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE books ADD COLUMN number_prefix VARCHAR(20) "
+                "NOT NULL DEFAULT ''"
+            )
+        if "number_digits" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE books ADD COLUMN number_digits INTEGER "
+                "NOT NULL DEFAULT 3"
             )
         for column in (
             "cover_file",
@@ -276,6 +346,30 @@ def _upgrade_author_identity_model() -> None:
             raise
         finally:
             connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+
+
+def _upgrade_article_content_fields() -> None:
+    """Add content fields introduced after the Author 1:N migration."""
+    if not settings.database_url.startswith("sqlite"):
+        return
+
+    columns = {column["name"] for column in inspect(engine).get_columns("articles")}
+    if "subtitle" not in columns:
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "ALTER TABLE articles ADD COLUMN subtitle VARCHAR(255) "
+                "NOT NULL DEFAULT ''"
+            )
+    if "image_settings" not in columns:
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "ALTER TABLE articles ADD COLUMN image_settings JSON"
+            )
+    if "edit_requested_at" not in columns:
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "ALTER TABLE articles ADD COLUMN edit_requested_at DATETIME"
+            )
 
 
 def _ensure_article_number_uniqueness() -> None:

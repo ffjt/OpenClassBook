@@ -22,6 +22,7 @@ const editorCopy = {
     description: "Write your story. The book template controls its appearance.",
     number: "Article Number",
     numberHint: "Unique within this book",
+    numberUnavailable: "Not used by this book",
     numberPending: "Assigned later in book layout",
     articleTitle: "Article Title",
     articleTitlePlaceholder: "Enter an article title",
@@ -52,6 +53,7 @@ const editorCopy = {
     description: "\u53ea\u9700\u4e13\u6ce8\u4e66\u5199\uff0c\u4e66\u7c4d\u6a21\u677f\u4f1a\u7edf\u4e00\u63a7\u5236\u6587\u7ae0\u6837\u5f0f\u3002",
     number: "\u6587\u7ae0\u7f16\u53f7",
     numberHint: "\u5728\u6574\u672c\u4e66\u4e2d\u552f\u4e00",
+    numberUnavailable: "\u5f53\u524d\u4e66\u7c4d\u4e0d\u4f7f\u7528\u7f16\u53f7",
     numberPending: "\u5c06\u5728\u4e66\u7c4d\u6392\u7248\u65f6\u5206\u914d",
     articleTitle: "\u6587\u7ae0\u6807\u9898",
     articleTitlePlaceholder: "\u8f93\u5165\u6587\u7ae0\u6807\u9898",
@@ -99,6 +101,8 @@ type UploadError = "fileTooLarge" | "invalidType" | "readFailed" | "";
 interface ArticleEditorFormProps {
   article: PreviewArticle;
   language: Language;
+  numberingEnabled: boolean;
+  numberPlaceholder: string;
   onBodyChange: (body: string) => void;
   onImageChange: (imageUrl: string) => void;
   onImageWrapChange: (imageWrap: ImageWrap) => void;
@@ -109,6 +113,8 @@ interface ArticleEditorFormProps {
 export function ArticleEditorForm({
   article,
   language,
+  numberingEnabled,
+  numberPlaceholder,
   onBodyChange,
   onImageChange,
   onImageWrapChange,
@@ -175,8 +181,8 @@ export function ArticleEditorForm({
       </header>
 
       <div className="space-y-7 p-5 sm:p-6">
-        {template.showNumber && (
-          <fieldset className="space-y-2.5">
+        {(template.showNumber || !numberingEnabled) && (
+          <fieldset className="space-y-2.5 disabled:opacity-60" disabled={!numberingEnabled}>
             <div className="flex items-center justify-between gap-3">
               <Label
                 className="flex items-center gap-2 text-xs font-medium text-foreground"
@@ -186,13 +192,14 @@ export function ArticleEditorForm({
                 {copy.number}
               </Label>
               <span className="text-[10px] text-muted-foreground">
-                {copy.numberHint}
+                {numberingEnabled ? copy.numberHint : copy.numberUnavailable}
               </span>
             </div>
             <Input
               className="h-10 rounded-lg border-input bg-background font-mono text-sm tracking-[0.14em] text-muted-foreground shadow-none"
               id="article-number"
-              placeholder={copy.numberPending}
+              disabled={!numberingEnabled}
+              placeholder={numberPlaceholder || copy.numberPending}
               readOnly
               value={article.number}
             />

@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 
-import mammoth
 import nh3
 from PIL import Image as PillowImage
 from PIL import ImageOps
@@ -17,6 +16,8 @@ from reportlab.pdfgen import canvas
 from xhtml2pdf import pisa
 
 from app.schemas.export import ExportTemplateInfo
+from app.services.docx_formatting import convert_docx_to_html
+from app.services.docx_word_converter import convert_docx_with_word
 from app.services.pdf_renderer import _page_size
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
@@ -43,6 +44,7 @@ ALLOWED_DOCX_TAGS = {
     "strong",
     "sub",
     "sup",
+    "span",
     "table",
     "tbody",
     "td",
@@ -76,12 +78,19 @@ class PageAssetRenderer:
         source: Path,
         template: ExportTemplateInfo,
         destination: Path,
+        *,
+        prefer_native_docx: bool = True,
     ) -> RenderedAsset:
         destination.parent.mkdir(parents=True, exist_ok=True)
         extension = source.suffix.lower()
         try:
             if extension == ".docx":
-                return self._render_docx(source, template, destination)
+                return self._render_docx(
+                    source,
+                    template,
+                    destination,
+                    prefer_native=prefer_native_docx,
+                )
             if extension == ".pdf":
                 return self._render_pdf(source, destination)
             if extension in IMAGE_EXTENSIONS:
@@ -151,17 +160,32 @@ class PageAssetRenderer:
         source: Path,
         template: ExportTemplateInfo,
         destination: Path,
+        *,
+        prefer_native: bool,
     ) -> RenderedAsset:
-        with source.open("rb") as document:
-            result = mammoth.convert_to_html(
-                document,
-                convert_image=mammoth.images.data_uri,
+        native = convert_docx_with_word(source, destination) if prefer_native else None
+        if native and native.converted:
+            reader = PdfReader(destination, strict=False)
+            return RenderedAsset(
+                destination,
+                len(reader.pages),
+                image_count=_docx_image_count(source),
             )
+
+        result = convert_docx_to_html(source)
+        class_attributes = {
+            tag: {"class"} for tag in ALLOWED_DOCX_TAGS if tag != "br"
+        }
+        class_attributes["br"] = {"class"}
+        class_attributes["a"].add("href")
+        class_attributes["img"].update({"alt", "src"})
+        class_attributes["td"].update({"colspan", "rowspan"})
+        class_attributes["th"].update({"colspan", "rowspan"})
         fragment = nh3.clean(
             result.value,
             tags=ALLOWED_DOCX_TAGS,
             clean_content_tags={"embed", "iframe", "object", "script", "style"},
-            attributes={"a": {"href"}, "img": {"alt", "src"}},
+            attributes=class_attributes,
             attribute_filter=_filter_docx_attribute,
             url_schemes={"data", "http", "https", "mailto"},
             url_relative="deny",
@@ -171,7 +195,13 @@ class PageAssetRenderer:
             raise PageAssetError
 
         page_width, page_height = _page_size(template)
-        markup = _docx_markup(fragment, template, page_width, page_height)
+        markup = _docx_markup(
+            fragment,
+            template,
+            page_width,
+            page_height,
+            result.css,
+        )
         with destination.open("wb") as output:
             status = pisa.CreatePDF(
                 markup,
@@ -184,13 +214,26 @@ class PageAssetRenderer:
         page_count = len(PdfReader(destination, strict=False).pages)
         if page_count == 0:
             raise PageAssetError
+        warnings: tuple[str, ...] = ()
+        warnings_zh: tuple[str, ...] = ()
+        if native and native.attempted:
+            warnings = (
+                "Microsoft Word conversion failed; "
+                "the compatible DOCX renderer was used.",
+            )
+            warnings_zh = (
+                "Microsoft Word 转换失败，已改用兼容 DOCX 渲染器。",
+            )
         if result.messages:
+            warnings += ("Some Word formatting was normalized for publication.",)
+            warnings_zh += ("部分 Word 格式已按出版模板标准化。",)
+        if warnings:
             return RenderedAsset(
                 destination,
                 page_count,
                 image_count=result.value.count("<img"),
-                warnings=("Some Word formatting was normalized for publication.",),
-                warnings_zh=("部分 Word 格式已按出版模板标准化。",),
+                warnings=warnings,
+                warnings_zh=warnings_zh,
             )
         return RenderedAsset(
             destination,
@@ -302,6 +345,7 @@ def _docx_markup(
     template: ExportTemplateInfo,
     page_width: float,
     page_height: float,
+    formatting_css: str = "",
 ) -> str:
     margin = _page_margin(template.page_margin)
     alignment = "justify" if template.body_justify else "left"
@@ -324,20 +368,41 @@ h1, h2, h3, h4, h5, h6 {{ text-align: {title_align}; font-weight: {title_weight}
 h1 {{ font-size: {template.title_size:.2f}pt; }}
 h2 {{ font-size: {max(template.title_size * 0.86, template.font_size * 1.25):.2f}pt; }}
 h3, h4, h5, h6 {{ font-size: {max(template.font_size * 1.1, 12):.2f}pt; }}
-ul, ol {{ margin: 0 0 10pt 20pt; }} li p {{ text-indent: 0; }}
+ul, ol {{ margin: 0 0 10pt 20pt; }}
+li {{ font-family: Helvetica; }} li p {{ text-indent: 0; }}
 table {{ width: 100%; border-collapse: collapse; margin: 8pt 0 12pt 0; }}
 th, td {{ border: 0.5pt solid #b9bdc5; padding: 4pt; vertical-align: top; }}
-img {{ display: block; max-width: {image_width:.2f}%;
+img {{ display: block; width: {image_width:.2f}%; max-width: 100%;
   max-height: {page_height * 0.72:.2f}pt;
   margin: 8pt auto 12pt auto; }}
 blockquote {{ border-left: 2pt solid #b9bdc5; margin: 8pt 0; padding-left: 10pt; }}
+{formatting_css}
 </style></head><body>{fragment}</body></html>"""
 
 
 def _filter_docx_attribute(tag: str, attribute: str, value: str) -> str | None:
     if tag == "img" and attribute == "src" and not value.startswith("data:image/"):
         return None
+    if attribute == "class" and not all(
+        re.fullmatch(
+            r"(?:docx-(?:cell|image|page-break|paragraph|run|table)(?:-\d+)?|"
+            r"docx-font-(?:cjk|mono|sans|serif))",
+            item,
+        )
+        for item in value.split()
+    ):
+        return None
     return value
+
+
+def _docx_image_count(source: Path) -> int:
+    from zipfile import ZipFile
+
+    with ZipFile(source) as archive:
+        return sum(
+            name.startswith("word/media/") and not name.endswith("/")
+            for name in archive.namelist()
+        )
 
 
 def _page_margin(value: str) -> float:

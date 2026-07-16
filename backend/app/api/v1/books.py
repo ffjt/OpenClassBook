@@ -131,14 +131,72 @@ def update_book(
     try:
         book = service.update(book_id, data)
     except ValueError as error:
+        empty_update = str(error).startswith("At least one field")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "message": "At least one field is required",
-                "message_zh": "至少需要一个更新字段",
-            },
+            detail=(
+                {
+                    "code": "empty_update",
+                    "message": "At least one field is required",
+                    "message_zh": "至少需要一个更新字段",
+                }
+                if empty_update
+                else {
+                    "code": "invalid_numbering_configuration",
+                    "message": "Number mode and article-number list are inconsistent",
+                    "message_zh": "编号模式与文章编号列表不一致",
+                }
+            ),
         ) from error
 
+    if book is None:
+        raise book_not_found()
+    return BookResponse.model_validate(book)
+
+
+@router.delete(
+    "/{book_id}/drafts",
+    response_model=BookResponse,
+    summary="Delete all book drafts / 删除书籍全部草稿",
+)
+def delete_book_drafts(book_id: int, service: BookServiceDep) -> BookResponse:
+    book = service.delete_drafts(book_id)
+    if book is None:
+        raise book_not_found()
+    return BookResponse.model_validate(book)
+
+
+@router.delete(
+    "/{book_id}/articles",
+    response_model=BookResponse,
+    summary="Delete all book articles / 删除书籍全部文章",
+)
+def delete_book_articles(book_id: int, service: BookServiceDep) -> BookResponse:
+    book = service.delete_articles(book_id)
+    if book is None:
+        raise book_not_found()
+    return BookResponse.model_validate(book)
+
+
+@router.delete(
+    "/{book_id}/authors",
+    response_model=BookResponse,
+    summary="Delete all book authors / 删除书籍全部作者",
+)
+def delete_book_authors(book_id: int, service: BookServiceDep) -> BookResponse:
+    book = service.delete_authors(book_id)
+    if book is None:
+        raise book_not_found()
+    return BookResponse.model_validate(book)
+
+
+@router.post(
+    "/{book_id}/invite-code",
+    response_model=BookResponse,
+    summary="Regenerate invitation code / 重新生成邀请码",
+)
+def regenerate_invite_code(book_id: int, service: BookServiceDep) -> BookResponse:
+    book = service.regenerate_invite_code(book_id)
     if book is None:
         raise book_not_found()
     return BookResponse.model_validate(book)

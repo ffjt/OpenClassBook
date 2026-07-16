@@ -45,7 +45,7 @@ const copy = {
     owner: "Owner",
     authors: "Authors",
     numbering: "Numbering mode",
-    modes: { none: "None", automatic: "Automatic", import: "Imported" },
+    modes: { none: "No numbers", automatic: "Automatic at layout", existing: "Existing numbers" },
     name: "Your name",
     namePlaceholder: "Enter your name",
     nameRequired: "Enter your name to join this book.",
@@ -53,6 +53,10 @@ const copy = {
     joining: "Joining...",
     invalidTitle: "This invitation has expired or does not exist.",
     invalidDescription: "The invitation code does not exist. Please check it and try again.",
+    inviteDisabledTitle: "This book is not accepting new authors.",
+    inviteDisabledDescription: "The book owner has temporarily disabled invitations.",
+    submissionPausedTitle: "This book has stopped accepting submissions.",
+    submissionPausedDescription: "Please contact the book owner for more information.",
     errorTitle: "Unable to connect to the server.",
     errorDescription: "Please confirm FastAPI is running.",
     joinError: "Unable to join this book. Please try again.",
@@ -75,7 +79,7 @@ const copy = {
     owner: "负责人",
     authors: "作者人数",
     numbering: "编号模式",
-    modes: { none: "不编号", automatic: "自动编号", import: "导入编号" },
+    modes: { none: "我不需要编号", automatic: "排版时自动生成", existing: "我已经有编号" },
     name: "你的姓名",
     namePlaceholder: "请输入姓名",
     nameRequired: "请输入姓名后加入这本书。",
@@ -83,6 +87,10 @@ const copy = {
     joining: "正在加入...",
     invalidTitle: "邀请已失效或不存在。",
     invalidDescription: "邀请码不存在。请检查邀请码是否正确。",
+    inviteDisabledTitle: "当前书籍暂不接受新的作者加入。",
+    inviteDisabledDescription: "负责人已暂时关闭邀请。",
+    submissionPausedTitle: "当前书籍已停止接收投稿。",
+    submissionPausedDescription: "如有疑问，请联系当前书籍负责人。",
     errorTitle: "无法连接服务器。",
     errorDescription: "请确认 FastAPI 正在运行。",
     joinError: "暂时无法加入这本书，请重试。",
@@ -121,7 +129,7 @@ export function JoinBookPage({
   const [codeError, setCodeError] = useState(false);
   const [nameError, setNameError] = useState(false);
   const [joinError, setJoinError] = useState(false);
-  const [loadError, setLoadError] = useState<"invalid" | "server" | null>(null);
+  const [loadError, setLoadError] = useState<"invalid" | "invite_disabled" | "server" | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -144,7 +152,13 @@ export function JoinBookPage({
       })
       .catch((requestError: unknown) => {
         if (!active) return;
-        setLoadError(requestError instanceof ApiError && requestError.status === 404 ? "invalid" : "server");
+        setLoadError(
+          requestError instanceof ApiError && requestError.status === 404
+            ? "invalid"
+            : requestError instanceof ApiError && requestError.detail?.code === "invite_disabled"
+              ? "invite_disabled"
+              : "server",
+        );
       })
       .finally(() => {
         if (active) setIsLoading(false);
@@ -189,6 +203,8 @@ export function JoinBookPage({
       if (requestError instanceof ApiError && requestError.status === 404) {
         setLoadError("invalid");
         setBook(null);
+      } else if (requestError instanceof ApiError && requestError.detail?.code === "submission_disabled") {
+        setBook((current) => current ? { ...current, submission_enabled: false } : current);
       } else {
         setJoinError(true);
       }
@@ -246,9 +262,15 @@ export function JoinBookPage({
         ) : loadError || !book ? (
           <div className="rounded-[2rem] border border-border bg-card/90 p-8 text-center sm:p-11">
             <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-rose-500/10 text-rose-400"><AlertCircle className="size-5" /></span>
-            <h2 className="mt-5 text-xl font-semibold">{loadError === "invalid" ? pageCopy.invalidTitle : pageCopy.errorTitle}</h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">{loadError === "invalid" ? pageCopy.invalidDescription : pageCopy.errorDescription}</p>
+            <h2 className="mt-5 text-xl font-semibold">{loadError === "invalid" ? pageCopy.invalidTitle : loadError === "invite_disabled" ? pageCopy.inviteDisabledTitle : pageCopy.errorTitle}</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{loadError === "invalid" ? pageCopy.invalidDescription : loadError === "invite_disabled" ? pageCopy.inviteDisabledDescription : pageCopy.errorDescription}</p>
             {loadError === "server" ? <Button className="mt-6" onClick={() => setReloadKey((value) => value + 1)} type="button"><RefreshCw className="mr-2 size-4" />{pageCopy.retry}</Button> : null}
+          </div>
+        ) : !book.submission_enabled ? (
+          <div className="rounded-[2rem] border border-border bg-card/90 p-8 text-center sm:p-11">
+            <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-500"><AlertCircle className="size-5" /></span>
+            <h2 className="mt-5 text-xl font-semibold">{pageCopy.submissionPausedTitle}</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{pageCopy.submissionPausedDescription}</p>
           </div>
         ) : (
           <form className="rounded-[2rem] border border-border bg-card/90 p-6 sm:p-9 lg:p-11" noValidate onSubmit={joinBook}>

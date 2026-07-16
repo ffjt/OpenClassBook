@@ -8,7 +8,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 class Settings(BaseSettings):
     app_name: str = "OpenClassBook Backend API"
     app_description: str = "OpenClassBook 后端 API / OpenClassBook Backend API"
-    app_version: str = "0.1.0"
+    app_version: str = "1.0.0"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "sqlite:///./openclassbook.db"
     export_dir: Path = Path("generated/exports")

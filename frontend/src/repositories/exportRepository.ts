@@ -64,8 +64,8 @@ export interface ExportResult {
 }
 
 export const exportRepository = {
-  getPreview(bookId: number) {
-    return apiRequest<ExportPreview>(`/books/${bookId}/export`);
+  getPreview(bookId: number, signal?: AbortSignal) {
+    return apiRequest<ExportPreview>(`/books/${bookId}/export`, { signal });
   },
 
   generate(bookId: number) {

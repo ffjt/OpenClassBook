@@ -1,6 +1,6 @@
 import {
-  Fragment,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -225,35 +225,83 @@ function getFlowImageStyle(
   position: PreviewArticle["imagePosition"],
   imageWrap: ImageWrap,
   imageSize: PreviewArticle["imageSize"],
+  bounds: { height: number; width: number },
 ): CSSProperties {
   const width = imageSize.width;
   const leftEdge = clamp(position.x - width / 2, 0, 100 - width);
   const rightEdge = 100 - leftEdge - width;
   const placeOnLeft = position.x <= 50;
-  const shapeOutside =
-    imageWrap === "tight"
-      ? "inset(5% round 18%)"
-      : imageWrap === "through"
-        ? "polygon(0 0, 100% 0, 82% 28%, 100% 52%, 76% 100%, 0 100%, 18% 52%)"
-        : "margin-box";
+  const gap = imageWrap === "through" ? 2 : imageWrap === "tight" ? 6 : 12;
+  const height = (imageSize.height / 100) * bounds.height;
 
   if (imageWrap === "topBottom") {
     return {
       clear: "both",
-      marginBottom: "1em",
-      marginLeft: `${leftEdge}%`,
-      width: `${width}%`,
+      display: "block",
+      height: `${height + gap * 2}px`,
+      width: "100%",
     };
   }
 
   return {
     float: placeOnLeft ? "left" : "right",
-    marginBottom: "1em",
-    marginLeft: placeOnLeft ? `${leftEdge}%` : "1em",
-    marginRight: placeOnLeft ? "1em" : `${rightEdge}%`,
-    shapeMargin: "10px",
-    shapeOutside,
+    height: `${height + gap * 2}px`,
+    marginLeft: placeOnLeft ? `${leftEdge}%` : `${gap}px`,
+    marginRight: placeOnLeft ? `${gap}px` : `${rightEdge}%`,
+    shapeOutside: "margin-box",
     width: `${width}%`,
+  };
+}
+
+interface WrapInsertion {
+  character: number;
+  line: number;
+}
+
+const getWrapGap = (imageWrap: ImageWrap) =>
+  imageWrap === "through" ? 2 : imageWrap === "tight" ? 6 : 12;
+
+function getCharacterRect(textNode: Text, character: number) {
+  const range = document.createRange();
+  range.setStart(textNode, character);
+  range.setEnd(textNode, Math.min(textNode.length, character + 1));
+  return range.getBoundingClientRect();
+}
+
+function findWrapInsertion(
+  measurement: HTMLElement,
+  targetY: number,
+): WrapInsertion {
+  const paragraphs = Array.from(
+    measurement.querySelectorAll<HTMLElement>("[data-measure-line]"),
+  );
+
+  for (const [line, paragraph] of paragraphs.entries()) {
+    const textNode = paragraph.firstChild;
+    const text = textNode?.textContent ?? "";
+    if (!(textNode instanceof Text) || !text || paragraph.getBoundingClientRect().bottom < targetY) {
+      continue;
+    }
+
+    let low = 0;
+    let high = text.length - 1;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (getCharacterRect(textNode, middle).bottom < targetY) low = middle + 1;
+      else high = middle;
+    }
+
+    const lineTop = getCharacterRect(textNode, low).top;
+    while (low > 0 && Math.abs(getCharacterRect(textNode, low - 1).top - lineTop) < 1) {
+      low -= 1;
+    }
+    return { character: low, line };
+  }
+
+  const lastLine = Math.max(0, paragraphs.length - 1);
+  return {
+    character: paragraphs[lastLine]?.textContent?.length ?? 0,
+    line: lastLine,
   };
 }
 
@@ -318,10 +366,26 @@ export function LiveArticlePreview({
   const [previewImagePage, setPreviewImagePage] = useState(resolvedImagePage);
   const [isInteracting, setIsInteracting] = useState(false);
   const pageContentRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const bodyRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const measurementRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [imageBounds, setImageBounds] = useState({ width: 0, height: 0 });
+  const [imageTopBoundary, setImageTopBoundary] = useState(0);
+  const [wrapInsertions, setWrapInsertions] = useState<Record<number, WrapInsertion>>({});
   const isOverlayImage =
     article.imageWrap === "behindText" ||
     article.imageWrap === "inFrontOfText";
+  const imagePixelHeight =
+    (previewImageSize.height / 100) * imageBounds.height;
+  const requestedImageTop =
+    (previewImagePosition.y / 100) * imageBounds.height -
+    imagePixelHeight * 0.5;
+  const imagePixelTop = isOverlayImage
+    ? requestedImageTop
+    : clamp(
+        requestedImageTop,
+        imageTopBoundary,
+        Math.max(imageTopBoundary, imageBounds.height - imagePixelHeight),
+      );
 
   useEffect(() => {
     if (!isInteracting) {
@@ -337,12 +401,70 @@ export function LiveArticlePreview({
     const updateBounds = () => {
       const bounds = imageBoundsElement.getBoundingClientRect();
       setImageBounds({ width: bounds.width, height: bounds.height });
+      const body = bodyRefs.current[previewImagePage];
+      setImageTopBoundary(
+        body ? Math.max(0, body.getBoundingClientRect().top - bounds.top) : 0,
+      );
     };
     updateBounds();
     const observer = new ResizeObserver(updateBounds);
     observer.observe(imageBoundsElement);
+    const body = bodyRefs.current[previewImagePage];
+    if (body) observer.observe(body);
     return () => observer.disconnect();
-  }, [pages.length, previewImagePage]);
+  }, [
+    article.number,
+    article.title,
+    pages.length,
+    previewImagePage,
+    showNumber,
+    subtitle,
+    template.numberPosition,
+    template.subtitleAlign,
+    template.titleAlign,
+    template.titleBold,
+    template.titleFont,
+    template.titleSize,
+    template.titleSpacing,
+  ]);
+
+  useLayoutEffect(() => {
+    if (isOverlayImage || !article.imageUrl || !imageBounds.height) return;
+    const measurement = measurementRefs.current[previewImagePage];
+    const content = pageContentRefs.current[previewImagePage];
+    if (!measurement || !content) return;
+
+    const contentTop = content.getBoundingClientRect().top;
+    const imageTop =
+      contentTop +
+      imagePixelTop -
+      getWrapGap(article.imageWrap);
+    const insertion = findWrapInsertion(measurement, imageTop);
+
+    setWrapInsertions((current) => {
+      const previous = current[previewImagePage];
+      return previous?.line === insertion.line &&
+        previous.character === insertion.character
+        ? current
+        : { ...current, [previewImagePage]: insertion };
+    });
+  }, [
+    article.body,
+    article.imageUrl,
+    article.imageWrap,
+    imageBounds.height,
+    imagePixelTop,
+    isOverlayImage,
+    pages,
+    previewImagePage,
+    previewImagePosition.y,
+    previewImageSize.height,
+    template.bodyFont,
+    template.bodySize,
+    template.firstLineIndent,
+    template.justify,
+    template.lineHeight,
+  ]);
 
   const handleImageKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (readOnly) return;
@@ -388,9 +510,7 @@ export function LiveArticlePreview({
     x:
       (previewImagePosition.x / 100) * imageBounds.width -
       (previewImageSize.width / 100) * imageBounds.width * 0.5,
-    y:
-      (previewImagePosition.y / 100) * imageBounds.height -
-      (previewImageSize.height / 100) * imageBounds.height * 0.5,
+    y: imagePixelTop,
   };
 
   const getDropTarget = (sourcePage: number, x: number, y: number) => {
@@ -469,8 +589,8 @@ export function LiveArticlePreview({
           previewImagePosition,
           article.imageWrap,
           previewImageSize,
+          imageBounds,
         ),
-        aspectRatio: `${previewImageSize.width} / ${previewImageSize.height}`,
         visibility: "hidden",
       }}
     />
@@ -623,13 +743,10 @@ export function LiveArticlePreview({
         {pages.map((page, pageIndex) => {
           const isFirstPage = pageIndex === 0;
           const pageNumber = pageIndex + 1;
-          const imageInsertIndex = clamp(
-            Math.round(
-              (previewImagePosition.y / 100) * page.lines.length,
-            ),
-            0,
-            page.lines.length,
-          );
+          const wrapInsertion = wrapInsertions[pageIndex] ?? {
+            character: 0,
+            line: 0,
+          };
 
           return (
             <article
@@ -675,6 +792,9 @@ export function LiveArticlePreview({
                   <div
                     className="break-words whitespace-pre-wrap"
                     data-preview-body={pageNumber}
+                    ref={(element) => {
+                      bodyRefs.current[pageIndex] = element;
+                    }}
                     style={{
                       fontFamily: getFontFamilyStyle(template.bodyFont),
                       fontSize: `${template.bodySize}px`,
@@ -689,14 +809,17 @@ export function LiveArticlePreview({
                       zIndex: 1,
                     }}
                   >
-                    {page.lines.map((line, lineIndex) => (
-                      <Fragment key={`${lineIndex}-${line.slice(0, 12)}`}>
-                        {page.showImage &&
-                          !isOverlayImage &&
-                          lineIndex === imageInsertIndex &&
-                          renderWrapSpacer()}
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-x-0 top-0 invisible"
+                      ref={(element) => {
+                        measurementRefs.current[pageIndex] = element;
+                      }}
+                    >
+                      {page.lines.map((line, lineIndex) => (
                         <p
-                          data-preview-line={lineIndex + 1}
+                          data-measure-line={lineIndex + 1}
+                          key={`${lineIndex}-${line.slice(0, 12)}`}
                           style={{
                             minHeight: `${template.lineHeight}em`,
                             textIndent: line
@@ -706,12 +829,40 @@ export function LiveArticlePreview({
                         >
                           {line || "\u00a0"}
                         </p>
-                      </Fragment>
-                    ))}
-                    {page.showImage &&
-                      !isOverlayImage &&
-                      imageInsertIndex === page.lines.length &&
-                      renderWrapSpacer()}
+                      ))}
+                    </div>
+                    {page.lines.map((line, lineIndex) => {
+                      const insertsImage =
+                        page.showImage &&
+                        !isOverlayImage &&
+                        lineIndex === wrapInsertion.line;
+                      const character = insertsImage
+                        ? clamp(wrapInsertion.character, 0, line.length)
+                        : 0;
+
+                      return (
+                        <p
+                          data-preview-line={lineIndex + 1}
+                          key={`${lineIndex}-${line.slice(0, 12)}`}
+                          style={{
+                            minHeight: `${template.lineHeight}em`,
+                            textIndent: line
+                              ? `${template.firstLineIndent}em`
+                              : 0,
+                          }}
+                        >
+                          {insertsImage ? (
+                            <>
+                              {line.slice(0, character)}
+                              {renderWrapSpacer()}
+                              {line.slice(character) || "\u00a0"}
+                            </>
+                          ) : (
+                            line || "\u00a0"
+                          )}
+                        </p>
+                      );
+                    })}
                   </div>
 
                   {page.showImage && renderImage(pageIndex)}

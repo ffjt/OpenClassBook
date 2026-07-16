@@ -15,6 +15,7 @@ import {
 } from "react-router-dom";
 
 import type { Language } from "@/lib/i18n";
+import { AppErrorBoundary } from "@/components/app-error-boundary";
 import {
   bookRepository,
   type Book,
@@ -80,9 +81,19 @@ const JoinSuccessPage = lazy(() =>
     default: module.JoinSuccessPage,
   })),
 );
+const FirstTimeSetupPage = lazy(() =>
+  import("@/pages/first-time-setup-page").then((module) => ({
+    default: module.FirstTimeSetupPage,
+  })),
+);
 const ExportPage = lazy(() =>
   import("@/pages/export-page").then((module) => ({
     default: module.ExportPage,
+  })),
+);
+const BookSettingsPage = lazy(() =>
+  import("@/pages/book-settings-page").then((module) => ({
+    default: module.BookSettingsPage,
   })),
 );
 const AuthorSelectPage = lazy(() =>
@@ -105,6 +116,11 @@ const MyBooksPage = lazy(() =>
     default: module.MyBooksPage,
   })),
 );
+const NotFoundPage = lazy(() =>
+  import("@/pages/not-found-page").then((module) => ({
+    default: module.NotFoundPage,
+  })),
+);
 
 interface SharedPageProps {
   language: Language;
@@ -113,7 +129,7 @@ interface SharedPageProps {
 }
 
 interface DashboardRouteProps extends SharedPageProps {
-  page: "overview" | "authors" | "review" | "template" | "layout" | "export";
+  page: "overview" | "authors" | "review" | "template" | "layout" | "export" | "settings";
 }
 
 function DashboardRoute({
@@ -145,6 +161,7 @@ function DashboardRoute({
   }
   if (page === "layout") return <BookLayoutPage {...sharedProps} bookId={routeBookId} />;
   if (page === "export") return <ExportPage {...sharedProps} bookId={routeBookId} />;
+  if (page === "settings") return <BookSettingsPage {...sharedProps} bookId={routeBookId} />;
   return (
     <DashboardOverviewPage
       {...sharedProps}
@@ -184,6 +201,17 @@ function JoinRoute(props: SharedPageProps) {
   return <JoinBookPage {...props} inviteCode={inviteCode} />;
 }
 
+function FirstTimeSetupRoute({
+  step,
+  ...props
+}: SharedPageProps & { step: "settings" | "template" }) {
+  const { bookId } = useParams();
+  const routeBookId = bookId && /^\d+$/.test(bookId) ? Number(bookId) : undefined;
+  if (!routeBookId) return <Navigate replace to="/book" />;
+
+  return <FirstTimeSetupPage {...props} bookId={routeBookId} step={step} />;
+}
+
 function AuthorSelectRoute(props: SharedPageProps) {
   const { inviteCode } = useParams();
   const name = new URLSearchParams(useLocation().search).get("name")?.trim();
@@ -209,7 +237,8 @@ function AuthorEditorRoute(props: SharedPageProps) {
 }
 
 function App() {
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
   const navigate = useNavigate();
   const [language, setLanguage] = useState<Language>(getInitialLanguage);
   const [createdBook, setCreatedBook] = useState<Book | null>(null);
@@ -224,7 +253,12 @@ function App() {
       if (path === pathname) return;
 
       navigate(path);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({
+        top: 0,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+      });
     },
     [navigate, pathname],
   );
@@ -258,7 +292,9 @@ function App() {
         />
       }
     >
-      <Routes>
+      <AppErrorBoundary key={pathname} language={language}>
+        <div className="route-enter min-h-screen" key={pathname}>
+      <Routes location={location}>
         <Route path="/" element={<LandingPage {...sharedProps} />} />
         <Route path="/book" element={<MyBooksPage {...sharedProps} />} />
         <Route
@@ -281,6 +317,18 @@ function App() {
           }
         />
         <Route path="/book/new" element={<Navigate replace to="/book/create" />} />
+        <Route
+          path="/book/:bookId/setup"
+          element={<FirstTimeSetupRoute {...sharedProps} step="settings" />}
+        />
+        <Route
+          path="/book/:bookId/setup/settings"
+          element={<FirstTimeSetupRoute {...sharedProps} step="settings" />}
+        />
+        <Route
+          path="/book/:bookId/setup/template"
+          element={<FirstTimeSetupRoute {...sharedProps} step="template" />}
+        />
         <Route path="/join" element={<JoinRoute {...sharedProps} />} />
         <Route path="/join/:inviteCode/select" element={<AuthorSelectRoute {...sharedProps} />} />
         <Route path="/join/:inviteCode" element={<JoinRoute {...sharedProps} />} />
@@ -319,10 +367,16 @@ function App() {
           path="/book/:bookId/dashboard/export"
           element={<DashboardRoute {...sharedProps} page="export" />}
         />
+        <Route
+          path="/book/:bookId/dashboard/settings"
+          element={<DashboardRoute {...sharedProps} page="settings" />}
+        />
         <Route path="/dashboard/*" element={<Navigate replace to="/book" />} />
         <Route path="/:bookId/dashboard/*" element={<LegacyDashboardRedirect />} />
-        <Route path="*" element={<LandingPage {...sharedProps} />} />
+        <Route path="*" element={<NotFoundPage {...sharedProps} />} />
       </Routes>
+        </div>
+      </AppErrorBoundary>
     </Suspense>
   );
 }

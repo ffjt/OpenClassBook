@@ -26,5 +26,5 @@ class JoinCreate(BaseModel):
 
 
 class JoinResponse(BaseModel):
-    mode: Literal["created", "restored", "selection_required"]
+    mode: Literal["created", "selection_required"]
     author_id: int | None = None

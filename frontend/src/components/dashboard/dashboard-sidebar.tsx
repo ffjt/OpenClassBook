@@ -4,9 +4,9 @@ import {
   FileOutput,
   LibraryBig,
   LayoutDashboard,
-  Settings,
   SlidersHorizontal,
   ListTree,
+  Settings,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -37,7 +37,7 @@ const navigationItems: NavigationItem[] = [
   { label: "Template", title: { en: "Format Settings", zh: "格式设置" }, icon: SlidersHorizontal, path: "/template" },
   { label: "Layout", title: { en: "Book Layout", zh: "书籍排版" }, icon: ListTree, path: "/layout" },
   { label: "Export", title: { en: "Export", zh: "导出" }, icon: FileOutput, path: "/export" },
-  { label: "Settings", title: { en: "Settings", zh: "设置" }, icon: Settings, path: "/settings" },
+  { label: "Settings", title: { en: "Book Settings", zh: "书籍设置" }, icon: Settings, path: "/settings" },
 ];
 
 interface DashboardSidebarProps {

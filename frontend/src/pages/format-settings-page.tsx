@@ -1,5 +1,5 @@
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CircleAlert,
   CheckCircle2,
@@ -16,8 +16,10 @@ import { Button } from "@/components/ui/button";
 import { useBookTemplate } from "@/hooks/use-book-template";
 import { useSystemFonts } from "@/hooks/use-system-fonts";
 import type { Language } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { defaultTemplate } from "@/mock/template";
 import { articleRepository } from "@/repositories/articleRepository";
+import { bookRepository, type NumberMode } from "@/repositories/bookRepository";
 import { templateRepository } from "@/repositories/templateRepository";
 
 const formatSettingsCopy = {
@@ -93,9 +95,18 @@ export function FormatSettingsPage({
 interface FormatSettingsContentProps {
   bookId: number;
   language: Language;
+  onSaved?: () => Promise<void>;
+  saveLabel?: string;
+  showHeader?: boolean;
 }
 
-function FormatSettingsContent({ bookId, language }: FormatSettingsContentProps) {
+export function FormatSettingsContent({
+  bookId,
+  language,
+  onSaved,
+  saveLabel,
+  showHeader = true,
+}: FormatSettingsContentProps) {
   const copy = formatSettingsCopy[language];
   const {
     reload,
@@ -109,9 +120,29 @@ function FormatSettingsContent({ bookId, language }: FormatSettingsContentProps)
   >("idle");
   const [approvedArticleIds, setApprovedArticleIds] = useState<number[]>([]);
   const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false);
+  const [numberMode, setNumberMode] = useState<NumberMode | null>(null);
+  const [bookLoadError, setBookLoadError] = useState(false);
+  const [bookReloadKey, setBookReloadKey] = useState(0);
   const [reviewAction, setReviewAction] = useState<
     "re-review" | "approve-all" | null
   >(null);
+
+  useEffect(() => {
+    let active = true;
+    setBookLoadError(false);
+    setNumberMode(null);
+    bookRepository.get(bookId).then(
+      (book) => {
+        if (active) setNumberMode(book.number_mode);
+      },
+      () => {
+        if (active) setBookLoadError(true);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [bookId, bookReloadKey]);
 
   const updateSetting = <Key extends keyof Template>(
     key: Key,
@@ -134,6 +165,7 @@ function FormatSettingsContent({ bookId, language }: FormatSettingsContentProps)
         );
       }
       setTemplate(savedTemplate);
+      await onSaved?.();
       setSaveStatus("saved");
       setIsReviewDialogOpen(false);
     } catch {
@@ -166,13 +198,18 @@ function FormatSettingsContent({ bookId, language }: FormatSettingsContentProps)
 
       const savedTemplate = await templateRepository.save(bookId, settings);
       setTemplate(savedTemplate);
+      await onSaved?.();
       setSaveStatus("saved");
     } catch {
       setSaveStatus("error");
     }
   };
 
-  if (loadStatus === "idle" || loadStatus === "loading") {
+  if (
+    (loadStatus === "idle" || loadStatus === "loading" || numberMode === null) &&
+    loadStatus !== "error" &&
+    !bookLoadError
+  ) {
     return (
       <div className="flex min-h-[420px] items-center justify-center text-sm text-muted-foreground">
         <LoaderCircle className="mr-2 size-4 animate-spin" />
@@ -181,12 +218,21 @@ function FormatSettingsContent({ bookId, language }: FormatSettingsContentProps)
     );
   }
 
-  if (loadStatus === "error") {
+  if (loadStatus === "error" || bookLoadError) {
     return (
       <div className="flex min-h-[420px] flex-col items-center justify-center gap-4 text-center">
         <CircleAlert className="size-7 text-rose-400" />
         <p className="text-sm text-muted-foreground">{copy.loadError}</p>
-        <Button onClick={reload} type="button" variant="outline">
+        <Button
+          onClick={() => {
+            setBookLoadError(false);
+            setNumberMode(null);
+            setBookReloadKey((value) => value + 1);
+            reload();
+          }}
+          type="button"
+          variant="outline"
+        >
           <RefreshCw className="mr-2 size-4" />
           {copy.retry}
         </Button>
@@ -196,7 +242,7 @@ function FormatSettingsContent({ bookId, language }: FormatSettingsContentProps)
 
   return (
     <>
-      <header className="flex flex-col gap-5 border-b border-border pb-7 sm:flex-row sm:items-end sm:justify-between">
+      {showHeader ? <header className="flex flex-col gap-5 border-b border-border pb-7 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-400">
             <WandSparkles className="size-3.5" />
@@ -211,9 +257,9 @@ function FormatSettingsContent({ bookId, language }: FormatSettingsContentProps)
             {copy.descriptionNote}
           </p>
         </div>
-      </header>
+      </header> : null}
 
-      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(320px,0.54fr)_minmax(0,1fr)]">
+      <div className={cn("grid items-start gap-6 xl:grid-cols-[minmax(320px,0.54fr)_minmax(0,1fr)]", showHeader && "mt-6")}>
         <aside>
           <FormatPanel
             fontOptions={fontOptions}
@@ -221,6 +267,7 @@ function FormatSettingsContent({ bookId, language }: FormatSettingsContentProps)
             language={language}
             onLoadSystemFonts={loadSystemFonts}
             onChange={updateSetting}
+            numberingEnabled={numberMode !== "none"}
             settings={settings}
           />
           <div className="sticky bottom-0 mt-4 border-t border-border bg-background/95 py-4 backdrop-blur-xl">
@@ -233,7 +280,7 @@ function FormatSettingsContent({ bookId, language }: FormatSettingsContentProps)
               {saveStatus === "saving" && (
                 <LoaderCircle className="mr-2 size-4 animate-spin" />
               )}
-              {saveStatus === "saving" ? copy.saving : copy.save}
+              {saveStatus === "saving" ? copy.saving : (saveLabel ?? copy.save)}
             </Button>
             <div aria-live="polite" className="min-h-5 pt-2 text-xs" role="status">
               {saveStatus === "saved" && (
@@ -253,7 +300,13 @@ function FormatSettingsContent({ bookId, language }: FormatSettingsContentProps)
         </aside>
 
         <div className="xl:sticky xl:top-24">
-          <BookPagePreview language={language} settings={settings} />
+          <BookPagePreview
+            language={language}
+            settings={{
+              ...settings,
+              showNumber: numberMode !== "none" && settings.showNumber,
+            }}
+          />
         </div>
       </div>
 

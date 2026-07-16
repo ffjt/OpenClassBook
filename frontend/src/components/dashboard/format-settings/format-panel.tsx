@@ -64,11 +64,13 @@ const panelCopy = {
       firstLineIndent: "First line indent",
       justify: "Justify text",
       allowImages: "Allow images",
+      imageWidth: "Image width",
       paperSize: "Paper size",
       paperWidth: "Width",
       paperHeight: "Height",
       margin: "Margins",
       pageNumber: "Page number",
+      numberingUnavailable: "Unavailable because this book does not use article numbers.",
     },
     values: {
       above: "Above title",
@@ -109,11 +111,13 @@ const panelCopy = {
       firstLineIndent: "首行缩进",
       justify: "两端对齐",
       allowImages: "允许图片",
+      imageWidth: "图片宽度",
       paperSize: "纸张尺寸",
       paperWidth: "宽度",
       paperHeight: "高度",
       margin: "页边距",
       pageNumber: "页码位置",
+      numberingUnavailable: "当前书籍选择了“我不需要编号”，编号格式不可用。",
     },
     values: {
       above: "标题上方",
@@ -140,17 +144,19 @@ interface FormatPanelProps {
     value: BookFormatSettings[Key],
   ) => void;
   settings: BookFormatSettings;
+  numberingEnabled: boolean;
 }
 
 interface PanelSectionProps {
   children: React.ReactNode;
   icon: React.ComponentType<{ className?: string }>;
   title: string;
+  disabled?: boolean;
 }
 
-function PanelSection({ children, icon: Icon, title }: PanelSectionProps) {
+function PanelSection({ children, disabled, icon: Icon, title }: PanelSectionProps) {
   return (
-    <Card className="border-border bg-card shadow-none">
+    <Card className={cn("border-border bg-card shadow-none", disabled && "bg-muted/20 opacity-65")}>
       <CardHeader className="flex-row items-center gap-2.5 space-y-0 border-b border-border px-4 py-3.5">
         <Icon className="size-4 text-blue-400" />
         <CardTitle className="text-sm text-foreground">{title}</CardTitle>
@@ -225,6 +231,7 @@ export function FormatPanel({
   onLoadSystemFonts,
   onChange,
   settings,
+  numberingEnabled,
 }: FormatPanelProps) {
   const copy = panelCopy[language];
   const selectableFontOptions = Array.from(
@@ -386,33 +393,40 @@ export function FormatPanel({
         </ControlRow>
       </PanelSection>
 
-      <PanelSection icon={Hash} title={copy.sections.numbering}>
-        <ControlRow htmlFor="show-number" label={copy.fields.showNumber}>
-          <Switch
-            aria-label={copy.fields.showNumber}
-            checked={settings.showNumber}
-            className="ml-auto"
-            id="show-number"
-            onChange={(event) => onChange("showNumber", event.target.checked)}
-          />
-        </ControlRow>
-        <ControlRow htmlFor="number-position" label={copy.fields.numberPosition}>
-          <Select
-            className="h-9 text-xs"
-            id="number-position"
-            onChange={(event) =>
-              onChange(
-                "numberPosition",
-                event.target.value as BookFormatSettings["numberPosition"],
-              )
-            }
-            value={settings.numberPosition}
-          >
-            <option value="above">{copy.values.above}</option>
-            <option value="left">{copy.values.titleLeft}</option>
-            <option value="hidden">{copy.values.hidden}</option>
-          </Select>
-        </ControlRow>
+      <PanelSection disabled={!numberingEnabled} icon={Hash} title={copy.sections.numbering}>
+        <fieldset className="grid gap-4 disabled:cursor-not-allowed" disabled={!numberingEnabled}>
+          <ControlRow htmlFor="show-number" label={copy.fields.showNumber}>
+            <Switch
+              aria-label={copy.fields.showNumber}
+              checked={numberingEnabled && settings.showNumber}
+              className="ml-auto"
+              id="show-number"
+              onChange={(event) => onChange("showNumber", event.target.checked)}
+            />
+          </ControlRow>
+          <ControlRow htmlFor="number-position" label={copy.fields.numberPosition}>
+            <Select
+              className="h-9 text-xs"
+              id="number-position"
+              onChange={(event) =>
+                onChange(
+                  "numberPosition",
+                  event.target.value as BookFormatSettings["numberPosition"],
+                )
+              }
+              value={settings.numberPosition}
+            >
+              <option value="above">{copy.values.above}</option>
+              <option value="left">{copy.values.titleLeft}</option>
+              <option value="hidden">{copy.values.hidden}</option>
+            </Select>
+          </ControlRow>
+        </fieldset>
+        {!numberingEnabled ? (
+          <p className="text-[11px] leading-5 text-muted-foreground">
+            {copy.fields.numberingUnavailable}
+          </p>
+        ) : null}
       </PanelSection>
 
       <PanelSection icon={Pilcrow} title={copy.sections.body}>
@@ -498,6 +512,24 @@ export function FormatPanel({
             onChange={(event) => onChange("allowImages", event.target.checked)}
           />
         </ControlRow>
+        {settings.allowImages && (
+          <ControlRow htmlFor="image-width" label={copy.fields.imageWidth}>
+            <div className="flex items-center gap-3">
+              <Slider
+                id="image-width"
+                max={100}
+                min={20}
+                onChange={(event) =>
+                  onChange("imageMaxWidth", Number(event.target.value))
+                }
+                value={settings.imageMaxWidth}
+              />
+              <span className="w-9 text-right text-[11px] tabular-nums text-muted-foreground">
+                {settings.imageMaxWidth}%
+              </span>
+            </div>
+          </ControlRow>
+        )}
       </PanelSection>
 
       <PanelSection icon={FileText} title={copy.sections.page}>

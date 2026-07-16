@@ -238,6 +238,7 @@ class ExportService:
                         source,
                         template,
                         directory / f"asset-{index}.pdf",
+                        prefer_native_docx=False,
                     )
                 except PageAssetError:
                     errors.append(
@@ -324,13 +325,16 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
         image_width=_number(images.get("max_width"), 72),
         numbering_style=(
             str(numbering.get("position", "above"))
-            if numbering.get("show", True)
+            if bundle.book.number_mode != "none" and numbering.get("show", True)
             else "hidden"
         ),
         line_height=_number(body.get("line_height"), 1.5),
         title_size=_number(title.get("size"), 24),
         title_align=str(title.get("align", "center")),
         title_bold=bool(title.get("bold", True)),
+        subtitle_mode=str(title.get("subtitle_mode", "free")),
+        fixed_subtitle=str(title.get("fixed_subtitle", "")),
+        subtitle_align=str(title.get("subtitle_align", "center")),
         body_justify=bool(body.get("justify", True)),
         first_line_indent=_number(body.get("first_line_indent"), 2),
         page_number_position=str(page.get("number_position", "center")),

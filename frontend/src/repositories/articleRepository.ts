@@ -2,17 +2,27 @@ import { apiRequest } from "@/repositories/apiClient";
 
 export type ArticleStatus = "draft" | "pending" | "approved" | "rejected";
 
+export interface ArticleImageSettings {
+  page: number;
+  wrap: "square" | "tight" | "through" | "topBottom" | "behindText" | "inFrontOfText";
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+}
+
 export interface Article {
   id: number;
   book_id: number;
   author_id: number;
   number: string;
   title: string;
+  subtitle: string;
   content: string;
   image: string | null;
+  image_settings: ArticleImageSettings | null;
   status: ArticleStatus;
   review_status: Exclude<ArticleStatus, "draft">;
   submitted_at: string | null;
+  edit_requested_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -21,8 +31,10 @@ export interface ArticleCreateInput {
   author_id: number;
   number?: string;
   title: string;
+  subtitle?: string;
   content: string;
   image?: string | null;
+  image_settings?: ArticleImageSettings | null;
   status?: ArticleStatus;
 }
 
@@ -73,6 +85,19 @@ export const articleRepository = {
   updateStatus(id: number, status: ArticleStatus) {
     return apiRequest<Article>(`/articles/${id}/status`, {
       body: JSON.stringify({ status }),
+      method: "PATCH",
+    });
+  },
+
+  requestEdit(id: number) {
+    return apiRequest<Article>(`/articles/${id}/edit-request`, {
+      method: "POST",
+    });
+  },
+
+  resolveEditRequest(id: number, action: "approve" | "reject") {
+    return apiRequest<Article>(`/articles/${id}/edit-request`, {
+      body: JSON.stringify({ action }),
       method: "PATCH",
     });
   },

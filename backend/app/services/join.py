@@ -8,12 +8,21 @@ from app.repositories.join import JoinRepository
 from app.schemas.invitation import JoinCreate
 
 
+class JoinUnavailableError(ValueError):
+    def __init__(self, code: Literal["invite_disabled", "submission_disabled"]) -> None:
+        super().__init__(code)
+        self.code = code
+
+
 class JoinService:
     def __init__(self, repository: JoinRepository) -> None:
         self.repository = repository
 
     def get_book(self, invite_code: str) -> Book | None:
-        return self.repository.get_book_by_invite_code(invite_code.strip().upper())
+        book = self.repository.get_book_by_invite_code(invite_code.strip().upper())
+        if book is not None and not book.invite_enabled:
+            raise JoinUnavailableError("invite_disabled")
+        return book
 
     def join(
         self,
@@ -21,7 +30,7 @@ class JoinService:
         data: JoinCreate,
     ) -> (
         tuple[
-            Literal["created", "restored", "selection_required"],
+            Literal["created", "selection_required"],
             Author | None,
         ]
         | None
@@ -29,10 +38,10 @@ class JoinService:
         book = self.get_book(invite_code)
         if book is None:
             return None
+        if not book.submission_enabled:
+            raise JoinUnavailableError("submission_disabled")
         matches = self.repository.find_authors(book.id, data.name)
-        if len(matches) == 1:
-            return "restored", matches[0]
-        if len(matches) > 1:
+        if matches:
             return "selection_required", None
         return (
             "created",

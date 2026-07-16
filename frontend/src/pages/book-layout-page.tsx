@@ -20,11 +20,14 @@ import {
   AlertCircle,
   ArrowDown,
   ArrowLeft,
+  ArrowUp,
+  ArrowUpDown,
   BookOpenText,
   Check,
   FileImage,
   FileText,
   Files,
+  ListOrdered,
   Image,
   LoaderCircle,
   Pencil,
@@ -70,6 +73,9 @@ import { toast } from "sonner";
 
 type StructureSaveStatus = "idle" | "saving" | "saved" | "error";
 type ArticleOrderSaveStatus = StructureSaveStatus;
+type NumberAssignmentStatus = StructureSaveStatus;
+type ArticleSortKey = "number" | "title" | "author";
+type SortDirection = "asc" | "desc";
 
 const commonSectionPresets: LayoutSectionPreset[] = [
   "preface",
@@ -126,7 +132,7 @@ const copy = {
     compatibleFormats: "Compatible formats",
     docx: "DOCX (recommended)",
     formatExplanation:
-      "Word files are stored as-is and will be processed automatically during export.",
+      "When Microsoft Word is installed, DOCX uses native Word PDF conversion for maximum fidelity. Otherwise, the compatible renderer preserves supported colors, fonts, paragraph layout, tables, and images.",
     coverFormats: "PNG · JPG · JPEG · WEBP · PDF",
     coverRecommendation: "A4 ratio · 300 DPI recommended",
     selectFile: "Choose file",
@@ -147,7 +153,7 @@ const copy = {
     unsupportedFormat: "Unsupported file format.",
     fileTooLarge: "File exceeds the 100 MB limit.",
     wordUploaded:
-      "Word file uploaded. It will be processed automatically during export.",
+      "Word file uploaded. Native Word conversion will be used when available, with automatic compatible fallback.",
     unsupportedPageType: "Uploads for this page type are not available yet.",
     maxFileSize: "Maximum file size: 100 MB",
     articlesHeading: (count: number) =>
@@ -158,6 +164,14 @@ const copy = {
     savingArticleOrder: "Saving article order...",
     articleOrderSaved: "Article order saved.",
     articleOrderSaveError: "Could not save the article order.",
+    assignNumbersInOrder: "Generate numbers in current order",
+    assignNumbersHint:
+      "Uses the current article order and the number prefix and length configured in Settings.",
+    assigningNumbers: "Generating numbers...",
+    numbersAssigned: "Article numbers generated in the current order.",
+    numberAssignmentError: "Could not generate article numbers.",
+    sortAscending: (label: string) => `Sort by ${label} ascending`,
+    sortDescending: (label: string) => `Sort by ${label} descending`,
     number: "No.",
     author: "Author",
     noArticles: "No approved articles yet.",
@@ -218,7 +232,8 @@ const copy = {
     recommendedFormat: "推荐格式",
     compatibleFormats: "兼容格式",
     docx: "DOCX（推荐）",
-    formatExplanation: "Word 文件保持原样存储，将在导出时自动处理。",
+    formatExplanation:
+      "安装 Microsoft Word 时优先使用 Word 原生 PDF 转换以获得最高保真度；否则自动使用兼容渲染器，保留受支持的颜色、字体、段落、表格和图片格式。",
     coverFormats: "PNG · JPG · JPEG · WEBP · PDF",
     coverRecommendation: "推荐 A4 比例 · 300 DPI",
     selectFile: "选择文件",
@@ -238,7 +253,8 @@ const copy = {
     deleteFailed: "无法删除文件。",
     unsupportedFormat: "不支持的文件格式。",
     fileTooLarge: "文件超过 100 MB 限制。",
-    wordUploaded: "Word 文件已上传，将在导出时自动处理。",
+    wordUploaded:
+      "Word 文件已上传。可用时将使用 Word 原生转换，否则自动使用兼容渲染。",
     unsupportedPageType: "当前页面类型暂不支持上传。",
     maxFileSize: "文件大小上限：100 MB",
     articlesHeading: (count: number) => `共 ${count} 篇审核通过的文章`,
@@ -248,6 +264,13 @@ const copy = {
     savingArticleOrder: "正在保存正文顺序……",
     articleOrderSaved: "正文顺序已保存。",
     articleOrderSaveError: "无法保存正文顺序。",
+    assignNumbersInOrder: "按当前顺序生成编号",
+    assignNumbersHint: "使用当前正文顺序，以及设置中的编号前缀和位数生成。",
+    assigningNumbers: "正在生成编号……",
+    numbersAssigned: "已按当前顺序生成文章编号。",
+    numberAssignmentError: "无法生成文章编号。",
+    sortAscending: (label: string) => `按${label}升序排序`,
+    sortDescending: (label: string) => `按${label}降序排序`,
     number: "编号",
     author: "作者",
     noArticles: "暂无审核通过的文章。",
@@ -294,6 +317,8 @@ export function BookLayoutPage({
     useState<StructureSaveStatus>("idle");
   const [articleOrderStatus, setArticleOrderStatus] =
     useState<ArticleOrderSaveStatus>("idle");
+  const [numberAssignmentStatus, setNumberAssignmentStatus] =
+    useState<NumberAssignmentStatus>("idle");
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -391,6 +416,7 @@ export function BookLayoutPage({
   const persistArticleOrder = async (articleIds: number[]) => {
     if (!book) return false;
     const previousOrder = book.layout_article_order;
+    setNumberAssignmentStatus("idle");
     setBook((current) =>
       current ? { ...current, layout_article_order: articleIds } : current,
     );
@@ -413,6 +439,39 @@ export function BookLayoutPage({
         current ? { ...current, layout_article_order: previousOrder } : current,
       );
       setArticleOrderStatus("error");
+      return false;
+    }
+  };
+  const assignNumbersInCurrentOrder = async () => {
+    if (!book || book.number_mode !== "automatic" || !approvedArticles.length) {
+      return false;
+    }
+    setNumberAssignmentStatus("saving");
+    try {
+      const updatedArticles = await articleRepository.assignNumbers(
+        book.id,
+        approvedArticles.map((article) => article.id),
+      );
+      const updates = new Map(
+        updatedArticles.map((article) => [article.id, article]),
+      );
+      setArticles((current) =>
+        current.map((article) => updates.get(article.id) ?? article),
+      );
+      setBook((current) =>
+        current
+          ? {
+              ...current,
+              layout_article_order: updatedArticles.map((article) => article.id),
+            }
+          : current,
+      );
+      setNumberAssignmentStatus("saved");
+      toast.success(pageCopy.numbersAssigned);
+      return true;
+    } catch {
+      setNumberAssignmentStatus("error");
+      toast.error(pageCopy.numberAssignmentError);
       return false;
     }
   };
@@ -517,7 +576,9 @@ export function BookLayoutPage({
           onAssetChanged={refreshBook}
           onArticlePreview={openArticlePreview}
           onArticleReorder={persistArticleOrder}
+          onAssignNumbers={assignNumbersInCurrentOrder}
           onRename={renameSection}
+          numberAssignmentStatus={numberAssignmentStatus}
           orderStatus={articleOrderStatus}
           section={selectedSection}
         />
@@ -789,7 +850,9 @@ function ResourceManager({
   onAssetChanged,
   onArticlePreview,
   onArticleReorder,
+  onAssignNumbers,
   onRename,
+  numberAssignmentStatus,
   orderStatus,
   section,
 }: {
@@ -802,7 +865,9 @@ function ResourceManager({
   onAssetChanged: () => Promise<void>;
   onArticlePreview: (articleId: number) => void;
   onArticleReorder: (articleIds: number[]) => Promise<boolean>;
+  onAssignNumbers: () => Promise<boolean>;
   onRename: (section: BookLayoutSection, name: string) => Promise<boolean>;
+  numberAssignmentStatus: NumberAssignmentStatus;
   orderStatus: ArticleOrderSaveStatus;
   section: BookLayoutSection;
 }) {
@@ -840,9 +905,12 @@ function ResourceManager({
           authorNames={authorNames}
           copy={pageCopy}
           focusedArticleId={focusedArticleId}
+          numberAssignmentStatus={numberAssignmentStatus}
           onArticlePreview={onArticlePreview}
+          onAssignNumbers={onAssignNumbers}
           onReorder={onArticleReorder}
           orderStatus={orderStatus}
+          showNumberAssignment={book.number_mode === "automatic"}
         />
       ) : (
         <PageAssetManager
@@ -1233,30 +1301,57 @@ function MainContentManager({
   authorNames,
   copy: pageCopy,
   focusedArticleId,
+  numberAssignmentStatus,
   onArticlePreview,
+  onAssignNumbers,
   onReorder,
   orderStatus,
+  showNumberAssignment,
 }: {
   articles: Article[];
   authorNames: Map<number, string>;
   copy: (typeof copy)[Language];
   focusedArticleId: number | null;
+  numberAssignmentStatus: NumberAssignmentStatus;
   onArticlePreview: (articleId: number) => void;
+  onAssignNumbers: () => Promise<boolean>;
   onReorder: (articleIds: number[]) => Promise<boolean>;
   orderStatus: ArticleOrderSaveStatus;
+  showNumberAssignment: boolean;
 }) {
+  const [sortConfig, setSortConfig] = useState<{
+    key: ArticleSortKey;
+    direction: SortDirection;
+  } | null>(null);
+  const isBusy =
+    orderStatus === "saving" || numberAssignmentStatus === "saving";
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const finishSorting = ({ active, over }: DragEndEvent) => {
-    if (!over || active.id === over.id || orderStatus === "saving") return;
+    if (!over || active.id === over.id || isBusy) return;
     const oldIndex = articles.findIndex((article) => article.id === active.id);
     const newIndex = articles.findIndex((article) => article.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
+    setSortConfig(null);
     void onReorder(
       arrayMove(articles, oldIndex, newIndex).map((article) => article.id),
     );
+  };
+  const sortArticles = (key: ArticleSortKey) => {
+    if (isBusy) return;
+    const direction: SortDirection =
+      sortConfig?.key === key && sortConfig.direction === "asc" ? "desc" : "asc";
+    setSortConfig({ key, direction });
+    const articleIds = [...articles]
+      .sort((left, right) =>
+        compareLayoutArticles(left, right, key, direction, authorNames),
+      )
+      .map((article) => article.id);
+    void onReorder(articleIds).then((saved) => {
+      if (!saved) setSortConfig(null);
+    });
   };
   const orderMessage =
     orderStatus === "saving"
@@ -1274,7 +1369,7 @@ function MainContentManager({
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
             <BookOpenText className="size-4" />
           </span>
-          <div>
+          <div className="min-w-0 flex-1">
             <h3 className="text-sm font-semibold text-foreground">
               {pageCopy.articlesHeading(articles.length)}
             </h3>
@@ -1299,6 +1394,33 @@ function MainContentManager({
             >
               {orderMessage}
             </p>
+            {showNumberAssignment ? (
+              <div className="mt-3 flex flex-col gap-2 border-t border-blue-500/15 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="max-w-sm text-[11px] leading-4 text-muted-foreground">
+                  {numberAssignmentStatus === "error"
+                    ? pageCopy.numberAssignmentError
+                    : numberAssignmentStatus === "saved"
+                      ? pageCopy.numbersAssigned
+                      : pageCopy.assignNumbersHint}
+                </p>
+                <Button
+                  className="h-9 shrink-0 gap-1.5 px-3 text-xs"
+                  disabled={!articles.length || isBusy}
+                  onClick={() => void onAssignNumbers()}
+                  type="button"
+                  variant="outline"
+                >
+                  {numberAssignmentStatus === "saving" ? (
+                    <LoaderCircle className="size-3.5 animate-spin" />
+                  ) : (
+                    <ListOrdered className="size-3.5" />
+                  )}
+                  {numberAssignmentStatus === "saving"
+                    ? pageCopy.assigningNumbers
+                    : pageCopy.assignNumbersInOrder}
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -1306,9 +1428,44 @@ function MainContentManager({
       {articles.length ? (
         <div className="mt-5 overflow-hidden rounded-xl border border-border">
           <div className="grid grid-cols-[64px_minmax(0,1fr)_minmax(90px,0.45fr)] gap-3 border-b border-border bg-muted/35 px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            <span>{pageCopy.number}</span>
-            <span>{pageCopy.sections.articles}</span>
-            <span>{pageCopy.author}</span>
+            {(
+              [
+                ["number", pageCopy.number],
+                ["title", pageCopy.sections.articles],
+                ["author", pageCopy.author],
+              ] as const
+            ).map(([key, label]) => {
+              const isActive = sortConfig?.key === key;
+              const nextDirection =
+                isActive && sortConfig.direction === "asc" ? "desc" : "asc";
+              const SortIcon = isActive
+                ? sortConfig.direction === "asc"
+                  ? ArrowUp
+                  : ArrowDown
+                : ArrowUpDown;
+              const sortLabel =
+                nextDirection === "asc"
+                  ? pageCopy.sortAscending(label)
+                  : pageCopy.sortDescending(label);
+              return (
+                <button
+                  aria-label={sortLabel}
+                  aria-pressed={isActive}
+                  className={cn(
+                    "flex min-w-0 items-center gap-1.5 text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30",
+                    isActive && "text-blue-400",
+                  )}
+                  disabled={isBusy}
+                  key={key}
+                  onClick={() => sortArticles(key)}
+                  title={sortLabel}
+                  type="button"
+                >
+                  <span className="truncate">{label}</span>
+                  <SortIcon className="size-3 shrink-0" />
+                </button>
+              );
+            })}
           </div>
           <DndContext
             collisionDetection={closestCenter}
@@ -1328,7 +1485,7 @@ function MainContentManager({
                       `${pageCopy.author} #${article.author_id}`
                     }
                     copy={pageCopy}
-                    disabled={orderStatus === "saving"}
+                    disabled={isBusy}
                     focused={focusedArticleId === article.id}
                     key={article.id}
                     onPreview={onArticlePreview}
@@ -1955,6 +2112,33 @@ function compareArticleNumbers(left: Article, right: Article) {
       sensitivity: "base",
     }) || left.id - right.id
   );
+}
+
+const layoutArticleCollator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
+
+function compareLayoutArticles(
+  left: Article,
+  right: Article,
+  key: ArticleSortKey,
+  direction: SortDirection,
+  authorNames: Map<number, string>,
+) {
+  const getValue = (article: Article) => {
+    if (key === "number") return article.number?.trim() ?? "";
+    if (key === "title") return article.title.trim();
+    return authorNames.get(article.author_id)?.trim() ?? `#${article.author_id}`;
+  };
+  const leftValue = getValue(left);
+  const rightValue = getValue(right);
+  if (!leftValue) return rightValue ? 1 : left.id - right.id;
+  if (!rightValue) return -1;
+
+  const comparison = layoutArticleCollator.compare(leftValue, rightValue);
+  if (comparison) return direction === "asc" ? comparison : -comparison;
+  return compareArticleNumbers(left, right);
 }
 
 function orderApprovedArticles(

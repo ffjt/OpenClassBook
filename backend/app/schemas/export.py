@@ -26,6 +26,9 @@ class ExportTemplateInfo(BaseModel):
     title_size: float
     title_align: str
     title_bold: bool
+    subtitle_mode: str
+    fixed_subtitle: str
+    subtitle_align: str
     body_justify: bool
     first_line_indent: float
     page_number_position: str
