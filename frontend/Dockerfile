@@ -12,7 +12,7 @@ ARG VITE_API_BASE_URL=http://localhost:8000
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN pnpm --filter frontend build
 
-FROM nginx:1.29-alpine
+FROM nginx:1.31-alpine
 
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
