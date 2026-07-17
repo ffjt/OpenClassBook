@@ -4,8 +4,8 @@ from app.api.dependencies import AuthorServiceDep, JoinServiceDep
 from app.schemas.author import (
     AuthorCreate,
     AuthorDetailResponse,
-    AuthorPreviewResponse,
     AuthorResponse,
+    AuthorSummaryResponse,
     AuthorUpdate,
     LatestArticlePreview,
 )
@@ -30,14 +30,14 @@ def book_not_found() -> HTTPException:
 
 @router.get(
     "/books/{book_id}/authors/search",
-    response_model=list[AuthorResponse],
+    response_model=list[AuthorSummaryResponse],
     summary="Search authors by display name / 按显示名称搜索作者",
 )
 def search_authors(
     book_id: int,
     service: AuthorServiceDep,
     name: str = Query(min_length=1, max_length=120),
-) -> list[AuthorResponse]:
+) -> list[AuthorSummaryResponse]:
     if not service.book_exists(book_id):
         raise book_not_found()
     if not name.strip():
@@ -49,23 +49,39 @@ def search_authors(
             },
         )
     return [
-        AuthorResponse.model_validate(author)
-        for author in service.search_by_name(book_id, name)
+        _author_summary(*result)
+        for result in service.search_by_name(book_id, name)
     ]
 
 
 @router.get(
     "/books/{book_id}/authors",
-    response_model=list[AuthorResponse],
+    response_model=list[AuthorSummaryResponse],
     summary="List book authors / 获取书籍作者列表",
 )
-def list_authors(book_id: int, service: AuthorServiceDep) -> list[AuthorResponse]:
+def list_authors(
+    book_id: int, service: AuthorServiceDep
+) -> list[AuthorSummaryResponse]:
     if not service.book_exists(book_id):
         raise book_not_found()
-    return [
-        AuthorResponse.model_validate(author)
-        for author in service.list_by_book(book_id)
-    ]
+    return [_author_summary(*result) for result in service.list_by_book(book_id)]
+
+
+def _author_summary(author, article_count: int, latest) -> AuthorSummaryResponse:
+    return AuthorSummaryResponse(
+        **AuthorResponse.model_validate(author).model_dump(),
+        article_count=article_count,
+        latest_article=(
+            LatestArticlePreview(
+                title=latest.title,
+                excerpt=latest.content[:120],
+                status=latest.status,
+                updated_at=latest.updated_at,
+            )
+            if latest
+            else None
+        ),
+    )
 
 
 @router.post(
@@ -111,34 +127,6 @@ def get_author(
     return AuthorDetailResponse(
         **AuthorResponse.model_validate(author).model_dump(),
         book=BookResponse.model_validate(book),
-    )
-
-
-@router.get(
-    "/authors/{author_id}/preview",
-    response_model=AuthorPreviewResponse,
-    summary="Preview an author's latest article / 预览作者最近文章",
-)
-def preview_author(
-    author_id: int,
-    service: AuthorServiceDep,
-) -> AuthorPreviewResponse:
-    result = service.get_preview(author_id)
-    if result is None:
-        raise author_not_found()
-    article_count, latest = result
-    return AuthorPreviewResponse(
-        article_count=article_count,
-        latest_article=(
-            LatestArticlePreview(
-                title=latest.title,
-                excerpt=latest.content[:120],
-                status=latest.status,
-                updated_at=latest.updated_at,
-            )
-            if latest
-            else None
-        ),
     )
 
 

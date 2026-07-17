@@ -258,8 +258,6 @@ POST /books/{id}/authors
 
 PATCH /authors/{id}
 
-GET /authors/{id}/preview
-
 Articles
 
 GET /books/{id}/articles

@@ -42,8 +42,7 @@ import {
 } from "@/repositories/articleRepository";
 import {
   authorRepository,
-  type Author,
-  type AuthorPreview,
+  type AuthorSummary,
 } from "@/repositories/authorRepository";
 import { bookRepository } from "@/repositories/bookRepository";
 import type { PreviewArticle } from "@/types/article";
@@ -179,13 +178,12 @@ export function AuthorsPage({
   onToggleLanguage,
 }: AuthorsPageProps) {
   const pageCopy = copy[language];
-  const [authors, setAuthors] = useState<Author[]>([]);
-  const [previews, setPreviews] = useState<Map<number, AuthorPreview>>(new Map());
+  const [authors, setAuthors] = useState<AuthorSummary[]>([]);
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [selectedAuthor, setSelectedAuthor] = useState<Author | null>(null);
+  const [selectedAuthor, setSelectedAuthor] = useState<AuthorSummary | null>(null);
   const [authorArticles, setAuthorArticles] = useState<Article[]>([]);
   const [isArticlesLoading, setIsArticlesLoading] = useState(false);
   const [articlesError, setArticlesError] = useState(false);
@@ -211,17 +209,9 @@ export function AuthorsPage({
           authorRepository.list(bookId),
           bookRepository.get(bookId),
         ]);
-        const loadedPreviews = await Promise.all(
-          loadedAuthors.map((author) => authorRepository.preview(author.id)),
-        );
         if (!active) return;
         setBookTitle(loadedBook.title);
         setAuthors(loadedAuthors);
-        setPreviews(
-          new Map(
-            loadedAuthors.map((author, index) => [author.id, loadedPreviews[index]]),
-          ),
-        );
       } catch {
         if (active) setHasError(true);
       } finally {
@@ -264,30 +254,28 @@ export function AuthorsPage({
     return authors.filter((author) => author.name.toLowerCase().includes(normalized));
   }, [authors, query]);
 
-  const totalArticles = [...previews.values()].reduce(
-    (sum, preview) => sum + preview.article_count,
+  const totalArticles = authors.reduce(
+    (sum, author) => sum + author.article_count,
     0,
   );
-  const activeAuthors = [...previews.values()].filter(
-    (preview) => preview.article_count > 0,
+  const activeAuthors = authors.filter(
+    (author) => author.article_count > 0,
   ).length;
 
   const refreshSelectedAuthor = async () => {
     if (!selectedAuthor) return;
-    const preview = await authorRepository.preview(selectedAuthor.id);
-    setPreviews((current) => new Map(current).set(selectedAuthor.id, preview));
+    const refreshed = await authorRepository.list(bookId);
+    setAuthors(refreshed);
+    setSelectedAuthor(
+      (current) => refreshed.find((author) => author.id === current?.id) ?? null,
+    );
   };
 
-  const removeAuthor = async (author: Author) => {
+  const removeAuthor = async (author: AuthorSummary) => {
     if (!window.confirm(pageCopy.removeConfirm)) return;
     try {
       await authorRepository.delete(author.id);
       setAuthors((current) => current.filter((item) => item.id !== author.id));
-      setPreviews((current) => {
-        const next = new Map(current);
-        next.delete(author.id);
-        return next;
-      });
     } catch {
       setHasError(true);
     }
@@ -309,7 +297,7 @@ export function AuthorsPage({
     }
   };
 
-  const openAuthor = (author: Author) => {
+  const openAuthor = (author: AuthorSummary) => {
     setSelectedAuthor(author);
     setExpandedArticleId(null);
     setAuthorArticles([]);
@@ -547,8 +535,7 @@ export function AuthorsPage({
                     </TableHeader>
                     <TableBody>
                       {filteredAuthors.map((author) => {
-                        const preview = previews.get(author.id);
-                        const latest = preview?.latest_article;
+                        const latest = author.latest_article;
                         return (
                           <TableRow key={author.id}>
                             <TableCell className="font-medium">
@@ -562,7 +549,7 @@ export function AuthorsPage({
                             </TableCell>
                             <TableCell>
                               <Badge className="border border-border bg-transparent text-foreground">
-                                {preview?.article_count ?? 0}
+                                {author.article_count}
                               </Badge>
                             </TableCell>
                             <TableCell>

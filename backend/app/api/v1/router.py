@@ -6,7 +6,6 @@ from app.api.v1 import (
     books,
     exports,
     files,
-    invites,
     join,
     templates,
 )
@@ -18,5 +17,4 @@ api_router.include_router(authors.router)
 api_router.include_router(articles.router)
 api_router.include_router(exports.router)
 api_router.include_router(files.router)
-api_router.include_router(invites.router)
 api_router.include_router(join.router)

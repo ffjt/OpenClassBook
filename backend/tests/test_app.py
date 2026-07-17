@@ -939,7 +939,10 @@ def test_author_crud_persists_to_sqlite(
         assert persisted is not None
         assert persisted.uuid is not None
 
-    assert client.get(collection).json() == [created]
+    listed = client.get(collection).json()
+    assert {key: listed[0][key] for key in created} == created
+    assert listed[0]["article_count"] == 0
+    assert listed[0]["latest_article"] is None
     author_detail = client.get(f"/api/v1/authors/{created['id']}").json()
     assert {key: author_detail[key] for key in created} == created
     assert author_detail["book"]["id"] == book["id"]
@@ -973,15 +976,6 @@ def test_invitation_join_and_welcome_flow_persists_to_sqlite(
         },
     ).json()
 
-    invite_response = client.get(f"/api/v1/books/{book['id']}/invite")
-    assert invite_response.status_code == 200
-    assert invite_response.json() == {
-        "book_id": book["id"],
-        "title": "Our Class Stories",
-        "owner_name": "Ms. Zhang",
-        "invite_code": book["invite_code"],
-    }
-
     join_path = f"/api/v1/join/{book['invite_code']}"
     invitation_response = client.get(join_path)
     assert invitation_response.status_code == 200
@@ -1012,6 +1006,7 @@ def test_invitation_join_and_welcome_flow_persists_to_sqlite(
 
 
 def test_invalid_invitation_returns_404(client: TestClient) -> None:
+    assert client.get("/api/v1/books/999").status_code == 404
     assert client.get("/api/v1/books/999/invite").status_code == 404
     assert client.get("/api/v1/join/OCB-NOT123").status_code == 404
     assert (
@@ -1085,7 +1080,7 @@ def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) ->
         ).json()
         == []
     )
-    preview = client.get(f"/api/v1/authors/{author['id']}/preview").json()
+    preview = client.get(f"/api/v1/books/{book['id']}/authors").json()[0]
     assert preview["article_count"] == 1
     assert preview["latest_article"]["status"] == "draft"
 
@@ -1122,9 +1117,9 @@ def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) ->
     assert approve_response.json()["status"] == "approved"
     assert approve_response.json()["submitted_at"] == submitted_at
     assert (
-        client.get(f"/api/v1/authors/{author['id']}/preview").json()["latest_article"][
-            "status"
-        ]
+        client.get(f"/api/v1/books/{book['id']}/authors").json()[0][
+            "latest_article"
+        ]["status"]
         == "approved"
     )
 
@@ -1175,10 +1170,9 @@ def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) ->
     assert client.delete(f"/api/v1/articles/{created['id']}").status_code == 204
     assert client.get(f"/api/v1/articles/{created['id']}").status_code == 404
     assert client.get(collection).json() == []
-    assert client.get(f"/api/v1/authors/{author['id']}/preview").json() == {
-        "article_count": 0,
-        "latest_article": None,
-    }
+    author_summary = client.get(f"/api/v1/books/{book['id']}/authors").json()[0]
+    assert author_summary["article_count"] == 0
+    assert author_summary["latest_article"] is None
 
 
 def test_join_requires_identity_confirmation_for_every_existing_name(
@@ -1266,11 +1260,12 @@ def test_author_can_manage_multiple_articles_and_preview_latest(
     )
     assert missing_number.status_code == 409
 
-    preview = client.get(f"/api/v1/authors/{author['id']}/preview").json()
+    preview = client.get(f"/api/v1/books/{book['id']}/authors").json()[0]
     assert preview["article_count"] == 2
     assert preview["latest_article"]["title"] == "Second"
     assert preview["latest_article"]["excerpt"] == "Latest article"
     assert preview["latest_article"]["status"] == "pending"
+    assert client.get(f"/api/v1/authors/{author['id']}/preview").status_code == 404
 
     other_author = client.post(
         f"/api/v1/books/{book['id']}/authors",

@@ -19,14 +19,11 @@ class AuthorService:
     def book_exists(self, book_id: int) -> bool:
         return self.repository.book_exists(book_id)
 
-    def list_by_book(self, book_id: int) -> list[Author]:
+    def list_by_book(self, book_id: int):
         return self.repository.list_by_book(book_id)
 
-    def search_by_name(self, book_id: int, name: str) -> list[Author]:
+    def search_by_name(self, book_id: int, name: str):
         return self.repository.search_by_name(book_id, name.strip())
-
-    def get_preview(self, author_id: int):
-        return self.repository.get_preview(author_id)
 
     def get(self, author_id: int) -> Author | None:
         return self.repository.get(author_id)

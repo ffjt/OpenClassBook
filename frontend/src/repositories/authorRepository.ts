@@ -26,7 +26,7 @@ export interface LatestArticlePreview {
   updated_at: string;
 }
 
-export interface AuthorPreview {
+export interface AuthorSummary extends Author {
   article_count: number;
   latest_article: LatestArticlePreview | null;
 }
@@ -35,12 +35,12 @@ export type AuthorUpdateInput = Partial<AuthorCreateInput>;
 
 export const authorRepository = {
   list(bookId: number) {
-    return apiRequest<Author[]>(`/books/${bookId}/authors`);
+    return apiRequest<AuthorSummary[]>(`/books/${bookId}/authors`);
   },
 
   search(bookId: number, name: string) {
     const query = new URLSearchParams({ name });
-    return apiRequest<Author[]>(`/books/${bookId}/authors/search?${query}`);
+    return apiRequest<AuthorSummary[]>(`/books/${bookId}/authors/search?${query}`);
   },
 
   listByBook(bookId: number) {
@@ -49,10 +49,6 @@ export const authorRepository = {
 
   get(id: number) {
     return apiRequest<AuthorDetail>(`/authors/${id}`);
-  },
-
-  preview(id: number) {
-    return apiRequest<AuthorPreview>(`/authors/${id}/preview`);
   },
 
   create(bookId: number, data: AuthorCreateInput) {

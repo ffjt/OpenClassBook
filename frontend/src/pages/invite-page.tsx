@@ -15,10 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { Language } from "@/lib/i18n";
 import { ApiError } from "@/repositories/apiClient";
-import {
-  inviteRepository,
-  type BookInvite,
-} from "@/repositories/inviteRepository";
+import { bookRepository, type Book } from "@/repositories/bookRepository";
 
 interface InvitePageProps {
   basePath: string;
@@ -89,7 +86,7 @@ export function InvitePage({
   onToggleLanguage,
 }: InvitePageProps) {
   const pageCopy = copy[language];
-  const [invite, setInvite] = useState<BookInvite | null>(null);
+  const [invite, setInvite] = useState<Book | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<"missing" | "server" | null>(null);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
@@ -100,7 +97,7 @@ export function InvitePage({
     setIsLoading(true);
     setError(null);
 
-    inviteRepository
+    bookRepository
       .get(bookId)
       .then((data) => {
         if (active) setInvite(data);

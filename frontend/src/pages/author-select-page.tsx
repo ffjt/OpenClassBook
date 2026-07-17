@@ -16,8 +16,7 @@ import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/i18n";
 import {
   authorRepository,
-  type Author,
-  type AuthorPreview,
+  type AuthorSummary,
 } from "@/repositories/authorRepository";
 import { joinRepository } from "@/repositories/joinRepository";
 
@@ -31,8 +30,7 @@ interface AuthorSelectPageProps {
 }
 
 interface Candidate {
-  author: Author;
-  preview: AuthorPreview;
+  author: AuthorSummary;
 }
 
 const copy = {
@@ -117,14 +115,9 @@ export function AuthorSelectPage({
       try {
         const invitation = await joinRepository.get(inviteCode);
         const authors = await authorRepository.search(invitation.book.id, name);
-        const previews = await Promise.all(
-          authors.map((author) => authorRepository.preview(author.id)),
-        );
         if (!active) return;
         setBookId(invitation.book.id);
-        setCandidates(
-          authors.map((author, index) => ({ author, preview: previews[index] })),
-        );
+        setCandidates(authors.map((author) => ({ author })));
       } catch {
         if (active) setHasError(true);
       } finally {
@@ -175,12 +168,12 @@ export function AuthorSelectPage({
         ) : (
           <div className="mt-12">
             <div className="grid gap-5 md:grid-cols-2">
-              {candidates.map(({ author, preview }) => {
-                const latest = preview.latest_article;
+              {candidates.map(({ author }) => {
+                const latest = author.latest_article;
                 const updatedAt = latest?.updated_at ?? author.updated_at;
                 return (
                   <article className="flex flex-col rounded-2xl border border-border bg-card p-6" key={author.id}>
-                    <div className="flex items-start justify-between gap-4"><div><h2 className="text-xl font-semibold">{author.name}</h2>{author.class_name ? <p className="mt-1 text-xs text-blue-500">{pageCopy.className}: {author.class_name}</p> : null}<p className="mt-1 text-xs text-muted-foreground">{pageCopy.updated} {formatDate(updatedAt, language)}</p></div><Badge className="border border-border bg-transparent text-foreground">{pageCopy.articles(preview.article_count)}</Badge></div>
+                    <div className="flex items-start justify-between gap-4"><div><h2 className="text-xl font-semibold">{author.name}</h2>{author.class_name ? <p className="mt-1 text-xs text-blue-500">{pageCopy.className}: {author.class_name}</p> : null}<p className="mt-1 text-xs text-muted-foreground">{pageCopy.updated} {formatDate(updatedAt, language)}</p></div><Badge className="border border-border bg-transparent text-foreground">{pageCopy.articles(author.article_count)}</Badge></div>
                     <div className="mt-6 min-h-40 rounded-xl bg-muted/40 p-4">
                       {latest ? <><div className="flex items-center justify-between gap-3"><p className="text-xs text-muted-foreground">{pageCopy.latest}</p><Badge className="border border-border bg-transparent text-foreground">{pageCopy.statuses[latest.status]}</Badge></div><h3 className="mt-3 font-semibold">{latest.title}</h3><p className="mt-3 whitespace-pre-line text-sm leading-6 text-muted-foreground">{latest.excerpt}{latest.excerpt.length >= 120 ? "……" : ""}</p></> : <div className="flex min-h-32 flex-col items-center justify-center text-sm text-muted-foreground"><FileText className="mb-3 size-5" />{pageCopy.noArticles}</div>}
                     </div>

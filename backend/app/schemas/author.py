@@ -57,7 +57,7 @@ class LatestArticlePreview(BaseModel):
     updated_at: datetime
 
 
-class AuthorPreviewResponse(BaseModel):
+class AuthorSummaryResponse(AuthorResponse):
     article_count: int
     latest_article: LatestArticlePreview | None
 

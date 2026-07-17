@@ -1,4 +1,5 @@
 from sqlalchemy import func, select
+from sqlalchemy.orm import aliased
 
 from app.models.article import Article
 from app.models.author import Author
@@ -20,36 +21,41 @@ class AuthorRepository(BaseRepository[Author, AuthorCreateData, AuthorUpdateData
     def get(self, resource_id: int) -> Author | None:
         return self.session.get(Author, resource_id)
 
-    def list_by_book(self, book_id: int) -> list[Author]:
-        statement = (
-            select(Author)
-            .where(Author.book_id == book_id)
-            .order_by(Author.updated_at.desc(), Author.id.desc())
-        )
-        return list(self.session.scalars(statement))
+    def list_by_book(self, book_id: int):
+        return self._list_with_previews(Author.book_id == book_id)
 
-    def search_by_name(self, book_id: int, name: str) -> list[Author]:
-        statement = (
-            select(Author)
-            .where(Author.book_id == book_id, Author.name == name)
-            .order_by(Author.updated_at.desc(), Author.id.desc())
+    def search_by_name(self, book_id: int, name: str):
+        return self._list_with_previews(
+            Author.book_id == book_id,
+            Author.name == name,
         )
-        return list(self.session.scalars(statement))
 
-    def get_preview(self, author_id: int) -> tuple[int, Article | None] | None:
-        if self.get(author_id) is None:
-            return None
-        articles = select(Article).where(Article.author_id == author_id)
-        article_count = (
-            self.session.scalar(
-                select(func.count(Article.id)).where(Article.author_id == author_id)
+    def _list_with_previews(self, *filters):
+        counts = (
+            select(
+                Article.author_id.label("author_id"),
+                func.count(Article.id).label("article_count"),
             )
-            or 0
+            .group_by(Article.author_id)
+            .subquery()
         )
-        latest = self.session.scalar(
-            articles.order_by(Article.updated_at.desc(), Article.id.desc()).limit(1)
+        latest_id = (
+            select(Article.id)
+            .where(Article.author_id == Author.id)
+            .order_by(Article.updated_at.desc(), Article.id.desc())
+            .limit(1)
+            .correlate(Author)
+            .scalar_subquery()
         )
-        return article_count, latest
+        latest = aliased(Article)
+        statement = (
+            select(Author, func.coalesce(counts.c.article_count, 0), latest)
+            .outerjoin(counts, counts.c.author_id == Author.id)
+            .outerjoin(latest, latest.id == latest_id)
+            .where(*filters)
+            .order_by(Author.updated_at.desc(), Author.id.desc())
+        )
+        return list(self.session.execute(statement).all())
 
     def book_exists(self, book_id: int) -> bool:
         return self.session.get(Book, book_id) is not None
