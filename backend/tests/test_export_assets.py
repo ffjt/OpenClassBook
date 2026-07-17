@@ -458,6 +458,39 @@ def test_export_preview_skips_native_word_conversion(
     assert native_calls == 0
 
 
+def test_lightweight_export_preview_does_not_render_uploaded_assets(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings, "storage_dir", tmp_path / "storage")
+    monkeypatch.setattr(settings, "export_dir", tmp_path / "exports")
+    book_id = int(_create_book(client, "On-demand preview")["id"])
+    _upload(
+        client,
+        book_id,
+        "preface",
+        "preface.docx",
+        _docx_bytes(),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+    def fail_if_rendered(*args: object, **kwargs: object) -> None:
+        raise AssertionError("lightweight preview must not render assets")
+
+    monkeypatch.setattr(PageAssetRenderer, "render", fail_if_rendered)
+
+    preview = client.get(f"/api/v1/books/{book_id}/export?preflight=false")
+
+    assert preview.status_code == 200, preview.text
+    payload = preview.json()
+    assert payload["can_export"] is True
+    preface = next(
+        page for page in payload["preview_pages"] if page["label_en"] == "Preface"
+    )
+    assert preface["is_placeholder"] is False
+
+
 def test_uploaded_asset_without_approved_articles_can_export(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

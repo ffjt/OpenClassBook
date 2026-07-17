@@ -64,8 +64,15 @@ export interface ExportResult {
 }
 
 export const exportRepository = {
-  getPreview(bookId: number, signal?: AbortSignal) {
-    return apiRequest<ExportPreview>(`/books/${bookId}/export`, { signal });
+  getPreview(
+    bookId: number,
+    options: { preflight?: boolean; signal?: AbortSignal } = {},
+  ) {
+    const preflight = options.preflight ?? true;
+    return apiRequest<ExportPreview>(
+      `/books/${bookId}/export?preflight=${preflight}`,
+      { signal: options.signal },
+    );
   },
 
   generate(bookId: number) {

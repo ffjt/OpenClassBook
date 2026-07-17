@@ -25,8 +25,9 @@ def book_not_found() -> HTTPException:
 def get_export_preview(
     book_id: int,
     service: ExportServiceDep,
+    preflight: bool = True,
 ) -> ExportPreviewResponse:
-    preview = service.get_preview(book_id)
+    preview = service.get_preview(book_id, preflight_assets=preflight)
     if preview is None:
         raise book_not_found()
     return preview

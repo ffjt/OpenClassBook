@@ -5,6 +5,7 @@ import {
   BookOpenText,
   Check,
   Download,
+  Eye,
   FileImage,
   FileOutput,
   FileText,
@@ -28,6 +29,7 @@ import {
 } from "@/repositories/exportRepository";
 
 type GenerationStatus = "idle" | "generating" | "success" | "error";
+type PreviewRenderStatus = "idle" | "rendering" | "success" | "error";
 
 const copy = {
   en: {
@@ -63,7 +65,14 @@ const copy = {
     flow: "Publication order",
     flowHint: "Read directly from the current Book Layout",
     preview: "PDF Preview",
-    previewHint: "Page sequence and parsed source page counts",
+    previewHint: "Render the current book only when you need to inspect its actual pages.",
+    renderPreview: "Render actual pages",
+    renderingPreview: "Rendering actual pages...",
+    previewReady: "Actual PDF preview",
+    previewFailed: "Unable to render the PDF preview.",
+    previewRetryHint: "Try rendering the preview again.",
+    renderAgain: "Render again",
+    previewFrameTitle: "Rendered book PDF preview",
     page: "Page",
     placeholder: "Publication preview",
     generate: "Generate PDF",
@@ -123,7 +132,14 @@ const copy = {
     flow: "导出流程",
     flowHint: "直接读取当前书籍排版顺序",
     preview: "PDF 预览",
-    previewHint: "页面顺序与已解析的来源页数",
+    previewHint: "仅在需要检查实际排版页面时，再开始渲染当前书籍。",
+    renderPreview: "渲染实际页面",
+    renderingPreview: "正在渲染实际页面……",
+    previewReady: "实际 PDF 预览",
+    previewFailed: "无法渲染 PDF 预览。",
+    previewRetryHint: "请重新尝试渲染预览。",
+    renderAgain: "重新渲染",
+    previewFrameTitle: "已渲染的书籍 PDF 预览",
     page: "第",
     placeholder: "出版预览",
     generate: "生成 PDF",
@@ -188,6 +204,10 @@ export function ExportPage({
   const [result, setResult] = useState<ExportResult | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [previewRenderStatus, setPreviewRenderStatus] =
+    useState<PreviewRenderStatus>("idle");
+  const [previewRenderError, setPreviewRenderError] = useState<string | null>(null);
+  const [renderedPreviewUrl, setRenderedPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -198,9 +218,15 @@ export function ExportPage({
     setResult(null);
     setGenerationError(null);
     setGenerationStatus("idle");
+    setPreviewRenderStatus("idle");
+    setPreviewRenderError(null);
+    setRenderedPreviewUrl(null);
     Promise.all([
       bookRepository.get(bookId),
-      exportRepository.getPreview(bookId, controller.signal),
+      exportRepository.getPreview(bookId, {
+        preflight: false,
+        signal: controller.signal,
+      }),
     ])
       .then(([loadedBook, loadedPreview]) => {
         if (!active) return;
@@ -219,7 +245,14 @@ export function ExportPage({
     };
   }, [bookId, reloadKey]);
 
-  const generate = useCallback(async () => {
+  useEffect(
+    () => () => {
+      if (renderedPreviewUrl) URL.revokeObjectURL(renderedPreviewUrl);
+    },
+    [renderedPreviewUrl],
+  );
+
+  const createExport = useCallback(async () => {
     if (!preview?.can_export) return;
     setGenerationStatus("generating");
     setResult(null);
@@ -228,16 +261,39 @@ export function ExportPage({
       const generated = await exportRepository.generate(bookId);
       setResult(generated);
       setGenerationStatus("success");
+      return generated;
     } catch (error) {
-      if (error instanceof ApiError) {
-        setGenerationError(
-          (language === "zh" ? error.detail?.message_zh : error.detail?.message) ??
-            null,
-        );
-      }
+      setGenerationError(localizedApiError(error, language));
       setGenerationStatus("error");
+      throw error;
     }
   }, [bookId, language, preview?.can_export]);
+
+  const generate = useCallback(async () => {
+    setRenderedPreviewUrl(null);
+    setPreviewRenderStatus("idle");
+    setPreviewRenderError(null);
+    try {
+      await createExport();
+    } catch {
+      // The generation message already contains the localized error.
+    }
+  }, [createExport]);
+
+  const renderPreview = useCallback(async () => {
+    setPreviewRenderStatus("rendering");
+    setPreviewRenderError(null);
+    try {
+      const generated = renderedPreviewUrl ? await createExport() : result ?? await createExport();
+      if (!generated) return;
+      const blob = await exportRepository.download(generated.download_url);
+      setRenderedPreviewUrl(URL.createObjectURL(blob));
+      setPreviewRenderStatus("success");
+    } catch (error) {
+      setPreviewRenderError(localizedApiError(error, language));
+      setPreviewRenderStatus("error");
+    }
+  }, [createExport, language, renderedPreviewUrl, result]);
 
   const download = useCallback(async () => {
     if (!result) return;
@@ -334,7 +390,15 @@ export function ExportPage({
       <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
         <ExportConfig language={language} preview={preview} />
         <PublicationInfo book={book} language={language} preview={preview} />
-        <PdfPreview language={language} preview={preview} />
+        <PdfPreview
+          canRender={preview.can_export}
+          generationStatus={generationStatus}
+          language={language}
+          onRender={() => void renderPreview()}
+          previewError={previewRenderError}
+          previewUrl={renderedPreviewUrl}
+          status={previewRenderStatus}
+        />
       </div>
 
       <div className="mt-6 rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
@@ -544,52 +608,99 @@ function PublicationInfo({
 }
 
 function PdfPreview({
+  canRender,
+  generationStatus,
   language,
-  preview,
+  onRender,
+  previewError,
+  previewUrl,
+  status,
 }: {
+  canRender: boolean;
+  generationStatus: GenerationStatus;
   language: Language;
-  preview: ExportPreview;
+  onRender: () => void;
+  previewError: string | null;
+  previewUrl: string | null;
+  status: PreviewRenderStatus;
 }) {
   const pageCopy = copy[language];
   return (
     <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeading icon={FilesIcon} title={pageCopy.preview} />
       <p className="mt-2 text-[11px] text-muted-foreground">{pageCopy.previewHint}</p>
-      <div className="mt-4 max-h-[780px] space-y-4 overflow-y-auto pr-1">
-        {preview.preview_pages.map((page) => (
-          <div key={page.page_number}>
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              {language === "zh"
-                ? `${pageCopy.page} ${page.page_number} 页`
-                : `${pageCopy.page} ${page.page_number}`}
-            </p>
-            <div className="aspect-[1/1.414] overflow-hidden rounded-md border border-border bg-[#f7f4ed] p-[9%] shadow-sm">
-              <div className="flex h-full flex-col text-[#272522]">
-                <p className="text-center text-[11px] font-semibold">
-                  {language === "zh" ? page.label_zh : page.label_en}
-                </p>
-                <div className="mt-5 space-y-2">
-                  <span className="block h-1 rounded-full bg-black/12" />
-                  <span className="block h-1 w-11/12 rounded-full bg-black/10" />
-                  <span className="block h-1 w-4/5 rounded-full bg-black/10" />
-                  {page.kind === "article" ? (
-                    <>
-                      <span className="mt-4 block h-1 rounded-full bg-black/10" />
-                      <span className="block h-1 w-10/12 rounded-full bg-black/10" />
-                      <span className="block h-1 w-11/12 rounded-full bg-black/10" />
-                    </>
-                  ) : null}
-                </div>
-                <span className="mt-auto text-center text-[8px] text-black/35">
-                  {pageCopy.placeholder}
-                </span>
-              </div>
+      <div className="mt-4 overflow-hidden rounded-lg border border-border bg-muted/20">
+        {previewUrl ? (
+          <div>
+            <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2.5">
+              <p className="text-xs font-medium text-foreground">{pageCopy.previewReady}</p>
+              <Button
+                className="h-8 px-3 text-xs"
+                disabled={status === "rendering" || generationStatus === "generating"}
+                onClick={onRender}
+                variant="outline"
+              >
+                {status === "rendering" ? (
+                  <LoaderCircle className="mr-1.5 size-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-1.5 size-3.5" />
+                )}
+                {pageCopy.renderAgain}
+              </Button>
             </div>
+            <iframe
+              className="h-[720px] w-full bg-[#525659]"
+              src={previewUrl}
+              title={pageCopy.previewFrameTitle}
+            />
           </div>
-        ))}
+        ) : (
+          <div className="flex min-h-[420px] flex-col items-center justify-center px-6 py-10 text-center">
+            <span className="flex size-12 items-center justify-center rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-400">
+              {status === "rendering" ? (
+                <LoaderCircle className="size-5 animate-spin" />
+              ) : (
+                <Eye className="size-5" />
+              )}
+            </span>
+            <p className="mt-4 text-sm font-medium text-foreground">
+              {status === "rendering" ? pageCopy.renderingPreview : pageCopy.renderPreview}
+            </p>
+            {status === "error" ? (
+              <p className="mt-2 max-w-xs text-xs leading-5 text-rose-400">
+                {pageCopy.previewFailed} {previewError || pageCopy.previewRetryHint}
+              </p>
+            ) : (
+              <p className="mt-2 max-w-xs text-xs leading-5 text-muted-foreground">
+                {pageCopy.previewHint}
+              </p>
+            )}
+            <Button
+              className="mt-5 h-9 rounded-lg px-4"
+              disabled={
+                !canRender || status === "rendering" || generationStatus === "generating"
+              }
+              onClick={onRender}
+            >
+              {status === "rendering" ? (
+                <LoaderCircle className="mr-2 size-4 animate-spin" />
+              ) : status === "error" ? (
+                <RefreshCw className="mr-2 size-4" />
+              ) : (
+                <Eye className="mr-2 size-4" />
+              )}
+              {status === "rendering" ? pageCopy.renderingPreview : pageCopy.renderPreview}
+            </Button>
+          </div>
+        )}
       </div>
     </section>
   );
+}
+
+function localizedApiError(error: unknown, language: Language) {
+  if (!(error instanceof ApiError)) return null;
+  return language === "zh" ? error.detail?.message_zh ?? null : error.detail?.message ?? null;
 }
 
 function GenerationMessage({

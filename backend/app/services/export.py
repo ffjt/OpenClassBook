@@ -108,14 +108,23 @@ class ExportService:
         self.storage = storage
         self.export_dir = export_dir
 
-    def get_preview(self, book_id: int) -> ExportPreviewResponse | None:
+    def get_preview(
+        self,
+        book_id: int,
+        *,
+        preflight_assets: bool = True,
+    ) -> ExportPreviewResponse | None:
         bundle = self.repository.get_bundle(book_id)
         if bundle is None:
             return None
         _sort_articles(bundle)
         template = _resolve_template(bundle)
         sections = _resolve_sections(bundle)
-        preflight = self._preflight_assets(sections, template)
+        preflight = (
+            self._preflight_assets(sections, template)
+            if preflight_assets
+            else self._inspect_assets(sections)
+        )
         preview_pages = _preview_pages(
             bundle,
             sections,
@@ -261,6 +270,35 @@ class ExportService:
             valid_count=valid_count,
             warnings=tuple(warnings),
             warnings_zh=tuple(warnings_zh),
+            errors=tuple(errors),
+            errors_zh=tuple(errors_zh),
+        )
+
+    def _inspect_assets(self, sections: list[dict[str, object]]) -> AssetPreflight:
+        page_counts: dict[str, int] = {}
+        errors: list[str] = []
+        errors_zh: list[str] = []
+        image_count = 0
+        valid_count = 0
+        for section in sections:
+            relative_path = section.get("file")
+            if not relative_path:
+                continue
+            label_en, label_zh = _section_labels(section)
+            source = self.storage.resolve(str(relative_path))
+            if source is None:
+                errors.append(f"{label_en} file is missing. Replace it before export.")
+                errors_zh.append(f"{label_zh}文件不存在，请替换后再导出。")
+                continue
+            page_counts[str(section["id"])] = 1
+            valid_count += 1
+            image_count += source.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}
+        return AssetPreflight(
+            page_counts=page_counts,
+            image_count=image_count,
+            valid_count=valid_count,
+            warnings=(),
+            warnings_zh=(),
             errors=tuple(errors),
             errors_zh=tuple(errors_zh),
         )
