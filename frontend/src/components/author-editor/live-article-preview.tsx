@@ -15,6 +15,7 @@ import type { Language } from "@/lib/i18n";
 import type { ImageWrap, PreviewArticle } from "@/types/article";
 import {
   getFontFamilyStyle,
+  publicationChromeFontFamily,
   type PageMargin,
   type PageSize,
   type Template,
@@ -653,7 +654,17 @@ export function LiveArticlePreview({
       }}
       tabIndex={readOnly ? -1 : 0}
     >
-      <figure className="relative size-full overflow-hidden border border-blue-400/60 bg-slate-50 shadow-md">
+      <figure
+        className="relative size-full overflow-hidden bg-slate-50 shadow-md"
+        style={{
+          border: readOnly
+            ? template.imageBorder
+              ? "1px solid #e2e8f0"
+              : "none"
+            : "1px solid rgb(96 165 250 / 0.7)",
+          borderRadius: `${template.imageRadius}px`,
+        }}
+      >
         <img
           alt=""
           className="size-full object-cover"
@@ -693,6 +704,7 @@ export function LiveArticlePreview({
           fontWeight: template.titleBold ? 700 : 400,
           lineHeight: 1.25,
           textAlign: template.titleAlign,
+          color: template.themeColor,
         }}
       >
         {article.title || "\u00a0"}
@@ -712,6 +724,7 @@ export function LiveArticlePreview({
       )}
     </div>
   );
+  const isMagazine = template.preset === "magazine";
 
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-card shadow-xl">
@@ -761,11 +774,24 @@ export function LiveArticlePreview({
             >
               <div className="flex h-full flex-col">
                 <div
-                  className={`relative min-h-0 flex-1 ${page.showImage && isInteracting ? "overflow-visible" : "overflow-hidden"}`}
+                  className={`relative flex min-h-0 flex-1 flex-col ${page.showImage && isInteracting ? "overflow-visible" : "overflow-hidden"}`}
                   ref={(element) => {
                     pageContentRefs.current[pageIndex] = element;
                   }}
                 >
+                  {isFirstPage && template.showHeader && (
+                    <header
+                      className="mb-4 flex items-center justify-between border-b-2 pb-2 text-[8px] font-semibold tracking-[0.14em]"
+                      style={{
+                        borderColor: template.accentColor,
+                        color: template.themeColor,
+                        fontFamily: publicationChromeFontFamily,
+                      }}
+                    >
+                      <span>{template.headerText || "OPEN CLASSBOOK"}</span>
+                      {isMagazine ? <span>VOL. 01</span> : null}
+                    </header>
+                  )}
                   {isFirstPage &&
                     showNumber &&
                     template.numberPosition === "above" && (
@@ -790,12 +816,19 @@ export function LiveArticlePreview({
                     ))}
 
                   <div
-                    className="break-words whitespace-pre-wrap"
+                    className="min-h-0 flex-1 overflow-hidden break-words whitespace-pre-wrap"
                     data-preview-body={pageNumber}
                     ref={(element) => {
                       bodyRefs.current[pageIndex] = element;
                     }}
                     style={{
+                      columnCount: template.columns === 2 ? 2 : undefined,
+                      columnFill: template.columns === 2 ? "auto" : undefined,
+                      columnGap: template.columns === 2 ? "1.5em" : undefined,
+                      columnRule:
+                        template.columns === 2
+                          ? `1px solid ${template.accentColor}33`
+                          : undefined,
                       fontFamily: getFontFamilyStyle(template.bodyFont),
                       fontSize: `${template.bodySize}px`,
                       lineHeight: template.lineHeight,
@@ -839,13 +872,23 @@ export function LiveArticlePreview({
                       const character = insertsImage
                         ? clamp(wrapInsertion.character, 0, line.length)
                         : 0;
+                      const isQuoteLine =
+                        template.quoteStyle && line.trimStart().startsWith(">");
+                      const displayLine = isQuoteLine
+                        ? line.trimStart().replace(/^>\s?/, "")
+                        : line;
 
                       return (
                         <p
                           data-preview-line={lineIndex + 1}
                           key={`${lineIndex}-${line.slice(0, 12)}`}
                           style={{
+                            borderLeft: isQuoteLine
+                              ? `2px solid ${template.accentColor}`
+                              : undefined,
+                            fontStyle: isQuoteLine ? "italic" : undefined,
                             minHeight: `${template.lineHeight}em`,
+                            paddingLeft: isQuoteLine ? "0.7em" : undefined,
                             textIndent: line
                               ? `${template.firstLineIndent}em`
                               : 0,
@@ -853,12 +896,12 @@ export function LiveArticlePreview({
                         >
                           {insertsImage ? (
                             <>
-                              {line.slice(0, character)}
+                              {displayLine.slice(0, character)}
                               {renderWrapSpacer()}
-                              {line.slice(character) || "\u00a0"}
+                              {displayLine.slice(character) || "\u00a0"}
                             </>
                           ) : (
-                            line || "\u00a0"
+                            displayLine || "\u00a0"
                           )}
                         </p>
                       );

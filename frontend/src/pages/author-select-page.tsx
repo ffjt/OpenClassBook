@@ -24,6 +24,7 @@ import { joinRepository } from "@/repositories/joinRepository";
 interface AuthorSelectPageProps {
   inviteCode: string;
   name: string;
+  classValue?: string;
   language: Language;
   onNavigate: (path: string) => void;
   onToggleLanguage: () => void;
@@ -51,6 +52,7 @@ const copy = {
     creatingIdentity: "Creating...",
     createError: "Unable to create a new author. Please try again.",
     updated: "Updated",
+    className: "Class",
     statuses: { draft: "Draft", pending: "Submitted", approved: "Approved", rejected: "Needs revision" },
     error: "Unable to load matching author identities.",
     retry: "Retry",
@@ -73,6 +75,7 @@ const copy = {
     creatingIdentity: "正在新建……",
     createError: "无法新建作者，请重试。",
     updated: "最近更新",
+    className: "班级",
     statuses: { draft: "草稿", pending: "已提交", approved: "已通过", rejected: "需修改" },
     error: "无法加载匹配的作者身份。",
     retry: "重试",
@@ -91,6 +94,7 @@ function formatDate(value: string, language: Language) {
 export function AuthorSelectPage({
   inviteCode,
   name,
+  classValue,
   language,
   onNavigate,
   onToggleLanguage,
@@ -139,7 +143,7 @@ export function AuthorSelectPage({
     setIsCreating(true);
     setCreateError(false);
     try {
-      const author = await authorRepository.create(bookId, { name });
+      const author = await authorRepository.create(bookId, { name, class_value: classValue });
       onNavigate(`/author/${author.id}/editor`);
     } catch {
       setCreateError(true);
@@ -176,7 +180,7 @@ export function AuthorSelectPage({
                 const updatedAt = latest?.updated_at ?? author.updated_at;
                 return (
                   <article className="flex flex-col rounded-2xl border border-border bg-card p-6" key={author.id}>
-                    <div className="flex items-start justify-between gap-4"><div><h2 className="text-xl font-semibold">{author.name}</h2><p className="mt-1 text-xs text-muted-foreground">{pageCopy.updated} {formatDate(updatedAt, language)}</p></div><Badge className="border border-border bg-transparent text-foreground">{pageCopy.articles(preview.article_count)}</Badge></div>
+                    <div className="flex items-start justify-between gap-4"><div><h2 className="text-xl font-semibold">{author.name}</h2>{author.class_name ? <p className="mt-1 text-xs text-blue-500">{pageCopy.className}: {author.class_name}</p> : null}<p className="mt-1 text-xs text-muted-foreground">{pageCopy.updated} {formatDate(updatedAt, language)}</p></div><Badge className="border border-border bg-transparent text-foreground">{pageCopy.articles(preview.article_count)}</Badge></div>
                     <div className="mt-6 min-h-40 rounded-xl bg-muted/40 p-4">
                       {latest ? <><div className="flex items-center justify-between gap-3"><p className="text-xs text-muted-foreground">{pageCopy.latest}</p><Badge className="border border-border bg-transparent text-foreground">{pageCopy.statuses[latest.status]}</Badge></div><h3 className="mt-3 font-semibold">{latest.title}</h3><p className="mt-3 whitespace-pre-line text-sm leading-6 text-muted-foreground">{latest.excerpt}{latest.excerpt.length >= 120 ? "……" : ""}</p></> : <div className="flex min-h-32 flex-col items-center justify-center text-sm text-muted-foreground"><FileText className="mb-3 size-5" />{pageCopy.noArticles}</div>}
                     </div>

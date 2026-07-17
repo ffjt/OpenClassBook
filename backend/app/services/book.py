@@ -9,6 +9,7 @@ from app.schemas.book import (
     BookCreateData,
     BookUpdate,
     BookUpdateData,
+    validate_class_collection_configuration,
     validate_numbering_configuration,
 )
 
@@ -65,6 +66,22 @@ class BookService:
             number_mode,
             existing_number_mode,
             number_pool,
+        )
+        class_collection_mode = changes.get(
+            "class_collection_mode", current.class_collection_mode
+        )
+        if "class_collection_mode" in changes:
+            if class_collection_mode == "none":
+                changes.setdefault("class_fixed_value", None)
+                changes.setdefault("class_name_template", None)
+            elif class_collection_mode == "fixed":
+                changes.setdefault("class_name_template", None)
+            else:
+                changes.setdefault("class_fixed_value", None)
+        validate_class_collection_configuration(
+            class_collection_mode,
+            changes.get("class_fixed_value", current.class_fixed_value),
+            changes.get("class_name_template", current.class_name_template),
         )
 
         update_data = BookUpdateData(**changes, updated_at=datetime.now(UTC))

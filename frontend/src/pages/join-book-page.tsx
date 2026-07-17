@@ -49,6 +49,10 @@ const copy = {
     name: "Your name",
     namePlaceholder: "Enter your name",
     nameRequired: "Enter your name to join this book.",
+    className: "Class",
+    classPlaceholder: "Fill the blank only",
+    classRequired: "Fill in the class blank to continue.",
+    fixedClass: "This class is set by the book owner.",
     join: "Join this book",
     joining: "Joining...",
     invalidTitle: "This invitation has expired or does not exist.",
@@ -83,6 +87,10 @@ const copy = {
     name: "你的姓名",
     namePlaceholder: "请输入姓名",
     nameRequired: "请输入姓名后加入这本书。",
+    className: "班级",
+    classPlaceholder: "只填写空格里的内容",
+    classRequired: "请填写班级格式中的空格。",
+    fixedClass: "班级已由负责人统一规定。",
     join: "加入这本书",
     joining: "正在加入...",
     invalidTitle: "邀请已失效或不存在。",
@@ -123,11 +131,13 @@ export function JoinBookPage({
   const normalizedCode = inviteCode?.trim().toUpperCase() ?? "";
   const [enteredCode, setEnteredCode] = useState("");
   const [name, setName] = useState("");
+  const [classValue, setClassValue] = useState("");
   const [book, setBook] = useState<Book | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(normalizedCode));
   const [isJoining, setIsJoining] = useState(false);
   const [codeError, setCodeError] = useState(false);
   const [nameError, setNameError] = useState(false);
+  const [classError, setClassError] = useState(false);
   const [joinError, setJoinError] = useState(false);
   const [loadError, setLoadError] = useState<"invalid" | "invite_disabled" | "server" | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -188,13 +198,19 @@ export function JoinBookPage({
       document.getElementById("author-name")?.focus();
       return;
     }
+    if (book?.class_collection_mode === "template" && !classValue.trim()) {
+      setClassError(true);
+      document.getElementById("author-class")?.focus();
+      return;
+    }
 
     setIsJoining(true);
     setJoinError(false);
     try {
-      const response = await joinRepository.join(normalizedCode, authorName);
+      const response = await joinRepository.join(normalizedCode, authorName, classValue.trim());
       if (response.mode === "selection_required") {
         const query = new URLSearchParams({ name: authorName });
+        if (classValue.trim()) query.set("classValue", classValue.trim());
         onNavigate(`/join/${encodeURIComponent(normalizedCode)}/select?${query}`);
       } else if (response.author_id) {
         onNavigate(`/author/${response.author_id}/editor`);
@@ -287,6 +303,11 @@ export function JoinBookPage({
               <Label htmlFor="author-name">{pageCopy.name}</Label>
               <Input autoComplete="name" id="author-name" maxLength={120} onChange={(event) => { setName(event.target.value); setNameError(false); setJoinError(false); }} placeholder={pageCopy.namePlaceholder} value={name} />
               {nameError ? <p className="text-sm text-red-500" role="alert">{pageCopy.nameRequired}</p> : null}
+              {book.class_collection_mode === "fixed" ? (
+                <div className="pt-2"><Label>{pageCopy.className}</Label><div className="mt-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm font-medium">{book.class_fixed_value}</div><p className="mt-2 text-xs text-muted-foreground">{pageCopy.fixedClass}</p></div>
+              ) : book.class_collection_mode === "template" ? (
+                <div className="pt-2"><Label htmlFor="author-class">{pageCopy.className}</Label><div className="mt-2 flex items-center overflow-hidden rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring"><span className="shrink-0 px-3 text-sm text-muted-foreground">{book.class_name_template?.split("{value}")[0]}</span><input className="min-w-20 flex-1 border-x border-dashed border-input bg-transparent px-3 py-2 text-sm outline-none" id="author-class" maxLength={120} onChange={(event) => { setClassValue(event.target.value); setClassError(false); setJoinError(false); }} placeholder={pageCopy.classPlaceholder} value={classValue} /><span className="shrink-0 px-3 text-sm text-muted-foreground">{book.class_name_template?.split("{value}")[1]}</span></div>{classError ? <p className="mt-2 text-sm text-red-500" role="alert">{pageCopy.classRequired}</p> : null}</div>
+              ) : null}
               {joinError ? <p className="text-sm text-red-500" role="alert">{pageCopy.joinError}</p> : null}
             </div>
             <div className="mt-8 flex justify-end border-t border-border pt-7">

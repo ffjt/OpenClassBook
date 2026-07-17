@@ -5,6 +5,7 @@ export interface Author {
   id: number;
   book_id: number;
   name: string;
+  class_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -15,6 +16,7 @@ export interface AuthorDetail extends Author {
 
 export interface AuthorCreateInput {
   name: string;
+  class_value?: string;
 }
 
 export interface LatestArticlePreview {

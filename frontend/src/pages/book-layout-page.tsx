@@ -44,6 +44,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { Select } from "@/components/ui/select";
 import { useBookTemplate } from "@/hooks/use-book-template";
 import type { Language } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -68,12 +69,18 @@ import {
   type UploadedFileMetadata,
   type UploadType,
 } from "@/repositories/uploadRepository";
-import { getFontFamilyStyle, type Template } from "@/types/template";
+import {
+  getFontFamilyStyle,
+  publicationChromeFontFamily,
+  type Template,
+} from "@/types/template";
+import { PublicationPageFooter } from "@/components/publication-page-footer";
 import { toast } from "sonner";
 
 type StructureSaveStatus = "idle" | "saving" | "saved" | "error";
 type ArticleOrderSaveStatus = StructureSaveStatus;
 type NumberAssignmentStatus = StructureSaveStatus;
+type ArticlePageModeSaveStatus = StructureSaveStatus;
 type ArticleSortKey = "number" | "title" | "author";
 type SortDirection = "asc" | "desc";
 
@@ -160,6 +167,14 @@ const copy = {
       `${count} approved article${count === 1 ? "" : "s"}`,
     articlesSource: "All content comes from Approved submissions.",
     templateControlled: "Formatting is controlled automatically by Template.",
+    articlePageMode: "Article pagination",
+    singleArticlePage: "New page for each article",
+    flowArticles: "Flow articles continuously",
+    articlePageModeHint:
+      "Continuous flow lets multiple approved articles share a page without changing their submitted formatting.",
+    savingArticlePageMode: "Saving pagination mode...",
+    articlePageModeSaved: "Pagination mode saved.",
+    articlePageModeSaveError: "Could not save pagination mode.",
     articleOrderHint: "Drag approved articles to set their publication order.",
     savingArticleOrder: "Saving article order...",
     articleOrderSaved: "Article order saved.",
@@ -260,6 +275,14 @@ const copy = {
     articlesHeading: (count: number) => `共 ${count} 篇审核通过的文章`,
     articlesSource: "全部来自审核通过（Approved）的投稿。",
     templateControlled: "正文格式由 Template 自动控制。",
+    articlePageMode: "文章分页",
+    singleArticlePage: "每篇文章新页",
+    flowArticles: "文章连续排版",
+    articlePageModeHint:
+      "连续排版会让多篇审核通过的文章共享页面，但不会改变投稿内容格式。",
+    savingArticlePageMode: "正在保存分页方式……",
+    articlePageModeSaved: "分页方式已保存。",
+    articlePageModeSaveError: "无法保存分页方式。",
     articleOrderHint: "拖拽审核通过的文章可调整正文出版顺序。",
     savingArticleOrder: "正在保存正文顺序……",
     articleOrderSaved: "正文顺序已保存。",
@@ -317,6 +340,8 @@ export function BookLayoutPage({
     useState<StructureSaveStatus>("idle");
   const [articleOrderStatus, setArticleOrderStatus] =
     useState<ArticleOrderSaveStatus>("idle");
+  const [articlePageModeStatus, setArticlePageModeStatus] =
+    useState<ArticlePageModeSaveStatus>("idle");
   const [numberAssignmentStatus, setNumberAssignmentStatus] =
     useState<NumberAssignmentStatus>("idle");
   const [isLoading, setIsLoading] = useState(true);
@@ -361,7 +386,7 @@ export function BookLayoutPage({
     [articles, book?.layout_article_order],
   );
   const authorNames = useMemo(
-    () => new Map(authors.map((author) => [author.id, author.name])),
+    () => new Map(authors.map((author) => [author.id, author.class_name ? `${author.name} · ${author.class_name}` : author.name])),
     [authors],
   );
   const selectedSection =
@@ -439,6 +464,37 @@ export function BookLayoutPage({
         current ? { ...current, layout_article_order: previousOrder } : current,
       );
       setArticleOrderStatus("error");
+      return false;
+    }
+  };
+  const persistArticlePageMode = async (mode: Book["layout_article_page_mode"]) => {
+    if (!book || mode === book.layout_article_page_mode) return true;
+    const previousMode = book.layout_article_page_mode;
+    setBook((current) =>
+      current ? { ...current, layout_article_page_mode: mode } : current,
+    );
+    setArticlePageModeStatus("saving");
+    try {
+      const updatedBook = await bookRepository.update(book.id, {
+        layout_article_page_mode: mode,
+      });
+      const persistedBook = await bookRepository.get(book.id);
+      if (
+        updatedBook.layout_article_page_mode !== mode ||
+        persistedBook.layout_article_page_mode !== mode
+      ) {
+        throw new Error("Article pagination mode was not persisted");
+      }
+      setBook(persistedBook);
+      setArticlePageModeStatus("saved");
+      return true;
+    } catch {
+      setBook((current) =>
+        current
+          ? { ...current, layout_article_page_mode: previousMode }
+          : current,
+      );
+      setArticlePageModeStatus("error");
       return false;
     }
   };
@@ -572,9 +628,12 @@ export function BookLayoutPage({
           book={book}
           copy={pageCopy}
           focusedArticleId={focusedArticleId}
+          articlePageMode={book.layout_article_page_mode}
+          articlePageModeStatus={articlePageModeStatus}
           language={language}
           onAssetChanged={refreshBook}
           onArticlePreview={openArticlePreview}
+          onArticlePageModeChange={persistArticlePageMode}
           onArticleReorder={persistArticleOrder}
           onAssignNumbers={assignNumbersInCurrentOrder}
           onRename={renameSection}
@@ -588,6 +647,7 @@ export function BookLayoutPage({
           book={book}
           copy={pageCopy}
           focusedArticleId={focusedArticleId}
+          articlePageMode={book.layout_article_page_mode}
           onBack={() => {
             setPreviewSectionId(null);
             setFocusedArticleId(null);
@@ -846,9 +906,12 @@ function ResourceManager({
   book,
   copy: pageCopy,
   focusedArticleId,
+  articlePageMode,
+  articlePageModeStatus,
   language,
   onAssetChanged,
   onArticlePreview,
+  onArticlePageModeChange,
   onArticleReorder,
   onAssignNumbers,
   onRename,
@@ -861,9 +924,14 @@ function ResourceManager({
   book: Book;
   copy: (typeof copy)[Language];
   focusedArticleId: number | null;
+  articlePageMode: Book["layout_article_page_mode"];
+  articlePageModeStatus: ArticlePageModeSaveStatus;
   language: Language;
   onAssetChanged: () => Promise<void>;
   onArticlePreview: (articleId: number) => void;
+  onArticlePageModeChange: (
+    mode: Book["layout_article_page_mode"],
+  ) => Promise<boolean>;
   onArticleReorder: (articleIds: number[]) => Promise<boolean>;
   onAssignNumbers: () => Promise<boolean>;
   onRename: (section: BookLayoutSection, name: string) => Promise<boolean>;
@@ -905,8 +973,11 @@ function ResourceManager({
           authorNames={authorNames}
           copy={pageCopy}
           focusedArticleId={focusedArticleId}
+          articlePageMode={articlePageMode}
+          articlePageModeStatus={articlePageModeStatus}
           numberAssignmentStatus={numberAssignmentStatus}
           onArticlePreview={onArticlePreview}
+          onArticlePageModeChange={onArticlePageModeChange}
           onAssignNumbers={onAssignNumbers}
           onReorder={onArticleReorder}
           orderStatus={orderStatus}
@@ -1301,8 +1372,11 @@ function MainContentManager({
   authorNames,
   copy: pageCopy,
   focusedArticleId,
+  articlePageMode,
+  articlePageModeStatus,
   numberAssignmentStatus,
   onArticlePreview,
+  onArticlePageModeChange,
   onAssignNumbers,
   onReorder,
   orderStatus,
@@ -1312,8 +1386,13 @@ function MainContentManager({
   authorNames: Map<number, string>;
   copy: (typeof copy)[Language];
   focusedArticleId: number | null;
+  articlePageMode: Book["layout_article_page_mode"];
+  articlePageModeStatus: ArticlePageModeSaveStatus;
   numberAssignmentStatus: NumberAssignmentStatus;
   onArticlePreview: (articleId: number) => void;
+  onArticlePageModeChange: (
+    mode: Book["layout_article_page_mode"],
+  ) => Promise<boolean>;
   onAssignNumbers: () => Promise<boolean>;
   onReorder: (articleIds: number[]) => Promise<boolean>;
   orderStatus: ArticleOrderSaveStatus;
@@ -1382,6 +1461,55 @@ function MainContentManager({
             <p className="text-xs leading-5 text-muted-foreground">
               {pageCopy.bodyLocked}
             </p>
+            <div className="mt-4 grid gap-3 border-t border-blue-500/15 pt-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:items-start">
+              <div>
+                <label
+                  className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground"
+                  htmlFor="layout-article-page-mode"
+                >
+                  {pageCopy.articlePageMode}
+                </label>
+                <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                  {pageCopy.articlePageModeHint}
+                </p>
+              </div>
+              <div>
+                <Select
+                  className="h-9 text-xs"
+                  disabled={articlePageModeStatus === "saving"}
+                  id="layout-article-page-mode"
+                  onChange={(event) =>
+                    void onArticlePageModeChange(
+                      event.target.value as Book["layout_article_page_mode"],
+                    )
+                  }
+                  value={articlePageMode}
+                >
+                  <option value="single">{pageCopy.singleArticlePage}</option>
+                  <option value="flow">{pageCopy.flowArticles}</option>
+                </Select>
+                <p
+                  className={cn(
+                    "mt-1 text-[10px] leading-4",
+                    articlePageModeStatus === "error"
+                      ? "text-rose-400"
+                      : articlePageModeStatus === "saved"
+                        ? "text-emerald-400"
+                        : "text-muted-foreground",
+                  )}
+                >
+                  {articlePageModeStatus === "saving"
+                    ? pageCopy.savingArticlePageMode
+                    : articlePageModeStatus === "saved"
+                      ? pageCopy.articlePageModeSaved
+                      : articlePageModeStatus === "error"
+                        ? pageCopy.articlePageModeSaveError
+                        : articlePageMode === "flow"
+                          ? pageCopy.flowArticles
+                          : pageCopy.singleArticlePage}
+                </p>
+              </div>
+            </div>
             <p
               className={cn(
                 "mt-1 text-xs leading-5",
@@ -1567,6 +1695,7 @@ function PublicationStructurePreview({
   book,
   copy: pageCopy,
   focusedArticleId,
+  articlePageMode,
   onBack,
   onPreview,
   previewSection,
@@ -1577,6 +1706,7 @@ function PublicationStructurePreview({
   articles: Article[];
   authorNames: Map<number, string>;
   book: Book;
+  articlePageMode: Book["layout_article_page_mode"];
   copy: (typeof copy)[Language];
   focusedArticleId: number | null;
   onBack: () => void;
@@ -1622,6 +1752,7 @@ function PublicationStructurePreview({
           book={book}
           copy={pageCopy}
           focusedArticleId={focusedArticleId}
+          articlePageMode={articlePageMode}
           section={previewSection}
           template={template}
         />
@@ -1679,12 +1810,14 @@ function SectionFullPreview({
   book,
   copy: pageCopy,
   focusedArticleId,
+  articlePageMode,
   section,
   template,
 }: {
   articles: Article[];
   authorNames: Map<number, string>;
   book: Book;
+  articlePageMode: Book["layout_article_page_mode"];
   copy: (typeof copy)[Language];
   focusedArticleId: number | null;
   section: BookLayoutSection;
@@ -1701,6 +1834,7 @@ function SectionFullPreview({
           authorNames={authorNames}
           copy={pageCopy}
           focusedArticleId={focusedArticleId}
+          articlePageMode={articlePageMode}
           template={template}
         />
       ) : (
@@ -1775,18 +1909,33 @@ function ArticleSectionPreview({
   authorNames,
   copy: pageCopy,
   focusedArticleId,
+  articlePageMode,
   template,
 }: {
   articles: Article[];
   authorNames: Map<number, string>;
   copy: (typeof copy)[Language];
   focusedArticleId: number | null;
+  articlePageMode: Book["layout_article_page_mode"];
   template: Template;
 }) {
   const pagesRef = useRef<HTMLDivElement>(null);
+  const previewArticles = useMemo(() => {
+    if (articlePageMode !== "flow" || articles.length <= 1) return articles;
+    const firstArticle = articles[0];
+    if (!firstArticle) return articles;
+    return [
+      {
+        ...firstArticle,
+        content: articles
+          .map((article) => `${article.title}\n${article.content || ""}`)
+          .join("\n\n\n\n"),
+      },
+    ];
+  }, [articlePageMode, articles]);
   const pages = useMemo(
     () =>
-      articles.flatMap((article) =>
+      previewArticles.flatMap((article) =>
         paginateArticle(
           article.content || "—",
           article.image ?? "",
@@ -1798,7 +1947,7 @@ function ArticleSectionPreview({
           page,
         })),
       ),
-    [articles, template],
+    [previewArticles, template],
   );
 
   useEffect(() => {
@@ -1838,8 +1987,14 @@ function ArticleSectionPreview({
 
   return (
     <div className="space-y-4" ref={pagesRef}>
+      <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.06] px-3 py-2 text-[10px] leading-4 text-blue-200">
+        {articlePageMode === "flow"
+          ? pageCopy.articlePageModeHint
+          : pageCopy.singleArticlePage}
+      </div>
       {pages.map(({ article, articlePageIndex, page }, pageIndex) => {
         const isFirstPage = articlePageIndex === 0;
+        const isMagazine = template.preset === "magazine";
         const authorName =
           authorNames.get(article.author_id) ??
           `${pageCopy.author} #${article.author_id}`;
@@ -1847,7 +2002,7 @@ function ArticleSectionPreview({
         return (
           <article
             className={cn(
-              "mx-auto flex w-full max-w-[250px] flex-col overflow-hidden bg-[#fffefa] text-slate-800 shadow-[0_18px_50px_rgba(0,0,0,0.4)] ring-black/10",
+              "relative mx-auto flex w-full max-w-[250px] flex-col overflow-hidden bg-[#fffefa] text-slate-800 shadow-[0_18px_50px_rgba(0,0,0,0.4)] ring-black/10",
               focusedArticleId === article.id && isFirstPage
                 ? "ring-2 ring-blue-500/40"
                 : "ring-1",
@@ -1856,9 +2011,24 @@ function ArticleSectionPreview({
             key={`${article.id}-${articlePageIndex}`}
             style={{
               aspectRatio: getPreviewAspectRatio(template),
+              color: template.themeColor,
+              containerType: "inline-size",
               padding: previewPageMargins[template.pageMargin],
             }}
           >
+            {template.showHeader ? (
+              <header
+                className="mb-2 flex items-center justify-between border-b pb-1.5 text-[6px] font-semibold tracking-[0.12em]"
+                style={{
+                  borderColor: template.accentColor,
+                  color: template.themeColor,
+                  fontFamily: publicationChromeFontFamily,
+                }}
+              >
+                <span>{template.headerText || "OpenClassBook"}</span>
+                {isMagazine ? <span>VOL. 01</span> : null}
+              </header>
+            ) : null}
             {isFirstPage ? (
               <>
                 {template.showNumber &&
@@ -1897,23 +2067,37 @@ function ArticleSectionPreview({
                     {article.title}
                   </h3>
                 </div>
-                <p
-                  className="mt-1 text-[7px] text-slate-500"
-                  style={{ textAlign: template.titleAlign }}
-                >
-                  {authorName}
-                </p>
+                {template.showAuthorMeta ? (
+                  <p
+                    className="mt-1 text-[7px] font-medium"
+                    style={{
+                      color: template.accentColor,
+                      textAlign: template.titleAlign,
+                    }}
+                  >
+                    {authorName}
+                  </p>
+                ) : null}
               </>
             ) : (
               <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2 text-[7px] text-slate-400">
                 <span className="truncate">{article.title}</span>
-                <span className="shrink-0">{authorName}</span>
+                {template.showAuthorMeta ? (
+                  <span className="shrink-0">{authorName}</span>
+                ) : null}
               </div>
             )}
 
             <div
               className="min-h-0 flex-1 overflow-hidden break-words whitespace-pre-wrap text-slate-700"
               style={{
+                columnCount: template.columns === 2 ? 2 : undefined,
+                columnFill: template.columns === 2 ? "auto" : undefined,
+                columnGap: template.columns === 2 ? "1.25em" : undefined,
+                columnRule:
+                  template.columns === 2
+                    ? `1px solid ${template.accentColor}33`
+                    : undefined,
                 fontFamily: getFontFamilyStyle(template.bodyFont),
                 fontSize: `${bodySize}px`,
                 lineHeight: template.lineHeight,
@@ -1923,40 +2107,56 @@ function ArticleSectionPreview({
                 textAlign: template.justify ? "justify" : "left",
               }}
             >
-              {page.lines.map((line, lineIndex) => (
-                <p
-                  key={`${lineIndex}-${line.slice(0, 12)}`}
-                  style={{
-                    minHeight: `${template.lineHeight}em`,
-                    textIndent: line ? `${template.firstLineIndent}em` : 0,
-                  }}
-                >
-                  {line || "\u00a0"}
-                </p>
-              ))}
+              {page.lines.map((line, lineIndex) => {
+                const isQuoteLine =
+                  template.quoteStyle && line.trimStart().startsWith(">");
+                const displayLine = isQuoteLine
+                  ? line.trimStart().replace(/^>\s?/, "")
+                  : line;
+                return (
+                  <p
+                    key={`${lineIndex}-${line.slice(0, 12)}`}
+                    style={{
+                      borderLeft: isQuoteLine
+                        ? `2px solid ${template.accentColor}`
+                        : undefined,
+                      breakInside: "avoid",
+                      fontStyle: isQuoteLine ? "italic" : undefined,
+                      minHeight: `${template.lineHeight}em`,
+                      paddingLeft: isQuoteLine ? "0.6em" : undefined,
+                      textIndent: line ? `${template.firstLineIndent}em` : 0,
+                    }}
+                  >
+                    {displayLine || "\u00a0"}
+                  </p>
+                );
+              })}
             </div>
 
             {page.showImage && article.image ? (
               <img
                 alt={article.title}
-                className="mt-2 max-h-[32%] self-center rounded-sm object-contain"
+                className="mt-2 max-h-[32%] self-center object-contain"
                 src={article.image}
-                style={{ width: `${template.imageMaxWidth}%` }}
+                style={{
+                  border: template.imageBorder
+                    ? `1px solid ${template.accentColor}55`
+                    : undefined,
+                  borderRadius: `${template.imageRadius * previewScale}px`,
+                  width: `${template.imageMaxWidth}%`,
+                }}
               />
             ) : null}
 
-            {template.pageNumberPosition !== "hidden" ? (
-              <footer
-                className={cn(
-                  "mt-3 flex text-[7px] tracking-[0.12em] text-slate-300",
-                  template.pageNumberPosition === "right"
-                    ? "justify-end"
-                    : "justify-center",
-                )}
-              >
-                — {pageIndex + 1} —
-              </footer>
-            ) : null}
+            <PublicationPageFooter
+              color={template.themeColor}
+              footerText={template.footerText}
+              pageMargin={template.pageMargin}
+              pageNumber={pageIndex + 1}
+              pageNumberPosition={template.pageNumberPosition}
+              pageWidthMm={getPreviewPageWidthMm(template)}
+              showFooter={template.showFooter}
+            />
           </article>
         );
       })}
@@ -2177,6 +2377,11 @@ function getPreviewAspectRatio(template: Template) {
     a5: "148 / 210",
     b5: "176 / 250",
   }[template.pageSize];
+}
+
+function getPreviewPageWidthMm(template: Template) {
+  if (template.pageSize === "custom") return template.customPageWidth;
+  return { a4: 210, a5: 148, b5: 176 }[template.pageSize];
 }
 
 function LayoutSkeleton({ label }: { label: string }) {

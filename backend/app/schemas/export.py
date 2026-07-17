@@ -15,6 +15,7 @@ class ExportBookInfo(BaseModel):
 
 class ExportTemplateInfo(BaseModel):
     font: str
+    title_font: str = "sans-serif"
     font_size: float
     page_size: str
     page_margin: str
@@ -24,6 +25,7 @@ class ExportTemplateInfo(BaseModel):
     numbering_style: str
     line_height: float
     title_size: float
+    title_spacing: float = Field(default=12, ge=0, le=96)
     title_align: str
     title_bold: bool
     subtitle_mode: str
@@ -34,6 +36,20 @@ class ExportTemplateInfo(BaseModel):
     page_number_position: str
     custom_page_width: float
     custom_page_height: float
+    # Publication-level defaults / 出版层样式（旧模板缺省为文集）
+    preset: str = "collection"
+    theme_color: str = "#202124"
+    accent_color: str = "#1f2937"
+    columns: int = Field(default=1, ge=1, le=2)
+    article_page_mode: str = "single"
+    show_header: bool = False
+    header_text: str = ""
+    show_footer: bool = True
+    footer_text: str = "OpenClassBook"
+    show_author_meta: bool = True
+    image_radius: float = Field(default=0, ge=0, le=24)
+    image_border: bool = True
+    quote_style: bool = False
 
 
 class ExportStats(BaseModel):

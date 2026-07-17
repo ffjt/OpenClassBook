@@ -331,13 +331,19 @@ class ExportService:
                         book=bundle.book,
                         articles=bundle.articles,
                         author_names={
-                            author.id: author.name for author in bundle.authors
+                            author.id: (
+                                f"{author.name} · {author.class_name}"
+                                if author.class_name
+                                else author.name
+                            )
+                            for author in bundle.authors
                         },
                         sections=[section],
                         template=template,
                     ),
                     destination,
                     include_page_numbers=False,
+                    include_page_chrome=False,
                 )
             fragments.append(destination)
         return fragments
@@ -350,11 +356,21 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
     images = stored.image_rules or {} if stored else {}
     numbering = stored.numbering_rules or {} if stored else {}
     page = stored.page_rules or {} if stored else {}
+    presentation = page.get("presentation") if isinstance(page, dict) else {}
+    if not isinstance(presentation, dict):
+        presentation = {}
     body_font = body.get("font", "serif")
     if isinstance(body_font, dict):
         body_font = body_font.get("fullName") or body_font.get("family") or "serif"
+    title_font = title.get("font", "sans-serif")
+    if isinstance(title_font, dict):
+        title_font = (
+            title_font.get("fullName") or title_font.get("family") or "sans-serif"
+        )
+    preset = str(presentation.get("preset", "collection"))
     return ExportTemplateInfo(
         font=str(body_font),
+        title_font=str(title_font),
         font_size=_number(body.get("size"), 14),
         page_size=str(page.get("size", "a4")),
         page_margin=str(page.get("margin", "normal")),
@@ -368,6 +384,10 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
         ),
         line_height=_number(body.get("line_height"), 1.5),
         title_size=_number(title.get("size"), 24),
+        title_spacing=_number(
+            title.get("spacing"),
+            12 if preset == "magazine" else 24,
+        ),
         title_align=str(title.get("align", "center")),
         title_bold=bool(title.get("bold", True)),
         subtitle_mode=str(title.get("subtitle_mode", "free")),
@@ -378,6 +398,23 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
         page_number_position=str(page.get("number_position", "center")),
         custom_page_width=_number(page.get("custom_width"), 210),
         custom_page_height=_number(page.get("custom_height"), 297),
+        preset=preset,
+        theme_color=_color(presentation.get("theme_color"), "#202124"),
+        accent_color=_color(presentation.get("accent_color"), "#1f2937"),
+        columns=2 if presentation.get("columns") == 2 else 1,
+        article_page_mode=(
+            "flow"
+            if getattr(bundle.book, "layout_article_page_mode", "single") == "flow"
+            else "single"
+        ),
+        show_header=bool(presentation.get("show_header", False)),
+        header_text=str(presentation.get("header_text", "")),
+        show_footer=bool(presentation.get("show_footer", True)),
+        footer_text=str(presentation.get("footer_text", "OpenClassBook")),
+        show_author_meta=bool(presentation.get("show_author_meta", True)),
+        image_radius=_number(presentation.get("image_radius"), 0),
+        image_border=bool(presentation.get("image_border", True)),
+        quote_style=bool(presentation.get("quote_style", False)),
     )
 
 
@@ -479,6 +516,15 @@ def _estimate_article_pages(
 
 def _number(value: object, fallback: float) -> float:
     return float(value) if isinstance(value, int | float) else fallback
+
+
+def _color(value: object, fallback: str) -> str:
+    if not isinstance(value, str):
+        return fallback
+    normalized = value.strip()
+    if re.fullmatch(r"#[0-9a-fA-F]{6}", normalized):
+        return normalized
+    return fallback
 
 
 def _sort_articles(bundle: ExportBundle) -> None:

@@ -32,7 +32,9 @@ NumberPrefix = Annotated[
 ]
 InviteCode = Annotated[str, StringConstraints(pattern=r"^OCB-[A-Z0-9]{6}$")]
 NumberMode = Literal["none", "automatic", "existing"]
+ArticlePageMode = Literal["single", "flow"]
 ExistingNumberMode = Literal["claim", "import"]
+ClassCollectionMode = Literal["none", "fixed", "template"]
 BookStatus = Literal["collecting", "reviewing", "published"]
 PAGE_FILE_MAX_LENGTH = 2_048
 LAYOUT_SECTION_LIMIT = 50
@@ -61,6 +63,51 @@ ArticleNumber = Annotated[
     StringConstraints(strip_whitespace=True, min_length=1, max_length=50),
 ]
 NUMBER_POOL_LIMIT = 2_000
+CLASS_VALUE_PLACEHOLDER = "{value}"
+
+
+def validate_class_collection_configuration(
+    mode: ClassCollectionMode,
+    fixed_value: str | None,
+    name_template: str | None,
+) -> None:
+    if mode == "none" and (fixed_value is not None or name_template is not None):
+        raise ValueError("Class collection is disabled / 未收集班级时不能设置班级内容")
+    if mode == "fixed" and (not fixed_value or name_template is not None):
+        raise ValueError(
+            "Fixed class requires one class name / 统一班级必须填写班级名称"
+        )
+    if mode == "template":
+        if fixed_value is not None or not name_template:
+            raise ValueError("Class format is required / 必须填写班级格式")
+        if name_template.count(CLASS_VALUE_PLACEHOLDER) != 1:
+            raise ValueError(
+                "Class format requires one placeholder / 班级格式必须包含一个填空"
+            )
+        if name_template == CLASS_VALUE_PLACEHOLDER:
+            raise ValueError(
+                "Class format must include fixed text / 班级格式必须包含固定文字"
+            )
+
+
+def resolve_class_name(
+    mode: ClassCollectionMode,
+    fixed_value: str | None,
+    name_template: str | None,
+    class_value: str | None,
+) -> str | None:
+    validate_class_collection_configuration(mode, fixed_value, name_template)
+    if mode == "none":
+        return None
+    if mode == "fixed":
+        return fixed_value
+    value = (class_value or "").strip()
+    if not value:
+        raise ValueError("Class value is required / 请填写班级")
+    resolved = name_template.replace(CLASS_VALUE_PLACEHOLDER, value)
+    if len(resolved) > 120:
+        raise ValueError("Class name is too long / 班级名称过长")
+    return resolved
 
 
 class BookLayoutSection(BaseModel):
@@ -192,6 +239,18 @@ class BookBase(BaseModel):
         default=True,
         description="Allow authors to delete articles / 允许作者删除文章",
     )
+    class_collection_mode: ClassCollectionMode = Field(
+        default="none",
+        description="Class collection mode / 班级收集方式",
+    )
+    class_fixed_value: OptionalBookText | None = Field(
+        default=None,
+        description="Unified class name / 统一规定的班级",
+    )
+    class_name_template: OptionalBookText | None = Field(
+        default=None,
+        description="Class fill-in format using {value} / 使用 {value} 的班级填空格式",
+    )
     invite_enabled: bool = Field(
         default=True,
         description="Accept new authors / 是否接受新作者加入",
@@ -252,6 +311,10 @@ class BookBase(BaseModel):
         default=None,
         description="Ordered book layout sections / 有序书籍板块结构",
     )
+    layout_article_page_mode: ArticlePageMode = Field(
+        default="single",
+        description="Article pagination mode / 文章分页方式",
+    )
 
     @field_validator("layout_sections")
     @classmethod
@@ -267,6 +330,11 @@ class BookCreate(BookBase):
             self.number_mode,
             self.existing_number_mode,
             self.number_pool,
+        )
+        validate_class_collection_configuration(
+            self.class_collection_mode,
+            self.class_fixed_value,
+            self.class_name_template,
         )
         return self
 
@@ -291,6 +359,9 @@ class BookUpdate(BaseModel):
     max_articles_per_author: int | None = Field(default=None, ge=1, le=100)
     allow_edit_after_submit: bool | None = Field(default=None)
     allow_delete_article: bool | None = Field(default=None)
+    class_collection_mode: ClassCollectionMode | None = Field(default=None)
+    class_fixed_value: OptionalBookText | None = Field(default=None)
+    class_name_template: OptionalBookText | None = Field(default=None)
     invite_enabled: bool | None = Field(default=None)
     number_mode: NumberMode | None = Field(
         default=None,
@@ -323,6 +394,7 @@ class BookUpdate(BaseModel):
     )
     back_cover_file: str | None = Field(default=None, max_length=PAGE_FILE_MAX_LENGTH)
     layout_sections: list[BookLayoutSection] | None = None
+    layout_article_page_mode: ArticlePageMode | None = None
 
     @field_validator(
         "title",
@@ -333,6 +405,7 @@ class BookUpdate(BaseModel):
         "max_articles_per_author",
         "allow_edit_after_submit",
         "allow_delete_article",
+        "class_collection_mode",
         "invite_enabled",
         "number_mode",
         "number_pool",

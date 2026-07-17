@@ -18,6 +18,19 @@ export interface ExportTemplateInfo {
   page_number_position: string;
   custom_page_width: number;
   custom_page_height: number;
+  preset: "collection" | "magazine" | string;
+  theme_color: string;
+  accent_color: string;
+  columns: number;
+  article_page_mode: "single" | "flow" | string;
+  show_header: boolean;
+  header_text: string;
+  show_footer: boolean;
+  footer_text: string;
+  show_author_meta: boolean;
+  image_radius: number;
+  image_border: boolean;
+  quote_style: boolean;
 }
 
 export interface ExportStats {

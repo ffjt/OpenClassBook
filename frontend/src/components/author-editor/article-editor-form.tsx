@@ -1,13 +1,23 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { Hash, ImagePlus, RefreshCw, Trash2, Type, WrapText } from "lucide-react";
+import {
+  Hash,
+  ImagePlus,
+  MessageSquareQuote,
+  RefreshCw,
+  Trash2,
+  Type,
+  WrapText,
+} from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { useTemplate } from "@/hooks/use-template";
 import type { Language } from "@/lib/i18n";
 import type { ImageWrap, PreviewArticle } from "@/types/article";
+import { getFontFamilyStyle } from "@/types/template";
 
 const editorCopy = {
   en: {
@@ -19,6 +29,8 @@ const editorCopy = {
     behindText: "Behind text",
     inFrontOfText: "In front of text",
     title: "Article Editor",
+    magazineMode: "Campus Magazine",
+    collectionMode: "Classic Collection",
     description: "Write your story. The book template controls its appearance.",
     number: "Article Number",
     numberHint: "Unique within this book",
@@ -30,6 +42,8 @@ const editorCopy = {
     subtitlePlaceholder: "Enter an article subtitle",
     body: "Article Body",
     bodyPlaceholder: "Write your article here...",
+    quoteHint: "Start a new paragraph with > and a space to create a styled quote. Leave a blank line before and after it.",
+    quoteExample: "> Your quoted text",
     image: "Article Image",
     upload: "Upload Image",
     uploadHint: "Click to choose or drop an image here",
@@ -50,6 +64,8 @@ const editorCopy = {
     behindText: "\u886c\u4e8e\u6587\u5b57\u4e0b\u65b9",
     inFrontOfText: "\u6d6e\u4e8e\u6587\u5b57\u4e0a\u65b9",
     title: "\u6587\u7ae0\u7f16\u8f91\u5668",
+    magazineMode: "\u6821\u56ed\u62a5\u520a",
+    collectionMode: "\u7ecf\u5178\u6587\u96c6",
     description: "\u53ea\u9700\u4e13\u6ce8\u4e66\u5199\uff0c\u4e66\u7c4d\u6a21\u677f\u4f1a\u7edf\u4e00\u63a7\u5236\u6587\u7ae0\u6837\u5f0f\u3002",
     number: "\u6587\u7ae0\u7f16\u53f7",
     numberHint: "\u5728\u6574\u672c\u4e66\u4e2d\u552f\u4e00",
@@ -61,6 +77,8 @@ const editorCopy = {
     subtitlePlaceholder: "\u8f93\u5165\u6587\u7ae0\u526f\u6807\u9898",
     body: "\u6b63\u6587",
     bodyPlaceholder: "\u5728\u8fd9\u91cc\u4e66\u5199\u6587\u7ae0\u2026\u2026",
+    quoteHint: "\u53e6\u8d77\u4e00\u6bb5\uff0c\u4ee5 > \u548c\u7a7a\u683c\u5f00\u5934\u5373\u53ef\u5e94\u7528\u5f15\u7528\u6837\u5f0f\uff1b\u5f15\u7528\u524d\u540e\u8bf7\u5404\u7559\u4e00\u4e2a\u7a7a\u884c\u3002",
+    quoteExample: "> \u5728\u8fd9\u91cc\u8f93\u5165\u5f15\u7528\u5185\u5bb9",
     image: "\u6587\u7ae0\u56fe\u7247",
     upload: "\u4e0a\u4f20\u56fe\u7247",
     uploadHint: "\u70b9\u51fb\u9009\u62e9\uff0c\u6216\u5c06\u56fe\u7247\u62d6\u5230\u8fd9\u91cc",
@@ -174,7 +192,20 @@ export function ArticleEditorForm({
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-card shadow-xl">
       <header className="border-b border-border px-5 py-5 sm:px-6">
-        <h2 className="text-sm font-semibold text-foreground">{copy.title}</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-foreground">{copy.title}</h2>
+          <Badge
+            className={
+              template.preset === "magazine"
+                ? "border-red-500/25 bg-red-500/10 text-red-300"
+                : "border-border bg-muted text-muted-foreground"
+            }
+          >
+            {template.preset === "magazine"
+              ? copy.magazineMode
+              : copy.collectionMode}
+          </Badge>
+        </div>
         <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
           {copy.description}
         </p>
@@ -250,11 +281,42 @@ export function ArticleEditorForm({
             <Type className="size-3.5 text-muted-foreground" />
             {copy.body}
           </Label>
+          {template.quoteStyle && (
+            <div
+              className="rounded-r-lg border-y border-r border-border bg-muted/40 px-3 py-2.5"
+              id="article-quote-hint"
+              style={{
+                borderLeft: `3px solid ${template.accentColor}`,
+                fontFamily: getFontFamilyStyle(template.bodyFont),
+              }}
+            >
+              <div className="flex items-start gap-2.5">
+                <MessageSquareQuote
+                  aria-hidden="true"
+                  className="mt-0.5 size-4 shrink-0"
+                  style={{ color: template.accentColor }}
+                />
+                <div>
+                  <p className="text-xs leading-5 text-foreground">
+                    {copy.quoteHint}
+                  </p>
+                  <p
+                    className="mt-1 text-xs italic"
+                    style={{ color: template.accentColor }}
+                  >
+                    {copy.quoteExample}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           <Textarea
+            aria-describedby={template.quoteStyle ? "article-quote-hint" : undefined}
             className="min-h-[300px] rounded-lg border-input bg-background text-sm leading-6 text-foreground shadow-none placeholder:text-muted-foreground xl:min-h-[360px]"
             id="article-body"
             onChange={(event) => onBodyChange(event.target.value)}
             placeholder={copy.bodyPlaceholder}
+            style={{ fontFamily: getFontFamilyStyle(template.bodyFont) }}
             value={article.body}
           />
         </fieldset>

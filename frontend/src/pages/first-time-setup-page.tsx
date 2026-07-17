@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, BookOpen, CircleAlert, LoaderCircle } from "luci
 import { toast } from "sonner";
 
 import { LanguageToggle } from "@/components/language-toggle";
+import { ClassCollectionFields, type ClassCollectionRules } from "@/components/class-collection-fields";
 import { SubmissionRuleFields } from "@/components/submission-rule-fields";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -77,6 +78,13 @@ const defaultRules: SubmissionRules = {
   allowDeleteArticle: true,
 };
 
+const defaultClassRules: ClassCollectionRules = {
+  mode: "none",
+  fixedValue: "",
+  prefix: "",
+  suffix: "",
+};
+
 export function FirstTimeSetupPage({
   bookId,
   language,
@@ -143,6 +151,7 @@ function BookSetupRules({ bookId, language, onContinue }: { bookId: number; lang
   const pageCopy = copy[language];
   const [book, setBook] = useState<Book | null>(null);
   const [rules, setRules] = useState(defaultRules);
+  const [classRules, setClassRules] = useState(defaultClassRules);
   const [reloadKey, setReloadKey] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready" | "saving" | "error" | "load-error">("loading");
 
@@ -153,17 +162,23 @@ function BookSetupRules({ bookId, language, onContinue }: { bookId: number; lang
       if (!active) return;
       setBook(loaded);
       setRules(submissionRulesFromBook(loaded));
+      const [prefix = "", suffix = ""] = (loaded.class_name_template ?? "").split("{value}");
+      setClassRules({ mode: loaded.class_collection_mode, fixedValue: loaded.class_fixed_value ?? "", prefix, suffix });
       setStatus("ready");
     }, () => active && setStatus("load-error"));
     return () => { active = false; };
   }, [bookId, reloadKey]);
 
   const save = async () => {
-    if (!book || (rules.deadlineMode === "date" && !rules.deadlineDate)) return;
+    const invalidClassRules = classRules.mode === "fixed" ? !classRules.fixedValue.trim() : classRules.mode === "template" ? !(classRules.prefix.trim() || classRules.suffix.trim()) : false;
+    if (!book || (rules.deadlineMode === "date" && !rules.deadlineDate) || invalidClassRules) return;
     setStatus("saving");
     try {
       await bookRepository.update(bookId, {
         ...submissionRulesToUpdate(rules),
+        class_collection_mode: classRules.mode,
+        class_fixed_value: classRules.mode === "fixed" ? classRules.fixedValue.trim() : null,
+        class_name_template: classRules.mode === "template" ? `${classRules.prefix}{value}${classRules.suffix}` : null,
       });
       onContinue();
     } catch {
@@ -178,11 +193,12 @@ function BookSetupRules({ bookId, language, onContinue }: { bookId: number; lang
     <div className="space-y-6">
       <section className="rounded-lg border border-border bg-card p-5 sm:p-7">
         <SubmissionRuleFields language={language} onChange={setRules} rules={rules} />
+        <ClassCollectionFields language={language} onChange={setClassRules} rules={classRules} />
       </section>
 
       <div className="flex flex-col items-end gap-3 border-t border-border pt-5">
         {status === "error" ? <p className="text-sm text-rose-500" role="alert">{pageCopy.saveError}</p> : null}
-        <Button className="h-11 w-full bg-blue-600 px-6 text-white hover:bg-blue-700 sm:w-auto" disabled={status === "saving" || (rules.deadlineMode === "date" && !rules.deadlineDate)} onClick={() => void save()}>
+        <Button className="h-11 w-full bg-blue-600 px-6 text-white hover:bg-blue-700 sm:w-auto" disabled={status === "saving" || (rules.deadlineMode === "date" && !rules.deadlineDate) || (classRules.mode === "fixed" && !classRules.fixedValue.trim()) || (classRules.mode === "template" && !(classRules.prefix.trim() || classRules.suffix.trim()))} onClick={() => void save()}>
           {status === "saving" ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : <ArrowRight className="mr-2 size-4" />}
           {status === "saving" ? pageCopy.saving : pageCopy.next}
         </Button>

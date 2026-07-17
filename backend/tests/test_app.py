@@ -36,6 +36,56 @@ def test_system_routes_and_swagger(client: TestClient) -> None:
     assert {"get", "patch", "delete"} <= item_path.keys()
 
 
+def test_class_collection_formats_author_input_for_join(client: TestClient) -> None:
+    book_response = client.post(
+        "/api/v1/books",
+        json={
+            "title": "Class format",
+            "owner_name": "Teacher",
+            "class_collection_mode": "template",
+            "class_name_template": "高二（{value}）班",
+        },
+    )
+    assert book_response.status_code == 201
+    book = book_response.json()
+    assert book["class_fixed_value"] is None
+    assert book["class_name_template"] == "高二（{value}）班"
+
+    missing = client.post(
+        f"/api/v1/join/{book['invite_code']}",
+        json={"name": "Lin"},
+    )
+    assert missing.status_code == 422
+    assert missing.json()["detail"]["code"] == "class_value_required"
+
+    joined = client.post(
+        f"/api/v1/join/{book['invite_code']}",
+        json={"name": "Lin", "class_value": "3"},
+    )
+    assert joined.status_code == 200
+    author = client.get(f"/api/v1/authors/{joined.json()['author_id']}").json()
+    assert author["class_name"] == "高二（3）班"
+
+
+def test_fixed_class_is_applied_without_author_input(client: TestClient) -> None:
+    book = client.post(
+        "/api/v1/books",
+        json={
+            "title": "Fixed class",
+            "owner_name": "Teacher",
+            "class_collection_mode": "fixed",
+            "class_fixed_value": "Grade 8 · Class A",
+        },
+    ).json()
+    joined = client.post(
+        f"/api/v1/join/{book['invite_code']}",
+        json={"name": "Alex"},
+    )
+    assert joined.status_code == 200
+    author = client.get(f"/api/v1/authors/{joined.json()['author_id']}").json()
+    assert author["class_name"] == "Grade 8 · Class A"
+
+
 def test_cors_allows_private_network_frontend(client: TestClient) -> None:
     origin = "http://192.168.31.105:5181"
     response = client.options(
@@ -108,6 +158,7 @@ def test_book_crud_persists_to_sqlite(
     assert created["back_cover_file"] is None
     assert created["layout_sections"] is None
     assert created["layout_article_order"] is None
+    assert created["layout_article_page_mode"] == "single"
     assert created["author_count"] == 0
     assert created["article_count"] == 0
     assert created["approved_article_count"] == 0
@@ -140,6 +191,7 @@ def test_book_crud_persists_to_sqlite(
             "afterword_file": "afterword.docx",
             "acknowledgement_file": "acknowledgements.pdf",
             "back_cover_file": "back-cover.webp",
+            "layout_article_page_mode": "flow",
             "layout_sections": [
                 {
                     "id": "cover",
@@ -175,6 +227,7 @@ def test_book_crud_persists_to_sqlite(
     assert updated["afterword_file"] == "afterword.docx"
     assert updated["acknowledgement_file"] == "acknowledgements.pdf"
     assert updated["back_cover_file"] == "back-cover.webp"
+    assert updated["layout_article_page_mode"] == "flow"
     assert [section["id"] for section in updated["layout_sections"]] == [
         "cover",
         "articles",
@@ -193,6 +246,7 @@ def test_book_crud_persists_to_sqlite(
         assert persisted.back_cover_file == "back-cover.webp"
         assert persisted.layout_sections is not None
         assert persisted.layout_sections[2]["name"] == "A Message from Our Class"
+        assert persisted.layout_article_page_mode == "flow"
         assert persisted.setup_completed is True
 
     delete_response = client.delete(f"/api/v1/books/{created['id']}")

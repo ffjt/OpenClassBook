@@ -2,7 +2,9 @@ import { apiRequest } from "@/repositories/apiClient";
 
 export type NumberMode = "none" | "automatic" | "existing";
 export type ExistingNumberMode = "claim" | "import";
+export type ClassCollectionMode = "none" | "fixed" | "template";
 export type BookStatus = "collecting" | "reviewing" | "published";
+export type ArticlePageMode = "single" | "flow";
 export type LayoutSectionKind = "page" | "articles";
 export type LayoutSectionPreset =
   | "cover"
@@ -40,6 +42,9 @@ export interface Book {
   max_articles_per_author: number;
   allow_edit_after_submit: boolean;
   allow_delete_article: boolean;
+  class_collection_mode: ClassCollectionMode;
+  class_fixed_value: string | null;
+  class_name_template: string | null;
   number_mode: NumberMode;
   existing_number_mode: ExistingNumberMode | null;
   number_pool: string[];
@@ -54,6 +59,7 @@ export interface Book {
   back_cover_file: string | null;
   layout_sections: BookLayoutSection[] | null;
   layout_article_order: number[] | null;
+  layout_article_page_mode: ArticlePageMode;
   author_count: number;
   article_count: number;
   approved_article_count: number;
@@ -89,6 +95,9 @@ export type BookUpdateInput = Partial<
     | "max_articles_per_author"
     | "allow_edit_after_submit"
     | "allow_delete_article"
+    | "class_collection_mode"
+    | "class_fixed_value"
+    | "class_name_template"
     | "invite_enabled"
     | "number_mode"
     | "existing_number_mode"
@@ -103,6 +112,7 @@ export type BookUpdateInput = Partial<
     | "acknowledgement_file"
     | "back_cover_file"
     | "layout_sections"
+    | "layout_article_page_mode"
   >
 >;
 

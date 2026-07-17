@@ -2,12 +2,16 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from app.schemas.article import ArticleStatus
 from app.schemas.book import BookResponse
 
 AuthorName = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=120),
+]
+ClassValue = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=120),
 ]
@@ -18,7 +22,7 @@ class AuthorBase(BaseModel):
 
 
 class AuthorCreate(AuthorBase):
-    pass
+    class_value: ClassValue | None = None
 
 
 class AuthorUpdate(BaseModel):
@@ -37,6 +41,7 @@ class AuthorResponse(AuthorBase):
 
     id: int
     book_id: int
+    class_name: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -58,6 +63,8 @@ class AuthorPreviewResponse(BaseModel):
 
 
 class AuthorCreateData(AuthorCreate):
+    class_value: ClassValue | None = Field(default=None, exclude=True)
+    class_name: str | None = None
     book_id: int
     uuid: UUID
     created_at: datetime

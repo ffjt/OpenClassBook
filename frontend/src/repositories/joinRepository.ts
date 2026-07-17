@@ -16,9 +16,9 @@ export const joinRepository = {
     return apiRequest<JoinBookResponse>(`/join/${encodeURIComponent(inviteCode)}`);
   },
 
-  join(inviteCode: string, name: string) {
+  join(inviteCode: string, name: string, classValue?: string) {
     return apiRequest<JoinResponse>(`/join/${encodeURIComponent(inviteCode)}`, {
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, class_value: classValue || undefined }),
       method: "POST",
     });
   },

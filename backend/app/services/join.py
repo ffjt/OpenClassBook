@@ -5,6 +5,7 @@ from uuid import uuid4
 from app.models.author import Author
 from app.models.book import Book
 from app.repositories.join import JoinRepository
+from app.schemas.book import resolve_class_name
 from app.schemas.invitation import JoinCreate
 
 
@@ -48,6 +49,12 @@ class JoinService:
             self.repository.create_author(
                 book,
                 data.name,
+                resolve_class_name(
+                    book.class_collection_mode,
+                    book.class_fixed_value,
+                    book.class_name_template,
+                    data.class_value,
+                ),
                 uuid4(),
                 datetime.now(UTC),
             ),

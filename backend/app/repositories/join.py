@@ -28,12 +28,14 @@ class JoinRepository:
         self,
         book: Book,
         name: str,
+        class_name: str | None,
         author_uuid: UUID,
         now: datetime,
     ) -> Author:
         author = Author(
             book_id=book.id,
             name=name,
+            class_name=class_name,
             uuid=author_uuid,
             created_at=now,
             updated_at=now,

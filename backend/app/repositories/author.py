@@ -54,6 +54,9 @@ class AuthorRepository(BaseRepository[Author, AuthorCreateData, AuthorUpdateData
     def book_exists(self, book_id: int) -> bool:
         return self.session.get(Book, book_id) is not None
 
+    def get_book(self, book_id: int) -> Book | None:
+        return self.session.get(Book, book_id)
+
     def update(self, resource_id: int, data: AuthorUpdateData) -> Author | None:
         author = self.get(resource_id)
         if author is None:

@@ -2,11 +2,13 @@ import { ApiError, apiRequest } from "@/repositories/apiClient";
 import { defaultTemplate } from "@/mock/template";
 import type {
   Alignment,
+  ColumnCount,
   FontSelection,
   NumberPosition,
   PageMargin,
   PageNumberPosition,
   PageSize,
+  PublishingPreset,
   SubtitleMode,
   Template,
 } from "@/types/template";
@@ -56,12 +58,13 @@ function readBoolean(value: unknown, fallback: boolean) {
   return typeof value === "boolean" ? value : fallback;
 }
 
-function readOption<Value extends string>(
+function readOption<Value extends string | number>(
   value: unknown,
   options: readonly Value[],
   fallback: Value,
 ) {
-  return typeof value === "string" && options.includes(value as Value)
+  return (typeof value === "string" || typeof value === "number") &&
+    options.includes(value as Value)
     ? (value as Value)
     : fallback;
 }
@@ -72,8 +75,44 @@ export function deserializeTemplate(stored: BookTemplate): Template {
   const images = stored.image_rules ?? {};
   const numbering = stored.numbering_rules ?? {};
   const page = stored.page_rules ?? {};
+  const presentation = isRecord(page.presentation) ? page.presentation : {};
 
   return {
+    preset: readOption<PublishingPreset>(
+      presentation.preset,
+      ["collection", "magazine"],
+      defaultTemplate.preset,
+    ),
+    themeColor:
+      typeof presentation.theme_color === "string"
+        ? presentation.theme_color
+        : defaultTemplate.themeColor,
+    accentColor:
+      typeof presentation.accent_color === "string"
+        ? presentation.accent_color
+        : defaultTemplate.accentColor,
+    columns: readOption<ColumnCount>(
+      presentation.columns,
+      [1, 2],
+      defaultTemplate.columns,
+    ),
+    showHeader: readBoolean(presentation.show_header, defaultTemplate.showHeader),
+    headerText:
+      typeof presentation.header_text === "string"
+        ? presentation.header_text
+        : defaultTemplate.headerText,
+    showFooter: readBoolean(presentation.show_footer, defaultTemplate.showFooter),
+    footerText:
+      typeof presentation.footer_text === "string"
+        ? presentation.footer_text
+        : defaultTemplate.footerText,
+    showAuthorMeta: readBoolean(
+      presentation.show_author_meta,
+      defaultTemplate.showAuthorMeta,
+    ),
+    imageRadius: readNumber(presentation.image_radius, defaultTemplate.imageRadius),
+    imageBorder: readBoolean(presentation.image_border, defaultTemplate.imageBorder),
+    quoteStyle: readBoolean(presentation.quote_style, defaultTemplate.quoteStyle),
     titleFont: readFont(title.font, defaultTemplate.titleFont),
     titleSize: readNumber(title.size, defaultTemplate.titleSize),
     titleBold: readBoolean(title.bold, defaultTemplate.titleBold),
@@ -199,6 +238,20 @@ export const templateRepository = {
           number_position: template.pageNumberPosition,
           custom_width: template.customPageWidth,
           custom_height: template.customPageHeight,
+          presentation: {
+            preset: template.preset,
+            theme_color: template.themeColor,
+            accent_color: template.accentColor,
+            columns: template.columns,
+            show_header: template.showHeader,
+            header_text: template.headerText,
+            show_footer: template.showFooter,
+            footer_text: template.footerText,
+            show_author_meta: template.showAuthorMeta,
+            image_radius: template.imageRadius,
+            image_border: template.imageBorder,
+            quote_style: template.quoteStyle,
+          },
         },
       }),
       method: "PATCH",

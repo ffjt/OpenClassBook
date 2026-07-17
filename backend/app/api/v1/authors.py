@@ -42,7 +42,7 @@ def search_authors(
         raise book_not_found()
     if not name.strip():
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "message": "Name cannot be blank",
                 "message_zh": "姓名不能为空",
@@ -81,7 +81,18 @@ def create_author(
 ) -> AuthorResponse:
     if not service.book_exists(book_id):
         raise book_not_found()
-    return AuthorResponse.model_validate(service.create(book_id, data))
+    try:
+        author = service.create(book_id, data)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "class_value_required",
+                "message": "A valid class value is required.",
+                "message_zh": "请按班级格式填写内容。",
+            },
+        ) from error
+    return AuthorResponse.model_validate(author)
 
 
 @router.get(

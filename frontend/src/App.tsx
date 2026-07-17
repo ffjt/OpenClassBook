@@ -214,11 +214,13 @@ function FirstTimeSetupRoute({
 
 function AuthorSelectRoute(props: SharedPageProps) {
   const { inviteCode } = useParams();
-  const name = new URLSearchParams(useLocation().search).get("name")?.trim();
+  const query = new URLSearchParams(useLocation().search);
+  const name = query.get("name")?.trim();
+  const classValue = query.get("classValue")?.trim();
   if (!inviteCode || !name) {
     return <Navigate replace to={inviteCode ? `/join/${inviteCode}` : "/join"} />;
   }
-  return <AuthorSelectPage {...props} inviteCode={inviteCode} name={name} />;
+  return <AuthorSelectPage {...props} classValue={classValue} inviteCode={inviteCode} name={name} />;
 }
 
 function WelcomeRoute(props: SharedPageProps) {

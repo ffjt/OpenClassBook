@@ -6,6 +6,7 @@ import {
   FileText,
   Hash,
   Image,
+  Columns3,
   Pilcrow,
   ScanText,
   Type,
@@ -41,6 +42,7 @@ const panelCopy = {
       body: "Body",
       images: "Images",
       page: "Page",
+      presentation: "Publication details",
     },
     fields: {
       fontDenied: "Font access was not granted.",
@@ -71,6 +73,17 @@ const panelCopy = {
       margin: "Margins",
       pageNumber: "Page number",
       numberingUnavailable: "Unavailable because this book does not use article numbers.",
+      columns: "Columns",
+      showHeader: "Show header",
+      headerText: "Header text",
+      showFooter: "Show footer",
+      footerText: "Footer text",
+      showAuthorMeta: "Show author and class",
+      themeColor: "Text color",
+      accentColor: "Accent color",
+      imageRadius: "Image corner radius",
+      imageBorder: "Image border",
+      quoteStyle: "Quote styling",
     },
     values: {
       above: "Above title",
@@ -83,6 +96,8 @@ const panelCopy = {
       bottomCenter: "Bottom center",
       bottomRight: "Bottom right",
       custom: "Custom",
+      oneColumn: "Single column",
+      twoColumns: "Two columns",
     },
   },
   zh: {
@@ -93,6 +108,7 @@ const panelCopy = {
       body: "正文",
       images: "图片",
       page: "页面",
+      presentation: "出版细节",
     },
     fields: {
       fontDenied: "未获得系统字体访问权限。",
@@ -118,6 +134,17 @@ const panelCopy = {
       margin: "页边距",
       pageNumber: "页码位置",
       numberingUnavailable: "当前书籍选择了“我不需要编号”，编号格式不可用。",
+      columns: "分栏布局",
+      showHeader: "显示页眉",
+      headerText: "页眉文字",
+      showFooter: "显示页脚",
+      footerText: "页脚文字",
+      showAuthorMeta: "显示作者与班级",
+      themeColor: "正文颜色",
+      accentColor: "强调色",
+      imageRadius: "图片圆角",
+      imageBorder: "图片边框",
+      quoteStyle: "引用样式",
     },
     values: {
       above: "标题上方",
@@ -130,6 +157,8 @@ const panelCopy = {
       bottomCenter: "底部居中",
       bottomRight: "底部右侧",
       custom: "自定义",
+      oneColumn: "单栏",
+      twoColumns: "双栏",
     },
   },
 } as const;
@@ -449,6 +478,7 @@ export function FormatPanel({
               max={48}
               min={6}
               onChange={(event) => onChange("bodySize", Number(event.target.value))}
+              step={0.5}
               type="number"
               value={settings.bodySize}
             />
@@ -466,7 +496,7 @@ export function FormatPanel({
             }
             value={settings.lineHeight}
           >
-            {[1, 1.25, 1.5, 1.75, 2].map((spacing) => (
+            {[1, 1.25, 1.35, 1.4, 1.5, 1.75, 2].map((spacing) => (
               <option key={spacing} value={spacing}>
                 {spacing.toFixed(spacing === 1 || spacing === 2 ? 1 : 2)}
               </option>
@@ -620,6 +650,119 @@ export function FormatPanel({
             <option value="right">{copy.values.bottomRight}</option>
             <option value="hidden">{copy.values.hidden}</option>
           </Select>
+        </ControlRow>
+      </PanelSection>
+
+      <PanelSection icon={Columns3} title={copy.sections.presentation}>
+        <ControlRow htmlFor="columns" label={copy.fields.columns}>
+          <Select
+            className="h-9 text-xs"
+            id="columns"
+            onChange={(event) =>
+              onChange("columns", Number(event.target.value) as 1 | 2)
+            }
+            value={settings.columns}
+          >
+            <option value={1}>{copy.values.oneColumn}</option>
+            <option value={2}>{copy.values.twoColumns}</option>
+          </Select>
+        </ControlRow>
+        <ControlRow htmlFor="theme-color" label={copy.fields.themeColor}>
+          <Input
+            className="h-9 rounded-lg border-input bg-background px-2 text-xs"
+            id="theme-color"
+            onChange={(event) => onChange("themeColor", event.target.value)}
+            type="color"
+            value={settings.themeColor}
+          />
+        </ControlRow>
+        <ControlRow htmlFor="accent-color" label={copy.fields.accentColor}>
+          <Input
+            className="h-9 rounded-lg border-input bg-background px-2 text-xs"
+            id="accent-color"
+            onChange={(event) => onChange("accentColor", event.target.value)}
+            type="color"
+            value={settings.accentColor}
+          />
+        </ControlRow>
+        <ControlRow htmlFor="show-header" label={copy.fields.showHeader}>
+          <Switch
+            aria-label={copy.fields.showHeader}
+            checked={settings.showHeader}
+            className="ml-auto"
+            id="show-header"
+            onChange={(event) => onChange("showHeader", event.target.checked)}
+          />
+        </ControlRow>
+        {settings.showHeader && (
+          <ControlRow htmlFor="header-text" label={copy.fields.headerText}>
+            <Input
+              className="h-9 rounded-lg border-input bg-background px-3 text-xs text-foreground"
+              id="header-text"
+              onChange={(event) => onChange("headerText", event.target.value)}
+              value={settings.headerText}
+            />
+          </ControlRow>
+        )}
+        <ControlRow htmlFor="show-footer" label={copy.fields.showFooter}>
+          <Switch
+            aria-label={copy.fields.showFooter}
+            checked={settings.showFooter}
+            className="ml-auto"
+            id="show-footer"
+            onChange={(event) => onChange("showFooter", event.target.checked)}
+          />
+        </ControlRow>
+        {settings.showFooter && (
+          <ControlRow htmlFor="footer-text" label={copy.fields.footerText}>
+            <Input
+              className="h-9 rounded-lg border-input bg-background px-3 text-xs text-foreground"
+              id="footer-text"
+              onChange={(event) => onChange("footerText", event.target.value)}
+              value={settings.footerText}
+            />
+          </ControlRow>
+        )}
+        <ControlRow htmlFor="show-author-meta" label={copy.fields.showAuthorMeta}>
+          <Switch
+            aria-label={copy.fields.showAuthorMeta}
+            checked={settings.showAuthorMeta}
+            className="ml-auto"
+            id="show-author-meta"
+            onChange={(event) => onChange("showAuthorMeta", event.target.checked)}
+          />
+        </ControlRow>
+        <ControlRow htmlFor="image-radius" label={copy.fields.imageRadius}>
+          <div className="flex items-center gap-3">
+            <Slider
+              id="image-radius"
+              max={24}
+              min={0}
+              onChange={(event) => onChange("imageRadius", Number(event.target.value))}
+              value={settings.imageRadius}
+            />
+            <span className="w-9 text-right text-[11px] tabular-nums text-muted-foreground">
+              {settings.imageRadius}px
+            </span>
+          </div>
+        </ControlRow>
+        <ControlRow htmlFor="image-border" label={copy.fields.imageBorder}>
+          <Switch
+            aria-label={copy.fields.imageBorder}
+            checked={settings.imageBorder}
+            className="ml-auto"
+            id="image-border"
+            onChange={(event) => onChange("imageBorder", event.target.checked)}
+          />
+        </ControlRow>
+        <ControlRow htmlFor="quote-style" label={copy.fields.quoteStyle}>
+          <Switch
+            aria-label={copy.fields.quoteStyle}
+            checked={settings.quoteStyle}
+            className="ml-auto"
+            id="quote-style"
+            onChange={(event) => onChange("quoteStyle", event.target.checked)}
+          />
         </ControlRow>
       </PanelSection>
     </div>

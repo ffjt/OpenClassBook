@@ -29,6 +29,11 @@ class Book(Base):
     max_articles_per_author: Mapped[int] = mapped_column(Integer, default=5)
     allow_edit_after_submit: Mapped[bool] = mapped_column(Boolean, default=True)
     allow_delete_article: Mapped[bool] = mapped_column(Boolean, default=True)
+    class_collection_mode: Mapped[str] = mapped_column(
+        String(20), default="none", server_default="none"
+    )
+    class_fixed_value: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    class_name_template: Mapped[str | None] = mapped_column(String(120), nullable=True)
     number_mode: Mapped[str] = mapped_column(String(20))
     existing_number_mode: Mapped[str | None] = mapped_column(
         String(20), nullable=True
@@ -48,6 +53,9 @@ class Book(Base):
     )
     layout_article_order: Mapped[list[int] | None] = mapped_column(
         JSON, nullable=True
+    )
+    layout_article_page_mode: Mapped[str] = mapped_column(
+        String(20), default="single", server_default="single"
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

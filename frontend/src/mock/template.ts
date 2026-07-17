@@ -1,6 +1,18 @@
 import type { Template } from "@/types/template";
 
 export const defaultTemplate: Template = {
+  preset: "collection",
+  themeColor: "#1f2937",
+  accentColor: "#dc2626",
+  columns: 1,
+  showHeader: false,
+  headerText: "",
+  showFooter: true,
+  footerText: "OpenClassBook · 2026",
+  showAuthorMeta: true,
+  imageRadius: 0,
+  imageBorder: true,
+  quoteStyle: false,
   titleFont: {
     family: "serif",
     fullName: "System Serif",

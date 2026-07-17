@@ -2,6 +2,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, StringConstraints
 
+from app.schemas.author import ClassValue
 from app.schemas.book import BookResponse, BookTitle, InviteCode, OwnerName
 
 AuthorJoinName = Annotated[
@@ -23,6 +24,7 @@ class JoinBookResponse(BaseModel):
 
 class JoinCreate(BaseModel):
     name: AuthorJoinName
+    class_value: ClassValue | None = None
 
 
 class JoinResponse(BaseModel):

@@ -9,6 +9,7 @@ from app.schemas.author import (
     AuthorUpdate,
     AuthorUpdateData,
 )
+from app.schemas.book import resolve_class_name
 
 
 class AuthorService:
@@ -31,6 +32,9 @@ class AuthorService:
         return self.repository.get(author_id)
 
     def create(self, book_id: int, data: AuthorCreate) -> Author:
+        book = self.repository.get_book(book_id)
+        if book is None:
+            raise ValueError("Book not found / 未找到书籍")
         now = datetime.now(UTC)
         return self.repository.create(
             AuthorCreateData(
@@ -38,7 +42,13 @@ class AuthorService:
                 uuid=uuid4(),
                 created_at=now,
                 updated_at=now,
-                **data.model_dump(),
+                name=data.name,
+                class_name=resolve_class_name(
+                    book.class_collection_mode,
+                    book.class_fixed_value,
+                    book.class_name_template,
+                    data.class_value,
+                ),
             )
         )
 

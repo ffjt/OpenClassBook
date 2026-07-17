@@ -62,6 +62,11 @@ const copy = {
     margin: "Page margin",
     imageWidth: "Image width",
     numbering: "Numbering",
+    preset: "Publishing template",
+    columns: "Layout",
+    articlePagination: "Article pagination",
+    headerFooter: "Header / footer",
+    colors: "Colors",
     flow: "Publication order",
     flowHint: "Read directly from the current Book Layout",
     preview: "PDF Preview",
@@ -129,6 +134,11 @@ const copy = {
     margin: "页边距",
     imageWidth: "图片宽度",
     numbering: "编号样式",
+    preset: "出版模板",
+    columns: "分栏布局",
+    articlePagination: "文章分页",
+    headerFooter: "页眉 / 页脚",
+    colors: "配色",
     flow: "导出流程",
     flowHint: "直接读取当前书籍排版顺序",
     preview: "PDF 预览",
@@ -560,6 +570,26 @@ function PublicationInfo({
           />
         </InfoBlock>
         <InfoBlock title={pageCopy.template}>
+          <InfoRow
+            label={pageCopy.preset}
+            value={
+              preview.template.preset === "magazine"
+                ? language === "zh" ? "校园报刊" : "Campus Magazine"
+                : language === "zh" ? "经典文集" : "Classic Collection"
+            }
+          />
+          <InfoRow
+            label={pageCopy.columns}
+            value={preview.template.columns === 2 ? (language === "zh" ? "双栏" : "Two columns") : (language === "zh" ? "单栏" : "Single column")}
+          />
+          <InfoRow
+            label={pageCopy.articlePagination}
+            value={
+              preview.template.article_page_mode === "flow"
+                ? language === "zh" ? "文章连续排版" : "Continuous flow"
+                : language === "zh" ? "每篇文章新页" : "New page per article"
+            }
+          />
           <InfoRow label={pageCopy.font} value={preview.template.font} />
           <InfoRow label={pageCopy.fontSize} value={`${preview.template.font_size} pt`} />
           <InfoRow
@@ -567,6 +597,18 @@ function PublicationInfo({
             value={formatOption(preview.template.page_margin, language)}
           />
           <InfoRow label={pageCopy.imageWidth} value={`${preview.template.image_width}%`} />
+          <InfoRow
+            label={pageCopy.headerFooter}
+            value={
+              preview.template.show_header || preview.template.show_footer
+                ? language === "zh" ? "已启用" : "Enabled"
+                : language === "zh" ? "未启用" : "Disabled"
+            }
+          />
+          <InfoRow
+            label={pageCopy.colors}
+            value={`${preview.template.theme_color} / ${preview.template.accent_color}`}
+          />
           <InfoRow
             label={pageCopy.numbering}
             value={formatOption(preview.template.numbering_style, language)}

@@ -44,6 +44,7 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _upgrade_scaffold_book_table()
     _upgrade_author_identity_model()
+    _upgrade_author_class_field()
     _upgrade_article_content_fields()
     _ensure_article_number_uniqueness()
 
@@ -94,6 +95,19 @@ def _upgrade_scaffold_book_table() -> None:
             connection.exec_driver_sql(
                 "ALTER TABLE books ADD COLUMN setup_completed BOOLEAN "
                 "NOT NULL DEFAULT 0"
+            )
+        if "class_collection_mode" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE books ADD COLUMN class_collection_mode VARCHAR(20) "
+                "NOT NULL DEFAULT 'none'"
+            )
+        if "class_fixed_value" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE books ADD COLUMN class_fixed_value VARCHAR(120)"
+            )
+        if "class_name_template" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE books ADD COLUMN class_name_template VARCHAR(120)"
             )
         if "submission_deadline" not in columns:
             connection.exec_driver_sql(
@@ -157,6 +171,11 @@ def _upgrade_scaffold_book_table() -> None:
             connection.exec_driver_sql(
                 "ALTER TABLE books ADD COLUMN layout_article_order JSON"
             )
+        if "layout_article_page_mode" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE books ADD COLUMN layout_article_page_mode VARCHAR(20) "
+                "NOT NULL DEFAULT 'single'"
+            )
 
 
 def _column_expression(columns: set[str], *candidates: str, fallback: str) -> str:
@@ -193,7 +212,7 @@ def _upgrade_author_identity_model() -> None:
         "updated_at",
     }
     if (
-        author_columns == expected_author_columns
+        expected_author_columns <= author_columns
         and required_article_columns <= article_columns
     ):
         return
@@ -253,6 +272,9 @@ def _upgrade_author_identity_model() -> None:
     article_updated_at = _column_expression(
         article_columns, "updated_at", "created_at", fallback="CURRENT_TIMESTAMP"
     )
+    author_class_name = _column_expression(
+        author_columns, "class_name", fallback="NULL"
+    )
     article_submitted_at = _column_expression(
         article_columns,
         "submitted_at",
@@ -275,6 +297,7 @@ def _upgrade_author_identity_model() -> None:
                     uuid CHAR(32) NOT NULL UNIQUE,
                     book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
                     name VARCHAR(120) NOT NULL,
+                    class_name VARCHAR(120),
                     created_at DATETIME NOT NULL,
                     updated_at DATETIME NOT NULL
                 )
@@ -301,8 +324,9 @@ def _upgrade_author_identity_model() -> None:
             connection.exec_driver_sql(
                 f"""
                 INSERT INTO authors_identity
-                    (id, uuid, book_id, name, created_at, updated_at)
+                    (id, uuid, book_id, name, class_name, created_at, updated_at)
                 SELECT id, {author_uuid}, book_id, name,
+                       {author_class_name},
                        COALESCE({author_created_at}, CURRENT_TIMESTAMP),
                        COALESCE({author_updated_at}, CURRENT_TIMESTAMP)
                 FROM authors
@@ -369,6 +393,18 @@ def _upgrade_article_content_fields() -> None:
         with engine.begin() as connection:
             connection.exec_driver_sql(
                 "ALTER TABLE articles ADD COLUMN edit_requested_at DATETIME"
+            )
+
+
+def _upgrade_author_class_field() -> None:
+    """Add the optional resolved class name without rebuilding author content."""
+    if not settings.database_url.startswith("sqlite"):
+        return
+    columns = {column["name"] for column in inspect(engine).get_columns("authors")}
+    if "class_name" not in columns:
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "ALTER TABLE authors ADD COLUMN class_name VARCHAR(120)"
             )
 
 

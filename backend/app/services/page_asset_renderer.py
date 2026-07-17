@@ -18,7 +18,7 @@ from xhtml2pdf import pisa
 from app.schemas.export import ExportTemplateInfo
 from app.services.docx_formatting import convert_docx_to_html
 from app.services.docx_word_converter import convert_docx_with_word
-from app.services.pdf_renderer import _page_size
+from app.services.pdf_renderer import _page_size, _register_fonts
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 ALLOWED_DOCX_TAGS = {
@@ -261,13 +261,21 @@ def assemble_fragments(
         for source_page in reader.pages:
             page_number = len(writer.pages) + 1
             target = _fit_page(source_page, page_width, page_height)
-            if template.page_number_position != "hidden" and page_number > 1:
+            if (
+                template.show_header
+                or template.show_footer
+                or (
+                    template.page_number_position != "hidden"
+                    and page_number > 1
+                )
+            ):
                 target.merge_page(
-                    _page_number_overlay(
+                    _page_chrome_overlay(
                         page_number,
                         page_width,
                         page_height,
                         template,
+                        title,
                     )
                 )
             writer.add_page(target)
@@ -319,17 +327,44 @@ def _fit_page(
     return target
 
 
-def _page_number_overlay(
+def _page_chrome_overlay(
     page_number: int,
     page_width: float,
     page_height: float,
     template: ExportTemplateInfo,
+    title: str,
 ) -> PageObject:
     output = BytesIO()
     overlay = canvas.Canvas(output, pagesize=(page_width, page_height))
     margin = _page_margin(template.page_margin)
-    overlay.setFillColor(colors.HexColor("#5f6368"))
-    overlay.setFont("Helvetica", 9)
+    normal_font, bold_font = _register_fonts("sans-serif")
+    if template.show_header:
+        header_y = page_height - margin + 5
+        overlay.setStrokeColor(colors.HexColor(template.accent_color))
+        overlay.setLineWidth(1.2)
+        overlay.line(margin, header_y - 4, page_width - margin, header_y - 4)
+        overlay.setFillColor(colors.HexColor(template.theme_color))
+        overlay.setFont(bold_font, 8)
+        overlay.drawString(
+            margin,
+            header_y + 1,
+            template.header_text or title,
+        )
+    if template.show_footer:
+        footer_y = max(8, margin / 2)
+        overlay.setFillColor(colors.HexColor(template.theme_color))
+        overlay.setFont(normal_font, 8)
+        overlay.drawString(
+            margin,
+            footer_y,
+            template.footer_text or "OpenClassBook",
+        )
+    overlay.setFillColor(colors.HexColor(template.accent_color))
+    overlay.setFont(normal_font, 9)
+    if page_number <= 1 or template.page_number_position == "hidden":
+        overlay.save()
+        output.seek(0)
+        return PdfReader(output).pages[0]
     y = max(8, margin / 2)
     if template.page_number_position == "right":
         overlay.drawRightString(page_width - margin, y, str(page_number))
@@ -356,14 +391,20 @@ def _docx_markup(
         "right",
     } else "center"
     title_weight = "bold" if template.title_bold else "normal"
+    column_style = (
+        "column-count: 2; column-gap: 18pt;"
+        if template.columns == 2
+        else ""
+    )
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><style>
 @page {{ size: {page_width:.3f}pt {page_height:.3f}pt; margin: {margin:.3f}pt; }}
-body {{ color: #202124; font-family: STSong-Light;
+body {{ color: {template.theme_color}; font-family: STSong-Light;
   font-size: {template.font_size:.2f}pt;
-  line-height: {template.line_height:.3f}; text-align: {alignment}; }}
+  line-height: {template.line_height:.3f}; text-align: {alignment}; {column_style} }}
 p {{ margin: 0 0 10pt 0; text-indent: {template.first_line_indent:.2f}em; }}
-h1, h2, h3, h4, h5, h6 {{ text-align: {title_align}; font-weight: {title_weight};
+h1, h2, h3, h4, h5, h6 {{ color: {template.theme_color};
+  text-align: {title_align}; font-weight: {title_weight};
   margin: 12pt 0 10pt 0; page-break-after: avoid; }}
 h1 {{ font-size: {template.title_size:.2f}pt; }}
 h2 {{ font-size: {max(template.title_size * 0.86, template.font_size * 1.25):.2f}pt; }}
@@ -375,7 +416,8 @@ th, td {{ border: 0.5pt solid #b9bdc5; padding: 4pt; vertical-align: top; }}
 img {{ display: block; width: {image_width:.2f}%; max-width: 100%;
   max-height: {page_height * 0.72:.2f}pt;
   margin: 8pt auto 12pt auto; }}
-blockquote {{ border-left: 2pt solid #b9bdc5; margin: 8pt 0; padding-left: 10pt; }}
+blockquote {{ border-left: 2pt solid {template.accent_color};
+  margin: 8pt 0; padding-left: 10pt; }}
 {formatting_css}
 </style></head><body>{fragment}</body></html>"""
 

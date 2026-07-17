@@ -67,6 +67,15 @@ def join_book(
         result = service.join(invite_code, data)
     except JoinUnavailableError as error:
         raise join_unavailable(error) from error
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "class_value_required",
+                "message": "A valid class value is required.",
+                "message_zh": "请按班级格式填写内容。",
+            },
+        ) from error
     if result is None:
         raise invitation_not_found()
     mode, author = result
