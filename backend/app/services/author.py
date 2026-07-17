@@ -47,6 +47,7 @@ class AuthorService:
                     book.class_collection_mode,
                     book.class_fixed_value,
                     book.class_name_template,
+                    book.class_value_style,
                     data.class_value,
                 ),
             )

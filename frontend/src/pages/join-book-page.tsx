@@ -52,6 +52,8 @@ const copy = {
     className: "Class",
     classPlaceholder: "Fill the blank only",
     classRequired: "Fill in the class blank to continue.",
+    arabicOnly: "Use Arabic digits (0–9) only.",
+    chineseOnly: "Use Chinese numerals only.",
     fixedClass: "This class is set by the book owner.",
     join: "Join this book",
     joining: "Joining...",
@@ -90,6 +92,8 @@ const copy = {
     className: "班级",
     classPlaceholder: "只填写空格里的内容",
     classRequired: "请填写班级格式中的空格。",
+    arabicOnly: "这里只能填写阿拉伯数字（0–9）。",
+    chineseOnly: "这里只能填写中文数字（一二三……）。",
     fixedClass: "班级已由负责人统一规定。",
     join: "加入这本书",
     joining: "正在加入...",
@@ -306,7 +310,7 @@ export function JoinBookPage({
               {book.class_collection_mode === "fixed" ? (
                 <div className="pt-2"><Label>{pageCopy.className}</Label><div className="mt-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm font-medium">{book.class_fixed_value}</div><p className="mt-2 text-xs text-muted-foreground">{pageCopy.fixedClass}</p></div>
               ) : book.class_collection_mode === "template" ? (
-                <div className="pt-2"><Label htmlFor="author-class">{pageCopy.className}</Label><div className="mt-2 flex items-center overflow-hidden rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring"><span className="shrink-0 px-3 text-sm text-muted-foreground">{book.class_name_template?.split("{value}")[0]}</span><input className="min-w-20 flex-1 border-x border-dashed border-input bg-transparent px-3 py-2 text-sm outline-none" id="author-class" maxLength={120} onChange={(event) => { setClassValue(event.target.value); setClassError(false); setJoinError(false); }} placeholder={pageCopy.classPlaceholder} value={classValue} /><span className="shrink-0 px-3 text-sm text-muted-foreground">{book.class_name_template?.split("{value}")[1]}</span></div>{classError ? <p className="mt-2 text-sm text-red-500" role="alert">{pageCopy.classRequired}</p> : null}</div>
+                <div className="pt-2"><Label htmlFor="author-class">{pageCopy.className}</Label><div className="mt-2 flex items-center overflow-hidden rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring"><span className="shrink-0 px-3 text-sm text-muted-foreground">{book.class_name_template?.split("{value}")[0]}</span><input className="min-w-20 flex-1 border-x border-dashed border-input bg-transparent px-3 py-2 text-sm outline-none" id="author-class" inputMode={book.class_value_style === "arabic" ? "numeric" : "text"} maxLength={120} onChange={(event) => { const next = event.target.value; const allowed = book.class_value_style === "chinese" ? /^[零〇一二三四五六七八九十百千万两廿卅]*$/.test(next) : /^[0-9]*$/.test(next); if (allowed) { setClassValue(next); setClassError(false); } else { setClassError(true); } setJoinError(false); }} placeholder={pageCopy.classPlaceholder} value={classValue} /><span className="shrink-0 px-3 text-sm text-muted-foreground">{book.class_name_template?.split("{value}")[1]}</span></div><p className="mt-2 text-xs text-muted-foreground">{book.class_value_style === "chinese" ? pageCopy.chineseOnly : pageCopy.arabicOnly}</p>{classError ? <p className="mt-2 text-sm text-red-500" role="alert">{classValue ? (book.class_value_style === "chinese" ? pageCopy.chineseOnly : pageCopy.arabicOnly) : pageCopy.classRequired}</p> : null}</div>
               ) : null}
               {joinError ? <p className="text-sm text-red-500" role="alert">{pageCopy.joinError}</p> : null}
             </div>

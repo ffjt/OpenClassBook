@@ -3,6 +3,7 @@ import { apiRequest } from "@/repositories/apiClient";
 export type NumberMode = "none" | "automatic" | "existing";
 export type ExistingNumberMode = "claim" | "import";
 export type ClassCollectionMode = "none" | "fixed" | "template";
+export type ClassValueStyle = "arabic" | "chinese";
 export type BookStatus = "collecting" | "reviewing" | "published";
 export type ArticlePageMode = "single" | "flow";
 export type LayoutSectionKind = "page" | "articles";
@@ -45,6 +46,7 @@ export interface Book {
   class_collection_mode: ClassCollectionMode;
   class_fixed_value: string | null;
   class_name_template: string | null;
+  class_value_style: ClassValueStyle | null;
   number_mode: NumberMode;
   existing_number_mode: ExistingNumberMode | null;
   number_pool: string[];
@@ -98,6 +100,7 @@ export type BookUpdateInput = Partial<
     | "class_collection_mode"
     | "class_fixed_value"
     | "class_name_template"
+    | "class_value_style"
     | "invite_enabled"
     | "number_mode"
     | "existing_number_mode"

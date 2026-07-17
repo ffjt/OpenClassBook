@@ -34,6 +34,7 @@ class Book(Base):
     )
     class_fixed_value: Mapped[str | None] = mapped_column(String(120), nullable=True)
     class_name_template: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    class_value_style: Mapped[str | None] = mapped_column(String(20), nullable=True)
     number_mode: Mapped[str] = mapped_column(String(20))
     existing_number_mode: Mapped[str | None] = mapped_column(
         String(20), nullable=True

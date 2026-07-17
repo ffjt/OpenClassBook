@@ -44,6 +44,7 @@ def test_class_collection_formats_author_input_for_join(client: TestClient) -> N
             "owner_name": "Teacher",
             "class_collection_mode": "template",
             "class_name_template": "高二（{value}）班",
+            "class_value_style": "arabic",
         },
     )
     assert book_response.status_code == 201
@@ -58,6 +59,12 @@ def test_class_collection_formats_author_input_for_join(client: TestClient) -> N
     assert missing.status_code == 422
     assert missing.json()["detail"]["code"] == "class_value_required"
 
+    mixed = client.post(
+        f"/api/v1/join/{book['invite_code']}",
+        json={"name": "Mixed", "class_value": "三3"},
+    )
+    assert mixed.status_code == 422
+
     joined = client.post(
         f"/api/v1/join/{book['invite_code']}",
         json={"name": "Lin", "class_value": "3"},
@@ -65,6 +72,31 @@ def test_class_collection_formats_author_input_for_join(client: TestClient) -> N
     assert joined.status_code == 200
     author = client.get(f"/api/v1/authors/{joined.json()['author_id']}").json()
     assert author["class_name"] == "高二（3）班"
+
+
+def test_chinese_class_style_rejects_arabic_digits(client: TestClient) -> None:
+    book = client.post(
+        "/api/v1/books",
+        json={
+            "title": "Chinese class format",
+            "owner_name": "Teacher",
+            "class_collection_mode": "template",
+            "class_name_template": "高二（{value}）班",
+            "class_value_style": "chinese",
+        },
+    ).json()
+    rejected = client.post(
+        f"/api/v1/join/{book['invite_code']}",
+        json={"name": "Arabic", "class_value": "3"},
+    )
+    assert rejected.status_code == 422
+    joined = client.post(
+        f"/api/v1/join/{book['invite_code']}",
+        json={"name": "Chinese", "class_value": "三"},
+    )
+    assert joined.status_code == 200
+    author = client.get(f"/api/v1/authors/{joined.json()['author_id']}").json()
+    assert author["class_name"] == "高二（三）班"
 
 
 def test_fixed_class_is_applied_without_author_input(client: TestClient) -> None:

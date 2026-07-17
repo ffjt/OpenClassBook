@@ -83,6 +83,7 @@ const defaultClassRules: ClassCollectionRules = {
   fixedValue: "",
   prefix: "",
   suffix: "",
+  valueStyle: "arabic",
 };
 
 export function FirstTimeSetupPage({
@@ -163,7 +164,7 @@ function BookSetupRules({ bookId, language, onContinue }: { bookId: number; lang
       setBook(loaded);
       setRules(submissionRulesFromBook(loaded));
       const [prefix = "", suffix = ""] = (loaded.class_name_template ?? "").split("{value}");
-      setClassRules({ mode: loaded.class_collection_mode, fixedValue: loaded.class_fixed_value ?? "", prefix, suffix });
+      setClassRules({ mode: loaded.class_collection_mode, fixedValue: loaded.class_fixed_value ?? "", prefix, suffix, valueStyle: loaded.class_value_style ?? "arabic" });
       setStatus("ready");
     }, () => active && setStatus("load-error"));
     return () => { active = false; };
@@ -179,6 +180,7 @@ function BookSetupRules({ bookId, language, onContinue }: { bookId: number; lang
         class_collection_mode: classRules.mode,
         class_fixed_value: classRules.mode === "fixed" ? classRules.fixedValue.trim() : null,
         class_name_template: classRules.mode === "template" ? `${classRules.prefix}{value}${classRules.suffix}` : null,
+        class_value_style: classRules.mode === "template" ? classRules.valueStyle : null,
       });
       onContinue();
     } catch {

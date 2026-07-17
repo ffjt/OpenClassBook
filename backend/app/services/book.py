@@ -74,14 +74,17 @@ class BookService:
             if class_collection_mode == "none":
                 changes.setdefault("class_fixed_value", None)
                 changes.setdefault("class_name_template", None)
+                changes.setdefault("class_value_style", None)
             elif class_collection_mode == "fixed":
                 changes.setdefault("class_name_template", None)
+                changes.setdefault("class_value_style", None)
             else:
                 changes.setdefault("class_fixed_value", None)
         validate_class_collection_configuration(
             class_collection_mode,
             changes.get("class_fixed_value", current.class_fixed_value),
             changes.get("class_name_template", current.class_name_template),
+            changes.get("class_value_style", current.class_value_style),
         )
 
         update_data = BookUpdateData(**changes, updated_at=datetime.now(UTC))

@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
@@ -35,6 +36,7 @@ NumberMode = Literal["none", "automatic", "existing"]
 ArticlePageMode = Literal["single", "flow"]
 ExistingNumberMode = Literal["claim", "import"]
 ClassCollectionMode = Literal["none", "fixed", "template"]
+ClassValueStyle = Literal["arabic", "chinese"]
 BookStatus = Literal["collecting", "reviewing", "published"]
 PAGE_FILE_MAX_LENGTH = 2_048
 LAYOUT_SECTION_LIMIT = 50
@@ -70,15 +72,20 @@ def validate_class_collection_configuration(
     mode: ClassCollectionMode,
     fixed_value: str | None,
     name_template: str | None,
+    value_style: ClassValueStyle | None,
 ) -> None:
-    if mode == "none" and (fixed_value is not None or name_template is not None):
+    if mode == "none" and (
+        fixed_value is not None or name_template is not None or value_style is not None
+    ):
         raise ValueError("Class collection is disabled / 未收集班级时不能设置班级内容")
-    if mode == "fixed" and (not fixed_value or name_template is not None):
+    if mode == "fixed" and (
+        not fixed_value or name_template is not None or value_style is not None
+    ):
         raise ValueError(
             "Fixed class requires one class name / 统一班级必须填写班级名称"
         )
     if mode == "template":
-        if fixed_value is not None or not name_template:
+        if fixed_value is not None or not name_template or value_style is None:
             raise ValueError("Class format is required / 必须填写班级格式")
         if name_template.count(CLASS_VALUE_PLACEHOLDER) != 1:
             raise ValueError(
@@ -94,9 +101,12 @@ def resolve_class_name(
     mode: ClassCollectionMode,
     fixed_value: str | None,
     name_template: str | None,
+    value_style: ClassValueStyle | None,
     class_value: str | None,
 ) -> str | None:
-    validate_class_collection_configuration(mode, fixed_value, name_template)
+    validate_class_collection_configuration(
+        mode, fixed_value, name_template, value_style
+    )
     if mode == "none":
         return None
     if mode == "fixed":
@@ -104,6 +114,12 @@ def resolve_class_name(
     value = (class_value or "").strip()
     if not value:
         raise ValueError("Class value is required / 请填写班级")
+    if value_style == "arabic" and re.fullmatch(r"[0-9]+", value) is None:
+        raise ValueError("Use Arabic digits only / 只能填写阿拉伯数字")
+    if value_style == "chinese" and re.fullmatch(
+        r"[零〇一二三四五六七八九十百千万两廿卅]+", value
+    ) is None:
+        raise ValueError("Use Chinese numerals only / 只能填写中文数字")
     resolved = name_template.replace(CLASS_VALUE_PLACEHOLDER, value)
     if len(resolved) > 120:
         raise ValueError("Class name is too long / 班级名称过长")
@@ -251,6 +267,10 @@ class BookBase(BaseModel):
         default=None,
         description="Class fill-in format using {value} / 使用 {value} 的班级填空格式",
     )
+    class_value_style: ClassValueStyle | None = Field(
+        default=None,
+        description="Allowed fill-in numeral style / 填空数字样式",
+    )
     invite_enabled: bool = Field(
         default=True,
         description="Accept new authors / 是否接受新作者加入",
@@ -335,6 +355,7 @@ class BookCreate(BookBase):
             self.class_collection_mode,
             self.class_fixed_value,
             self.class_name_template,
+            self.class_value_style,
         )
         return self
 
@@ -362,6 +383,7 @@ class BookUpdate(BaseModel):
     class_collection_mode: ClassCollectionMode | None = Field(default=None)
     class_fixed_value: OptionalBookText | None = Field(default=None)
     class_name_template: OptionalBookText | None = Field(default=None)
+    class_value_style: ClassValueStyle | None = Field(default=None)
     invite_enabled: bool | None = Field(default=None)
     number_mode: NumberMode | None = Field(
         default=None,

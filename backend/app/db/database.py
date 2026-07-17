@@ -109,6 +109,14 @@ def _upgrade_scaffold_book_table() -> None:
             connection.exec_driver_sql(
                 "ALTER TABLE books ADD COLUMN class_name_template VARCHAR(120)"
             )
+        if "class_value_style" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE books ADD COLUMN class_value_style VARCHAR(20)"
+            )
+            connection.exec_driver_sql(
+                "UPDATE books SET class_value_style = 'arabic' "
+                "WHERE class_collection_mode = 'template'"
+            )
         if "submission_deadline" not in columns:
             connection.exec_driver_sql(
                 "ALTER TABLE books ADD COLUMN submission_deadline DATETIME"
