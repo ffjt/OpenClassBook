@@ -69,6 +69,11 @@ export interface PreviewPage {
   showImage: boolean;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function getPreviewColumnCount(template: Template): 1 | 2 {
+  return template.columns;
+}
+
 function splitParagraph(paragraph: string, limit: number) {
   if (paragraph.length <= limit) return [paragraph, ""] as const;
 
@@ -121,17 +126,12 @@ function getPageCapacities(template: Template, body: string) {
     1.12,
     Math.max(0.62, 1 - (template.titleSize - 24) / 90),
   );
-  // The preview body uses CSS multi-column layout. Pagination must reserve
-  // capacity for every column on the page, otherwise a two-column preview
-  // receives only one column's worth of text and spills prematurely.
-  const columnMultiplier = template.columns === 2 ? 2 : 1;
-
   return {
     first: Math.max(
       90,
-      Math.round(pageCapacity * 0.68 * titleScale * columnMultiplier),
+      Math.round(pageCapacity * 0.815 * titleScale),
     ),
-    following: pageCapacity * columnMultiplier,
+    following: Math.round(pageCapacity * 0.965),
     line: Math.max(
       16,
       Math.round(
@@ -227,19 +227,226 @@ export function paginateArticle(
   return pages;
 }
 
+interface MeasuredParagraph {
+  displayStart: number;
+  element: HTMLParagraphElement;
+  isEmpty: boolean;
+  lineStart: number;
+}
+
+function getMeasuredPageLines(body: string, start: number, end: number) {
+  const slice = body.slice(start, end);
+  const lines = slice.split("\n");
+  if (end < body.length && slice.endsWith("\n")) lines.pop();
+  return lines.length ? lines : [""];
+}
+
+function appendMeasuredParagraphs(
+  container: HTMLElement,
+  body: string,
+  start: number,
+  template: Template,
+) {
+  const paragraphs: MeasuredParagraph[] = [];
+  let lineStart = start;
+
+  body.slice(start).split("\n").forEach((line, lineIndex) => {
+    const paragraph = document.createElement("p");
+    const trimmed = line.trimStart();
+    const quotePrefix = template.quoteStyle ? trimmed.match(/^>\s?/)?.[0] : undefined;
+    const leadingWhitespace = line.length - trimmed.length;
+    const removedCharacters = quotePrefix
+      ? leadingWhitespace + quotePrefix.length
+      : 0;
+    const displayLine = quotePrefix ? trimmed.slice(quotePrefix.length) : line;
+
+    paragraph.dataset.measureLine = String(lineIndex + 1);
+    paragraph.style.borderLeft = quotePrefix
+      ? `2px solid ${template.accentColor}`
+      : "";
+    paragraph.style.boxSizing = "border-box";
+    paragraph.style.fontStyle = quotePrefix ? "italic" : "";
+    paragraph.style.margin = "0";
+    paragraph.style.minHeight = `${template.lineHeight}em`;
+    paragraph.style.paddingLeft = quotePrefix ? "0.7em" : "";
+    paragraph.style.textIndent = line
+      ? `${template.firstLineIndent}em`
+      : "0";
+    paragraph.textContent = displayLine || "\u00a0";
+    container.append(paragraph);
+    paragraphs.push({
+      displayStart: lineStart + removedCharacters,
+      element: paragraph,
+      isEmpty: displayLine.length === 0,
+      lineStart,
+    });
+    lineStart += line.length + 1;
+  });
+
+  return paragraphs;
+}
+
+function applyMeasurementStyle(
+  element: HTMLElement,
+  style: CSSProperties,
+) {
+  Object.entries(style).forEach(([property, value]) => {
+    if (value === undefined || value === null) return;
+    const cssProperty = property.replace(
+      /[A-Z]/g,
+      (character) => `-${character.toLowerCase()}`,
+    );
+    element.style.setProperty(
+      cssProperty,
+      typeof value === "number" && value !== 0 ? `${value}px` : String(value),
+    );
+  });
+}
+
+function insertMeasuredImageSpacer(
+  paragraphs: MeasuredParagraph[],
+  insertion: WrapInsertion,
+  style: CSSProperties,
+) {
+  const paragraph = paragraphs[insertion.line]?.element;
+  const textNode = paragraph?.firstChild;
+  if (!(textNode instanceof Text) || !paragraph) return;
+
+  const character = clamp(insertion.character, 0, textNode.length);
+  const followingText = textNode.splitText(character);
+  const spacer = document.createElement("span");
+  spacer.setAttribute("aria-hidden", "true");
+  applyMeasurementStyle(spacer, style);
+  spacer.style.visibility = "hidden";
+  paragraph.insertBefore(spacer, followingText);
+}
+
+function getMeasuredPageEnd(
+  container: HTMLElement,
+  paragraphs: MeasuredParagraph[],
+  bodyLength: number,
+  start: number,
+  columns: 1 | 2,
+) {
+  const characters: Array<{
+    firstInParagraph: boolean;
+    node: Text;
+    offset: number;
+    sourceOffset: number;
+  }> = [];
+
+  paragraphs.forEach((paragraph) => {
+    const walker = document.createTreeWalker(
+      paragraph.element,
+      NodeFilter.SHOW_TEXT,
+    );
+    let displayOffset = 0;
+    let node = walker.nextNode();
+    while (node) {
+      if (node instanceof Text) {
+        for (let offset = 0; offset < node.length; offset += 1) {
+          characters.push({
+            firstInParagraph: displayOffset === 0 && offset === 0,
+            node,
+            offset,
+            sourceOffset: paragraph.isEmpty
+              ? paragraph.lineStart
+              : paragraph.displayStart + displayOffset + offset,
+          });
+        }
+        displayOffset += node.length;
+      }
+      node = walker.nextNode();
+    }
+  });
+
+  if (!characters.length) return bodyLength;
+  const bounds = container.getBoundingClientRect();
+  const overflows = (index: number) => {
+    const character = characters[index];
+    const range = document.createRange();
+    range.setStart(character.node, character.offset);
+    range.setEnd(character.node, character.offset + 1);
+    const rect = range.getBoundingClientRect();
+    return columns === 2
+      ? rect.left > bounds.right + 0.5
+      : rect.bottom > bounds.bottom + 0.5;
+  };
+
+  const overflowIndex = characters.findIndex((_character, index) =>
+    overflows(index),
+  );
+  if (overflowIndex < 0) return bodyLength;
+  const firstOverflow = characters[overflowIndex];
+  const paragraph = paragraphs.find((candidate) =>
+    candidate.element.contains(firstOverflow.node),
+  );
+  return firstOverflow.firstInParagraph && paragraph
+    ? paragraph.lineStart
+    : firstOverflow.sourceOffset;
+}
+
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.min(maximum, Math.max(minimum, value));
+
+function getFlowImageLayout(
+  position: PreviewArticle["imagePosition"],
+  imageWrap: ImageWrap,
+  imageSize: PreviewArticle["imageSize"],
+  bounds: { height: number; width: number },
+  columns: 1 | 2,
+  columnGap: number,
+) {
+  if (!bounds.width) {
+    return {
+      left: 0,
+      placeOnLeft: position.x <= 50,
+      width: 0,
+      widthInColumn: imageSize.width,
+      widthInPage: imageSize.width,
+    };
+  }
+  const columnWidth = (bounds.width - columnGap * (columns - 1)) / columns;
+  const columnSpan = columnWidth + columnGap;
+  const column = clamp(
+    Math.floor(((position.x / 100) * bounds.width) / columnSpan),
+    0,
+    columns - 1,
+  );
+  const columnLeft = column * columnSpan;
+  const localX = (position.x / 100) * bounds.width - columnLeft;
+  const placeOnLeft = localX <= columnWidth / 2;
+  const width = Math.min((imageSize.width / 100) * bounds.width, columnWidth);
+  const left =
+    imageWrap === "topBottom"
+      ? columnLeft + (columnWidth - width) / 2
+      : columnLeft + (placeOnLeft ? 0 : columnWidth - width);
+
+  return {
+    left,
+    placeOnLeft,
+    width,
+    widthInColumn: (width / columnWidth) * 100,
+    widthInPage: bounds.width ? (width / bounds.width) * 100 : imageSize.width,
+  };
+}
 
 function getFlowImageStyle(
   position: PreviewArticle["imagePosition"],
   imageWrap: ImageWrap,
   imageSize: PreviewArticle["imageSize"],
   bounds: { height: number; width: number },
+  columns: 1 | 2,
+  columnGap: number,
 ): CSSProperties {
-  const width = imageSize.width;
-  const leftEdge = clamp(position.x - width / 2, 0, 100 - width);
-  const rightEdge = 100 - leftEdge - width;
-  const placeOnLeft = position.x <= 50;
+  const layout = getFlowImageLayout(
+    position,
+    imageWrap,
+    imageSize,
+    bounds,
+    columns,
+    columnGap,
+  );
   const gap = imageWrap === "through" ? 2 : imageWrap === "tight" ? 6 : 12;
   const height = (imageSize.height / 100) * bounds.height;
 
@@ -253,12 +460,12 @@ function getFlowImageStyle(
   }
 
   return {
-    float: placeOnLeft ? "left" : "right",
+    float: layout.placeOnLeft ? "left" : "right",
     height: `${height + gap * 2}px`,
-    marginLeft: placeOnLeft ? `${leftEdge}%` : `${gap}px`,
-    marginRight: placeOnLeft ? `${gap}px` : `${rightEdge}%`,
+    marginLeft: layout.placeOnLeft ? 0 : `${gap}px`,
+    marginRight: layout.placeOnLeft ? `${gap}px` : 0,
     shapeOutside: "margin-box",
-    width: `${width}%`,
+    width: `${layout.widthInColumn}%`,
   };
 }
 
@@ -279,32 +486,92 @@ function getCharacterRect(textNode: Text, character: number) {
 
 function findWrapInsertion(
   measurement: HTMLElement,
+  targetX: number,
   targetY: number,
 ): WrapInsertion {
   const paragraphs = Array.from(
     measurement.querySelectorAll<HTMLElement>("[data-measure-line]"),
   );
+  const measurementRect = measurement.getBoundingClientRect();
+  const columns = getComputedStyle(measurement).columnCount === "2" ? 2 : 1;
+  const columnBoundary = measurementRect.left + measurementRect.width / 2;
 
+  let closest: (WrapInsertion & { distance: number; top: number }) | null = null;
   for (const [line, paragraph] of paragraphs.entries()) {
     const textNode = paragraph.firstChild;
     const text = textNode?.textContent ?? "";
-    if (!(textNode instanceof Text) || !text || paragraph.getBoundingClientRect().bottom < targetY) {
-      continue;
+    if (!(textNode instanceof Text) || !text) continue;
+    const rects = new Map<number, DOMRect>();
+    const rectAt = (character: number) => {
+      const cached = rects.get(character);
+      if (cached) return cached;
+      const rect = getCharacterRect(textNode, character);
+      rects.set(character, rect);
+      return rect;
+    };
+    const targetColumn = columns === 2 && targetX >= columnBoundary ? 1 : 0;
+    const characterColumn = (character: number) =>
+      columns === 2 && rectAt(character).left >= columnBoundary ? 1 : 0;
+    let start = 0;
+    let end = text.length;
+
+    if (targetColumn === 1) {
+      while (start < end) {
+        const middle = Math.floor((start + end) / 2);
+        if (characterColumn(middle) < targetColumn) start = middle + 1;
+        else end = middle;
+      }
+      if (start >= text.length || characterColumn(start) !== targetColumn) continue;
+      end = text.length;
+    } else if (columns === 2) {
+      while (start < end) {
+        const middle = Math.floor((start + end) / 2);
+        if (characterColumn(middle) <= targetColumn) start = middle + 1;
+        else end = middle;
+      }
+      end = start;
+      start = 0;
+      if (end === 0) continue;
     }
 
-    let low = 0;
-    let high = text.length - 1;
+    let low = start;
+    let high = Math.max(start, end - 1);
     while (low < high) {
       const middle = Math.floor((low + high) / 2);
-      if (getCharacterRect(textNode, middle).bottom < targetY) low = middle + 1;
+      if (rectAt(middle).bottom < targetY) low = middle + 1;
       else high = middle;
     }
 
-    const lineTop = getCharacterRect(textNode, low).top;
-    while (low > 0 && Math.abs(getCharacterRect(textNode, low - 1).top - lineTop) < 1) {
-      low -= 1;
+    const rect = rectAt(low);
+    const horizontalDistance =
+      targetX < rect.left
+        ? rect.left - targetX
+        : targetX > rect.right
+          ? targetX - rect.right
+          : 0;
+    const verticalDistance =
+      targetY < rect.top
+        ? rect.top - targetY
+        : targetY > rect.bottom
+          ? targetY - rect.bottom
+          : 0;
+    const distance = verticalDistance * 4 + horizontalDistance;
+    if (!closest || distance < closest.distance) {
+      closest = { character: low, distance, line, top: rect.top };
     }
-    return { character: low, line };
+  }
+
+  if (closest) {
+    const paragraph = paragraphs[closest.line];
+    const textNode = paragraph.firstChild as Text;
+    let character = closest.character;
+    while (character > 0) {
+      const previous = getCharacterRect(textNode, character - 1);
+      const current = getCharacterRect(textNode, character);
+      if (Math.abs(previous.top - closest.top) >= 1 || previous.right > current.left + 1) break;
+      character -= 1;
+    }
+    return { character, line: closest.line };
   }
 
   const lastLine = Math.max(0, paragraphs.length - 1);
@@ -372,7 +639,7 @@ export function PublicationArticlePreview({
       : template.subtitleMode === "free"
         ? article.subtitle
         : "";
-  const pages = useMemo(
+  const estimatedPages = useMemo(
     () =>
       paginateArticle(
         article.body,
@@ -382,16 +649,47 @@ export function PublicationArticlePreview({
       ),
     [article.body, article.imagePage, article.imageUrl, template],
   );
-  const resolvedImagePage = Math.max(
+  const estimatedImagePage = Math.max(
     0,
-    pages.findIndex((page) => page.showImage),
+    estimatedPages.findIndex((page) => page.showImage),
   );
   const [previewImagePosition, setPreviewImagePosition] = useState(
     article.imagePosition,
   );
   const [previewImageSize, setPreviewImageSize] = useState(article.imageSize);
-  const [previewImagePage, setPreviewImagePage] = useState(resolvedImagePage);
+  const [previewImagePage, setPreviewImagePage] = useState(estimatedImagePage);
   const [isInteracting, setIsInteracting] = useState(false);
+  const paginationKey = JSON.stringify({
+    article: {
+      authorMeta: article.authorMeta,
+      body: article.body,
+      imageUrl: article.imageUrl,
+      number: article.number,
+      subtitle,
+      title: article.title,
+    },
+    bookTitle,
+    compact,
+    image: {
+      page: previewImagePage,
+      position: previewImagePosition,
+      size: previewImageSize,
+      wrap: article.imageWrap,
+    },
+    template,
+  });
+  const [measuredPagination, setMeasuredPagination] = useState<{
+    key: string;
+    pages: PreviewPage[];
+  } | null>(null);
+  const pages =
+    measuredPagination?.key === paginationKey
+      ? measuredPagination.pages
+      : estimatedPages;
+  const resolvedImagePage = Math.max(
+    0,
+    pages.findIndex((page) => page.showImage),
+  );
   const pageContentRefs = useRef<Array<HTMLDivElement | null>>([]);
   const bodyRefs = useRef<Array<HTMLDivElement | null>>([]);
   const measurementRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -413,6 +711,20 @@ export function PublicationArticlePreview({
         imageTopBoundary,
         Math.max(imageTopBoundary, imageBounds.height - imagePixelHeight),
       );
+  const bodyFontSize = Math.max(7.5, template.bodySize * previewScale);
+  const activeColumns = getPreviewColumnCount(template);
+  const columnGap = activeColumns === 2 ? bodyFontSize * 1.5 : 0;
+  const flowImageLayout = getFlowImageLayout(
+    previewImagePosition,
+    article.imageWrap,
+    previewImageSize,
+    imageBounds,
+    activeColumns,
+    columnGap,
+  );
+  const displayedImageSize = isOverlayImage
+    ? previewImageSize
+    : { ...previewImageSize, width: flowImageLayout.widthInPage };
 
   useEffect(() => {
     if (!isInteracting) {
@@ -456,6 +768,176 @@ export function PublicationArticlePreview({
   ]);
 
   useLayoutEffect(() => {
+    if (isInteracting) return;
+    const firstBody = bodyRefs.current[0];
+    const firstContent = pageContentRefs.current[0];
+    if (!firstBody || !firstContent) return;
+
+    const normalizedBody = article.body.replace(/\r\n/g, "\n");
+    const firstBodyBounds = firstBody.getBoundingClientRect();
+    const followingBody = bodyRefs.current[1];
+    const header = firstContent.querySelector<HTMLElement>(":scope > header");
+    const headerStyle = header ? getComputedStyle(header) : null;
+    const headerHeight = header
+      ? header.getBoundingClientRect().height +
+        Number.parseFloat(headerStyle?.marginTop || "0") +
+        Number.parseFloat(headerStyle?.marginBottom || "0")
+      : 0;
+    const followingBodyHeight = followingBody
+      ? followingBody.getBoundingClientRect().height
+      : firstContent.getBoundingClientRect().height - headerHeight;
+    const hasImage = template.allowImages && Boolean(article.imageUrl);
+    const canMeasureImage = hasImage && imageBounds.width > 0 && imageBounds.height > 0;
+
+    const measurePages = (imagePage: number | null) => {
+      const measuredPages: PreviewPage[] = [];
+      let start = 0;
+      let pageIndex = 0;
+
+      do {
+        const container = document.createElement("div");
+        container.setAttribute("aria-hidden", "true");
+        Object.assign(container.style, {
+          boxSizing: "border-box",
+          fontFamily: getFontFamilyStyle(template.bodyFont),
+          fontSize: `${bodyFontSize}px`,
+          height: `${Math.max(
+            1,
+            pageIndex === 0 ? firstBodyBounds.height : followingBodyHeight,
+          )}px`,
+          left: "-100000px",
+          lineHeight: String(template.lineHeight),
+          overflow: "visible",
+          overflowWrap: "break-word",
+          pointerEvents: "none",
+          position: "fixed",
+          textAlign: template.justify ? "justify" : "left",
+          top: "0",
+          visibility: "hidden",
+          whiteSpace: "pre-wrap",
+          width: `${firstBodyBounds.width}px`,
+        });
+        if (activeColumns === 2) {
+          container.style.columnCount = "2";
+          container.style.columnFill = "auto";
+          container.style.columnGap = "1.5em";
+        }
+        document.body.append(container);
+
+        if (
+          pageIndex === 0 &&
+          template.showAuthorMeta &&
+          article.authorMeta
+        ) {
+          const authorMeta = document.createElement("p");
+          authorMeta.textContent = article.authorMeta;
+          Object.assign(authorMeta.style, {
+            color: template.accentColor,
+            fontWeight: "600",
+            letterSpacing: "0.025em",
+            margin: "0 0 8px",
+          });
+          container.append(authorMeta);
+        }
+
+        const paragraphs = appendMeasuredParagraphs(
+          container,
+          normalizedBody,
+          start,
+          template,
+        );
+        const showsImage = imagePage === pageIndex;
+        if (showsImage && canMeasureImage && !isOverlayImage) {
+          const bounds = container.getBoundingClientRect();
+          const insertion = findWrapInsertion(
+            container,
+            bounds.left + (previewImagePosition.x / 100) * bounds.width,
+            bounds.top +
+              imagePixelTop -
+              imageTopBoundary -
+              getWrapGap(article.imageWrap),
+          );
+          insertMeasuredImageSpacer(
+            paragraphs,
+            insertion,
+            getFlowImageStyle(
+              previewImagePosition,
+              article.imageWrap,
+              previewImageSize,
+              imageBounds,
+              activeColumns,
+              columnGap,
+            ),
+          );
+        }
+
+        let end = getMeasuredPageEnd(
+          container,
+          paragraphs,
+          normalizedBody.length,
+          start,
+          activeColumns,
+        );
+        container.remove();
+        if (end <= start && start < normalizedBody.length) {
+          end = Math.min(normalizedBody.length, start + 1);
+        }
+        measuredPages.push({
+          lines: getMeasuredPageLines(normalizedBody, start, end),
+          showImage: showsImage,
+        });
+        start = end;
+        pageIndex += 1;
+      } while (start < normalizedBody.length);
+
+      return measuredPages;
+    };
+
+    const pagesWithoutImage = measurePages(null);
+    const imagePage = hasImage
+      ? article.imagePage < 0
+        ? pagesWithoutImage.length - 1
+        : clamp(previewImagePage, 0, pagesWithoutImage.length - 1)
+      : null;
+    const nextPages = imagePage === null
+      ? pagesWithoutImage
+      : measurePages(imagePage);
+    setMeasuredPagination((current) => {
+      const unchanged =
+        current?.key === paginationKey &&
+        current.pages.length === nextPages.length &&
+        current.pages.every(
+          (page, index) =>
+            page.showImage === nextPages[index]?.showImage &&
+            page.lines.length === nextPages[index]?.lines.length &&
+            page.lines.every(
+              (line, lineIndex) => line === nextPages[index]?.lines[lineIndex],
+            ),
+        );
+      return unchanged ? current : { key: paginationKey, pages: nextPages };
+    });
+  }, [
+    activeColumns,
+    article.authorMeta,
+    article.body,
+    article.imagePage,
+    article.imageUrl,
+    article.imageWrap,
+    bodyFontSize,
+    columnGap,
+    imageBounds,
+    imagePixelTop,
+    imageTopBoundary,
+    isInteracting,
+    isOverlayImage,
+    paginationKey,
+    previewImagePage,
+    previewImagePosition,
+    previewImageSize,
+    template,
+  ]);
+
+  useLayoutEffect(() => {
     if (isOverlayImage || !article.imageUrl || !imageBounds.height) return;
     const measurement = measurementRefs.current[previewImagePage];
     const content = pageContentRefs.current[previewImagePage];
@@ -466,7 +948,10 @@ export function PublicationArticlePreview({
       contentTop +
       imagePixelTop -
       getWrapGap(article.imageWrap);
-    const insertion = findWrapInsertion(measurement, imageTop);
+    const contentLeft = content.getBoundingClientRect().left;
+    const imageCenterX =
+      contentLeft + (previewImagePosition.x / 100) * imageBounds.width;
+    const insertion = findWrapInsertion(measurement, imageCenterX, imageTop);
 
     setWrapInsertions((current) => {
       const previous = current[previewImagePage];
@@ -480,11 +965,13 @@ export function PublicationArticlePreview({
     article.imageUrl,
     article.imageWrap,
     imageBounds.height,
+    imageBounds.width,
     imagePixelTop,
     isOverlayImage,
     pages,
     previewImagePage,
     previewImagePosition.y,
+    previewImagePosition.x,
     previewImageSize.height,
     template.bodyFont,
     template.bodySize,
@@ -519,7 +1006,7 @@ export function PublicationArticlePreview({
   const getPercentPosition = (
     x: number,
     y: number,
-    size = previewImageSize,
+    size = displayedImageSize,
   ) => ({
     x: imageBounds.width
       ? ((x + (size.width / 100) * imageBounds.width * 0.5) /
@@ -534,9 +1021,10 @@ export function PublicationArticlePreview({
   });
 
   const imagePixelPosition = {
-    x:
-      (previewImagePosition.x / 100) * imageBounds.width -
-      (previewImageSize.width / 100) * imageBounds.width * 0.5,
+    x: isOverlayImage
+      ? (previewImagePosition.x / 100) * imageBounds.width -
+        (displayedImageSize.width / 100) * imageBounds.width * 0.5
+      : flowImageLayout.left,
     y: imagePixelTop,
   };
 
@@ -617,6 +1105,8 @@ export function PublicationArticlePreview({
           article.imageWrap,
           previewImageSize,
           imageBounds,
+          template.columns,
+          columnGap,
         ),
         visibility: "hidden",
       }}
@@ -671,8 +1161,8 @@ export function PublicationArticlePreview({
       position={imagePixelPosition}
       role={readOnly ? undefined : "button"}
       size={{
-        height: `${previewImageSize.height}%`,
-        width: `${previewImageSize.width}%`,
+        height: `${displayedImageSize.height}%`,
+        width: `${displayedImageSize.width}%`,
       }}
       style={{
         opacity: article.imageWrap === "behindText" ? 0.38 : 1,
@@ -780,6 +1270,7 @@ export function PublicationArticlePreview({
         {pages.map((page, pageIndex) => {
           const isFirstPage = pageIndex === 0;
           const pageNumber = pageNumberOffset + pageIndex + 1;
+          const pageColumns = getPreviewColumnCount(template);
           const chrome = getPublicationPageChrome({
             bookTitle,
             pageNumber,
@@ -853,16 +1344,6 @@ export function PublicationArticlePreview({
                       bodyRefs.current[pageIndex] = element;
                     }}
                     style={{
-                      columnCount: template.columns === 2 ? 2 : undefined,
-                      // Balance shorter pages (especially the title page) so
-                      // the second column does not look artificially empty.
-                      columnFill:
-                        template.columns === 2 ? "balance" : undefined,
-                      columnGap: template.columns === 2 ? "1.5em" : undefined,
-                      columnRule:
-                        template.columns === 2
-                          ? `1px solid ${template.accentColor}33`
-                          : undefined,
                       fontFamily: getFontFamilyStyle(template.bodyFont),
                       fontSize: `${Math.max(7.5, template.bodySize * previewScale)}px`,
                       lineHeight: template.lineHeight,
@@ -876,19 +1357,17 @@ export function PublicationArticlePreview({
                       zIndex: 1,
                     }}
                   >
-                    {isFirstPage && template.showAuthorMeta && article.authorMeta ? (
-                      <p
-                        className="mb-2 font-semibold tracking-wide"
-                        style={{ color: template.accentColor }}
-                      >
-                        {article.authorMeta}
-                      </p>
-                    ) : null}
                     <div
                       aria-hidden="true"
-                      className="pointer-events-none absolute inset-x-0 top-0 invisible"
+                      className="pointer-events-none absolute inset-x-0 top-0 max-h-full invisible overflow-hidden"
                       ref={(element) => {
                         measurementRefs.current[pageIndex] = element;
+                      }}
+                      style={{
+                        columnCount: pageColumns === 2 ? 2 : undefined,
+                        columnFill: pageColumns === 2 ? "auto" : undefined,
+                        columnGap: pageColumns === 2 ? "1.5em" : undefined,
+                        height: pageColumns === 2 ? "100%" : undefined,
                       }}
                     >
                       {page.lines.map((line, lineIndex) => (
@@ -904,50 +1383,72 @@ export function PublicationArticlePreview({
                         >
                           {line || "\u00a0"}
                         </p>
-                      ))}
+                        ))}
                     </div>
-                    {page.lines.map((line, lineIndex) => {
-                      const insertsImage =
-                        page.showImage &&
-                        !isOverlayImage &&
-                        lineIndex === wrapInsertion.line;
-                      const character = insertsImage
-                        ? clamp(wrapInsertion.character, 0, line.length)
-                        : 0;
-                      const isQuoteLine =
-                        template.quoteStyle && line.trimStart().startsWith(">");
-                      const displayLine = isQuoteLine
-                        ? line.trimStart().replace(/^>\s?/, "")
-                        : line;
-
-                      return (
+                    <div
+                      data-preview-flow={pageNumber}
+                      style={{
+                        columnCount: pageColumns === 2 ? 2 : undefined,
+                        columnFill: pageColumns === 2 ? "auto" : undefined,
+                        columnGap: pageColumns === 2 ? "1.5em" : undefined,
+                        columnRule:
+                          pageColumns === 2
+                            ? `1px solid ${template.accentColor}33`
+                            : undefined,
+                        height: pageColumns === 2 ? "100%" : undefined,
+                      }}
+                    >
+                      {isFirstPage && template.showAuthorMeta && article.authorMeta ? (
                         <p
-                          data-preview-line={lineIndex + 1}
-                          key={`${lineIndex}-${line.slice(0, 12)}`}
-                          style={{
-                            borderLeft: isQuoteLine
-                              ? `2px solid ${template.accentColor}`
-                              : undefined,
-                            fontStyle: isQuoteLine ? "italic" : undefined,
-                            minHeight: `${template.lineHeight}em`,
-                            paddingLeft: isQuoteLine ? "0.7em" : undefined,
-                            textIndent: line
-                              ? `${template.firstLineIndent}em`
-                              : 0,
-                          }}
+                          className="mb-2 font-semibold tracking-wide"
+                          style={{ color: template.accentColor }}
                         >
-                          {insertsImage ? (
-                            <>
-                              {displayLine.slice(0, character)}
-                              {renderWrapSpacer()}
-                              {displayLine.slice(character) || "\u00a0"}
-                            </>
-                          ) : (
-                            displayLine || "\u00a0"
-                          )}
+                          {article.authorMeta}
                         </p>
-                      );
-                    })}
+                      ) : null}
+                      {page.lines.map((line, lineIndex) => {
+                        const insertsImage =
+                          page.showImage &&
+                          !isOverlayImage &&
+                          lineIndex === wrapInsertion.line;
+                        const character = insertsImage
+                          ? clamp(wrapInsertion.character, 0, line.length)
+                          : 0;
+                        const isQuoteLine =
+                          template.quoteStyle && line.trimStart().startsWith(">");
+                        const displayLine = isQuoteLine
+                          ? line.trimStart().replace(/^>\s?/, "")
+                          : line;
+
+                        return (
+                          <p
+                            data-preview-line={lineIndex + 1}
+                            key={`${lineIndex}-${line.slice(0, 12)}`}
+                            style={{
+                              borderLeft: isQuoteLine
+                                ? `2px solid ${template.accentColor}`
+                                : undefined,
+                              fontStyle: isQuoteLine ? "italic" : undefined,
+                              minHeight: `${template.lineHeight}em`,
+                              paddingLeft: isQuoteLine ? "0.7em" : undefined,
+                              textIndent: line
+                                ? `${template.firstLineIndent}em`
+                                : 0,
+                            }}
+                          >
+                            {insertsImage ? (
+                              <>
+                                {displayLine.slice(0, character)}
+                                {renderWrapSpacer()}
+                                {displayLine.slice(character) || "\u00a0"}
+                              </>
+                            ) : (
+                              displayLine || "\u00a0"
+                            )}
+                          </p>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {page.showImage && renderImage(pageIndex)}

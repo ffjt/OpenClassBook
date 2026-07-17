@@ -240,6 +240,55 @@ def test_magazine_template_renders_real_columns_and_publication_chrome(
     assert len(set(positions)) >= 3
 
 
+def test_long_bilingual_quote_matches_preview_across_columns(tmp_path: Path) -> None:
+    destination = tmp_path / "long-bilingual-quote.pdf"
+    quote = "引用内容 Quote content " * 180
+    article = SimpleNamespace(
+        number="",
+        title="Quote export",
+        subtitle="引用导出",
+        author_id=1,
+        content=f"> {quote}\nNormal paragraph after quote / 引用后的普通正文。",
+        image=None,
+    )
+    template = _magazine_template().model_copy(
+        update={
+            "show_header": False,
+            "show_footer": False,
+            "show_author_meta": False,
+        }
+    )
+
+    page_count = PdfRenderer().render(
+        PdfDocumentData(
+            book=SimpleNamespace(
+                title="Quote test",
+                description="",
+                owner_name="Editor",
+            ),
+            articles=[article],
+            author_names={1: "Student"},
+            sections=[{"kind": "articles"}],
+            template=template,
+        ),
+        destination,
+        include_page_numbers=False,
+        include_page_chrome=False,
+    )
+
+    reader = PdfReader(destination)
+    assert page_count == len(reader.pages)
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    assert "引用内容" in text
+    assert "Normal paragraph after quote" in text
+    assert ">" not in text
+
+    content = b"\n".join(page.get_contents().get_data() for page in reader.pages)
+    assert b".862745 .14902 .14902 RG" in content
+    assert b".862745 .14902 .14902 rg" not in content
+    assert b" re" not in content
+
+
 def test_flow_mode_places_multiple_articles_on_one_page(tmp_path: Path) -> None:
     template = _magazine_template().model_copy(
         update={

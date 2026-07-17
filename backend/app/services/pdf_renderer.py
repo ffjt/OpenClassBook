@@ -1,6 +1,5 @@
 import base64
 import binascii
-import re
 from dataclasses import dataclass
 from html import escape
 from io import BytesIO
@@ -94,6 +93,34 @@ class PublicationImage(Flowable):
                 fill=0,
             )
             canvas.restoreState()
+
+
+class QuoteParagraph(Paragraph):
+    """A splittable paragraph with the same left accent rule as the previews."""
+
+    def draw(self) -> None:
+        canvas = self.canv
+        canvas.saveState()
+        canvas.setStrokeColor(self.style.borderColor)
+        canvas.setLineWidth(1.5)
+        canvas.line(0, 0, 0, self.height)
+        canvas.restoreState()
+        super().draw()
+
+
+def _append_normal_paragraph(
+    paragraphs: list[Paragraph],
+    normal_lines: list[str],
+    style: ParagraphStyle,
+) -> None:
+    if normal_lines:
+        paragraphs.append(
+            Paragraph(
+                escape("\n".join(normal_lines)).replace("\n", "<br/>"),
+                style,
+            )
+        )
+        normal_lines.clear()
 
 
 class PdfRenderer:
@@ -315,21 +342,31 @@ class PdfRenderer:
                 story.append(PageBreak())
 
             paragraphs: list[Paragraph] = []
-            for paragraph in re.split(r"\n\s*\n", article.content.strip()):
-                if not paragraph:
-                    continue
-                text = escape(paragraph).replace("\n", "<br/>")
-                is_quote = (
-                    document.template.quote_style
-                    and paragraph.lstrip().startswith(">")
-                )
-                if is_quote:
-                    text = escape(paragraph.lstrip()[1:].strip()).replace(
-                        "\n", "<br/>"
+            normal_lines: list[str] = []
+
+            for line in article.content.strip().splitlines():
+                stripped = line.lstrip()
+                if document.template.quote_style and stripped.startswith(">"):
+                    _append_normal_paragraph(
+                        paragraphs,
+                        normal_lines,
+                        styles["body"],
                     )
-                paragraphs.append(
-                    Paragraph(text, styles["quote"] if is_quote else styles["body"])
-                )
+                    paragraphs.append(
+                        QuoteParagraph(
+                            escape(stripped[1:].lstrip()),
+                            styles["quote"],
+                        )
+                    )
+                elif line.strip():
+                    normal_lines.append(line)
+                else:
+                    _append_normal_paragraph(
+                        paragraphs,
+                        normal_lines,
+                        styles["body"],
+                    )
+            _append_normal_paragraph(paragraphs, normal_lines, styles["body"])
 
             image: Flowable | None = None
             if (
@@ -529,11 +566,11 @@ def _styles(
                 leading=template.font_size * template.line_height,
             ),
             leftIndent=8,
-            borderPadding=5,
-            borderWidth=1,
+            borderPadding=0,
+            borderWidth=0,
             borderColor=accent_color,
-            backColor=colors.HexColor("#f8fafc"),
-            textColor=accent_color,
+            backColor=None,
+            textColor=theme_color,
             wordWrap="CJK",
             allowWidows=0,
             allowOrphans=0,
