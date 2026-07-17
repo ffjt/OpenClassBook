@@ -234,6 +234,7 @@ export function FormatSettingsContent({
   const [numberMode, setNumberMode] = useState<NumberMode | null>(null);
   const [articlePageMode, setArticlePageMode] = useState<ArticlePageMode>("single");
   const [authorClassName, setAuthorClassName] = useState<string | null>(null);
+  const [bookTitle, setBookTitle] = useState("OpenClassBook");
   const [bookLoadError, setBookLoadError] = useState(false);
   const [bookReloadKey, setBookReloadKey] = useState(0);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -247,16 +248,21 @@ export function FormatSettingsContent({
     setNumberMode(null);
     setArticlePageMode("single");
     setAuthorClassName(null);
+    setBookTitle("OpenClassBook");
     bookRepository.get(bookId).then(
       (book) => {
         if (active) {
+          setBookTitle(book.title);
           setNumberMode(book.number_mode);
           setArticlePageMode(book.layout_article_page_mode ?? "single");
           setAuthorClassName(
             book.class_collection_mode === "fixed"
               ? book.class_fixed_value
               : book.class_collection_mode === "template"
-                ? book.class_name_template?.replace("{value}", language === "zh" ? "3" : "A") ?? null
+                ? book.class_name_template?.replace(
+                    "{value}",
+                    book.class_value_style === "chinese" ? "三" : "3",
+                  ) ?? null
                 : null,
           );
         }
@@ -489,7 +495,9 @@ export function FormatSettingsContent({
         <div className="hidden min-h-0 lg:sticky lg:top-24 lg:block lg:self-start lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain">
           <BookPagePreview
             authorClassName={authorClassName}
+            bookTitle={bookTitle}
             language={language}
+            numberingEnabled={numberMode !== "none"}
             settings={{
               ...settings,
               showNumber: numberMode !== "none" && settings.showNumber,
@@ -544,7 +552,9 @@ export function FormatSettingsContent({
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5">
               <BookPagePreview
                 authorClassName={authorClassName}
+                bookTitle={bookTitle}
                 language={language}
+                numberingEnabled={numberMode !== "none"}
                 settings={{
                   ...settings,
                   showNumber: numberMode !== "none" && settings.showNumber,

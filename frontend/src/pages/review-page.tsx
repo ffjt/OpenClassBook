@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { useBookTemplate } from "@/hooks/use-book-template";
 import type { Language } from "@/lib/i18n";
 import {
   articleRepository,
@@ -28,6 +29,7 @@ import {
   authorRepository,
   type Author,
 } from "@/repositories/authorRepository";
+import { bookRepository } from "@/repositories/bookRepository";
 import type { PreviewArticle } from "@/types/article";
 
 type ReviewStatus = Exclude<ArticleStatus, "draft">;
@@ -81,6 +83,7 @@ const copy = {
     errorDescription:
       "Unable to connect to the backend. Please confirm FastAPI is running.",
     retry: "Retry",
+    previewLoadError: "Unable to load the publication template.",
     loading: "Loading submissions",
   },
   zh: {
@@ -128,6 +131,7 @@ const copy = {
     errorTitle: "无法加载投稿",
     errorDescription: "无法连接后端。请确认 FastAPI 正在运行。",
     retry: "重试",
+    previewLoadError: "无法加载出版模板。",
     loading: "正在加载投稿",
   },
 } as const;
@@ -231,6 +235,12 @@ export function ReviewPage({
     "approve" | "reject" | "approveEdit" | "rejectEdit" | null
   >(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [bookTitle, setBookTitle] = useState("");
+  const {
+    reload: reloadTemplate,
+    status: templateStatus,
+    template,
+  } = useBookTemplate(bookId);
 
   useEffect(() => {
     let active = true;
@@ -239,10 +249,12 @@ export function ReviewPage({
       setIsLoading(true);
       setHasError(false);
       try {
-        const [loadedArticles, loadedAuthors] = await Promise.all([
+        const [loadedArticles, loadedAuthors, loadedBook] = await Promise.all([
           articleRepository.listSubmitted(bookId),
           authorRepository.list(bookId),
+          bookRepository.get(bookId),
         ]);
+        setBookTitle(loadedBook.title);
         const initialArticle =
           loadedArticles.find((article) => article.id === requestedArticleId) ??
           (requestedReviewView === "editRequests"
@@ -709,11 +721,24 @@ export function ReviewPage({
 
           <div className="xl:sticky xl:top-24">
             {previewArticle ? (
-              <LiveArticlePreview
-                article={previewArticle}
-                language={language}
-                readOnly
-              />
+              templateStatus === "error" ? (
+                <div className="rounded-xl border border-border bg-card p-6 text-center">
+                  <p className="text-sm text-muted-foreground">{pageCopy.previewLoadError}</p>
+                  <Button className="mt-4" onClick={reloadTemplate} variant="outline">
+                    <RefreshCw className="mr-2 size-4" />
+                    {pageCopy.retry}
+                  </Button>
+                </div>
+              ) : templateStatus === "ready" ? (
+                <LiveArticlePreview
+                  article={previewArticle}
+                  articlePageMode="single"
+                  bookTitle={bookTitle}
+                  language={language}
+                  readOnly
+                  template={template}
+                />
+              ) : null
             ) : null}
           </div>
         </div>

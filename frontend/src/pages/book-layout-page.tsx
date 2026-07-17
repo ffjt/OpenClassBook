@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
+import { PublicationPageFooter } from "@/components/publication-page-footer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,7 +49,11 @@ import { Select } from "@/components/ui/select";
 import { useBookTemplate } from "@/hooks/use-book-template";
 import type { Language } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { paginateArticle } from "@/components/author-editor/live-article-preview";
+import {
+  paginateArticle,
+  PublicationArticlePreview,
+  type PublicationPreviewArticle,
+} from "@/components/author-editor/live-article-preview";
 import {
   articleRepository,
   type Article,
@@ -74,7 +79,6 @@ import {
   publicationChromeFontFamily,
   type Template,
 } from "@/types/template";
-import { PublicationPageFooter } from "@/components/publication-page-footer";
 import { toast } from "sonner";
 
 type StructureSaveStatus = "idle" | "saving" | "saved" | "error";
@@ -629,8 +633,8 @@ export function BookLayoutPage({
           copy={pageCopy}
           focusedArticleId={focusedArticleId}
           articlePageMode={book.layout_article_page_mode}
-          articlePageModeStatus={articlePageModeStatus}
           language={language}
+          articlePageModeStatus={articlePageModeStatus}
           onAssetChanged={refreshBook}
           onArticlePreview={openArticlePreview}
           onArticlePageModeChange={persistArticlePageMode}
@@ -648,6 +652,7 @@ export function BookLayoutPage({
           copy={pageCopy}
           focusedArticleId={focusedArticleId}
           articlePageMode={book.layout_article_page_mode}
+          language={language}
           onBack={() => {
             setPreviewSectionId(null);
             setFocusedArticleId(null);
@@ -907,8 +912,8 @@ function ResourceManager({
   copy: pageCopy,
   focusedArticleId,
   articlePageMode,
-  articlePageModeStatus,
   language,
+  articlePageModeStatus,
   onAssetChanged,
   onArticlePreview,
   onArticlePageModeChange,
@@ -924,9 +929,9 @@ function ResourceManager({
   book: Book;
   copy: (typeof copy)[Language];
   focusedArticleId: number | null;
+  language: Language;
   articlePageMode: Book["layout_article_page_mode"];
   articlePageModeStatus: ArticlePageModeSaveStatus;
-  language: Language;
   onAssetChanged: () => Promise<void>;
   onArticlePreview: (articleId: number) => void;
   onArticlePageModeChange: (
@@ -1696,6 +1701,7 @@ function PublicationStructurePreview({
   copy: pageCopy,
   focusedArticleId,
   articlePageMode,
+  language,
   onBack,
   onPreview,
   previewSection,
@@ -1709,6 +1715,7 @@ function PublicationStructurePreview({
   articlePageMode: Book["layout_article_page_mode"];
   copy: (typeof copy)[Language];
   focusedArticleId: number | null;
+  language: Language;
   onBack: () => void;
   onPreview: (section: BookLayoutSection) => void;
   previewSection: BookLayoutSection | null;
@@ -1753,6 +1760,7 @@ function PublicationStructurePreview({
           copy={pageCopy}
           focusedArticleId={focusedArticleId}
           articlePageMode={articlePageMode}
+          language={language}
           section={previewSection}
           template={template}
         />
@@ -1811,6 +1819,7 @@ function SectionFullPreview({
   copy: pageCopy,
   focusedArticleId,
   articlePageMode,
+  language,
   section,
   template,
 }: {
@@ -1820,6 +1829,7 @@ function SectionFullPreview({
   articlePageMode: Book["layout_article_page_mode"];
   copy: (typeof copy)[Language];
   focusedArticleId: number | null;
+  language: Language;
   section: BookLayoutSection;
   template: Template;
 }) {
@@ -1832,9 +1842,12 @@ function SectionFullPreview({
         <ArticleSectionPreview
           articles={articles}
           authorNames={authorNames}
+          bookTitle={book.title}
           copy={pageCopy}
           focusedArticleId={focusedArticleId}
+          hasNumbering={book.number_mode !== "none"}
           articlePageMode={articlePageMode}
+          language={language}
           template={template}
         />
       ) : (
@@ -1907,16 +1920,22 @@ function PageSectionPreview({
 function ArticleSectionPreview({
   articles,
   authorNames,
+  bookTitle,
   copy: pageCopy,
   focusedArticleId,
+  hasNumbering,
   articlePageMode,
+  language,
   template,
 }: {
   articles: Article[];
   authorNames: Map<number, string>;
+  bookTitle: string;
   copy: (typeof copy)[Language];
   focusedArticleId: number | null;
+  hasNumbering: boolean;
   articlePageMode: Book["layout_article_page_mode"];
+  language: Language;
   template: Template;
 }) {
   const pagesRef = useRef<HTMLDivElement>(null);
@@ -1994,7 +2013,40 @@ function ArticleSectionPreview({
       </div>
       {pages.map(({ article, articlePageIndex, page }, pageIndex) => {
         const isFirstPage = articlePageIndex === 0;
-        const isMagazine = template.preset === "magazine";
+        const imageSettings = article.image_settings;
+        const sharedArticle: PublicationPreviewArticle = {
+          authorMeta:
+            authorNames.get(article.author_id) ??
+            `${pageCopy.author} #${article.author_id}`,
+          body: article.content || "",
+          id: article.id,
+          imagePage: imageSettings?.page ?? -1,
+          imagePosition: imageSettings?.position ?? { x: 50, y: 50 },
+          imageSize: imageSettings?.size ?? { width: 72, height: 32 },
+          imageUrl: article.image ?? "",
+          imageWrap: imageSettings?.wrap ?? "topBottom",
+          number: hasNumbering ? article.number : "",
+          subtitle: article.subtitle,
+          title: article.title,
+        };
+        const renderSharedPreview = Boolean(template);
+        if (renderSharedPreview) {
+          if (!isFirstPage) return null;
+          return (
+            <PublicationArticlePreview
+              article={sharedArticle}
+              articlePageMode={articlePageMode}
+              bookTitle={bookTitle}
+              compact
+              focused={focusedArticleId === article.id}
+              key={article.id}
+              language={language}
+              pageNumberOffset={pageIndex}
+              readOnly
+              template={template}
+            />
+          );
+        }
         const authorName =
           authorNames.get(article.author_id) ??
           `${pageCopy.author} #${article.author_id}`;
@@ -2026,7 +2078,6 @@ function ArticleSectionPreview({
                 }}
               >
                 <span>{template.headerText || "OpenClassBook"}</span>
-                {isMagazine ? <span>VOL. 01</span> : null}
               </header>
             ) : null}
             {isFirstPage ? (
@@ -2149,13 +2200,15 @@ function ArticleSectionPreview({
             ) : null}
 
             <PublicationPageFooter
-              color={template.themeColor}
+              footerColor={template.themeColor}
               footerText={template.footerText}
               pageMargin={template.pageMargin}
               pageNumber={pageIndex + 1}
+              pageNumberColor={template.accentColor}
               pageNumberPosition={template.pageNumberPosition}
               pageWidthMm={getPreviewPageWidthMm(template)}
               showFooter={template.showFooter}
+              showPageNumber={pageIndex > 0 && template.pageNumberPosition !== "hidden"}
             />
           </article>
         );

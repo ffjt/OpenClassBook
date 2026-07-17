@@ -10,10 +10,11 @@ import {
 import { Maximize2, Move } from "lucide-react";
 import { Rnd } from "react-rnd";
 
-import { useTemplate } from "@/hooks/use-template";
+import { PublicationPageFooter } from "@/components/publication-page-footer";
 import type { Language } from "@/lib/i18n";
 import type { ImageWrap, PreviewArticle } from "@/types/article";
 import {
+  getPublicationPageChrome,
   getFontFamilyStyle,
   publicationChromeFontFamily,
   type PageMargin,
@@ -51,9 +52,9 @@ const marginCapacity: Record<PageMargin, number> = {
 };
 
 const paperStyles = {
-  a4: { label: "A4", aspectRatio: "210 / 297", maxWidth: 540 },
-  a5: { label: "A5", aspectRatio: "148 / 210", maxWidth: 440 },
-  b5: { label: "B5", aspectRatio: "176 / 250", maxWidth: 480 },
+  a4: { label: "A4", aspectRatio: "210 / 297", maxWidth: 540, widthMm: 210 },
+  a5: { label: "A5", aspectRatio: "148 / 210", maxWidth: 440, widthMm: 148 },
+  b5: { label: "B5", aspectRatio: "176 / 250", maxWidth: 480, widthMm: 176 },
 } as const;
 
 const paperCapacity: Record<PageSize, number> = {
@@ -120,10 +121,17 @@ function getPageCapacities(template: Template, body: string) {
     1.12,
     Math.max(0.62, 1 - (template.titleSize - 24) / 90),
   );
+  // The preview body uses CSS multi-column layout. Pagination must reserve
+  // capacity for every column on the page, otherwise a two-column preview
+  // receives only one column's worth of text and spills prematurely.
+  const columnMultiplier = template.columns === 2 ? 2 : 1;
 
   return {
-    first: Math.max(90, Math.round(pageCapacity * 0.68 * titleScale)),
-    following: pageCapacity,
+    first: Math.max(
+      90,
+      Math.round(pageCapacity * 0.68 * titleScale * columnMultiplier),
+    ),
+    following: pageCapacity * columnMultiplier,
     line: Math.max(
       16,
       Math.round(
@@ -306,25 +314,42 @@ function findWrapInsertion(
   };
 }
 
-interface LiveArticlePreviewProps {
-  article: PreviewArticle;
+export interface PublicationPreviewArticle extends PreviewArticle {
+  authorMeta?: string;
+  id?: number | string;
+}
+
+interface PublicationArticlePreviewProps {
+  article: PublicationPreviewArticle;
+  articlePageMode: "flow" | "single";
+  bookTitle: string;
+  compact?: boolean;
+  focused?: boolean;
   language: Language;
   onImagePageChange?: (page: number) => void;
   onImagePositionChange?: (position: PreviewArticle["imagePosition"]) => void;
   onImageSizeChange?: (size: PreviewArticle["imageSize"]) => void;
+  pageNumberOffset?: number;
   readOnly?: boolean;
+  template: Template;
 }
 
-export function LiveArticlePreview({
+export function PublicationArticlePreview({
   article,
+  articlePageMode,
+  bookTitle,
+  compact = false,
+  focused = false,
   language,
   onImagePageChange,
   onImagePositionChange,
   onImageSizeChange,
+  pageNumberOffset = 0,
   readOnly = false,
-}: LiveArticlePreviewProps) {
-  const { template } = useTemplate();
+  template,
+}: PublicationArticlePreviewProps) {
   const copy = previewCopy[language];
+  const previewScale = compact ? 0.54 : 1;
   const paper =
     template.pageSize === "custom"
       ? {
@@ -334,6 +359,7 @@ export function LiveArticlePreview({
             560,
             Math.max(360, (template.customPageWidth / 210) * 540),
           ),
+          widthMm: template.customPageWidth,
         }
       : paperStyles[template.pageSize];
   const showNumber =
@@ -662,7 +688,7 @@ export function LiveArticlePreview({
               ? "1px solid #e2e8f0"
               : "none"
             : "1px solid rgb(96 165 250 / 0.7)",
-          borderRadius: `${template.imageRadius}px`,
+          borderRadius: `${template.imageRadius * previewScale}px`,
         }}
       >
         <img
@@ -700,7 +726,7 @@ export function LiveArticlePreview({
         className="break-words text-slate-950"
         style={{
           fontFamily: getFontFamilyStyle(template.titleFont),
-          fontSize: `${template.titleSize}px`,
+          fontSize: `${Math.max(10, template.titleSize * previewScale)}px`,
           fontWeight: template.titleBold ? 700 : 400,
           lineHeight: 1.25,
           textAlign: template.titleAlign,
@@ -714,7 +740,7 @@ export function LiveArticlePreview({
           className="mt-2 break-words text-slate-500"
           style={{
             fontFamily: getFontFamilyStyle(template.titleFont),
-            fontSize: `${Math.max(12, template.titleSize * 0.5)}px`,
+            fontSize: `${Math.max(compact ? 7 : 12, template.titleSize * 0.5 * previewScale)}px`,
             lineHeight: 1.4,
             textAlign: template.subtitleAlign,
           }}
@@ -724,11 +750,9 @@ export function LiveArticlePreview({
       )}
     </div>
   );
-  const isMagazine = template.preset === "magazine";
-
   return (
-    <section className="overflow-hidden rounded-xl border border-border bg-card shadow-xl">
-      <header className="flex h-12 items-center justify-between border-b border-border px-4">
+    <section className={compact ? "contents" : "overflow-hidden rounded-xl border border-border bg-card shadow-xl"} data-article-page-mode={articlePageMode}>
+      {!compact ? <header className="flex h-12 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2.5">
           <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.55)]" />
           <h2 className="text-xs font-semibold text-foreground">{copy.title}</h2>
@@ -744,9 +768,9 @@ export function LiveArticlePreview({
               ? "page"
               : copy.pages}
         </div>
-      </header>
+      </header> : null}
 
-      <div className="flex flex-col items-center gap-6 bg-muted/40 p-5 sm:p-8 xl:p-10">
+      <div className={compact ? "flex flex-col items-center gap-4" : "flex flex-col items-center gap-6 bg-muted/40 p-5 sm:p-8 xl:p-10"}>
         {article.imageUrl && !readOnly && (
           <p className="flex items-center gap-2 self-center text-[10px] font-medium text-muted-foreground">
             <Move className="size-3" />
@@ -755,7 +779,12 @@ export function LiveArticlePreview({
         )}
         {pages.map((page, pageIndex) => {
           const isFirstPage = pageIndex === 0;
-          const pageNumber = pageIndex + 1;
+          const pageNumber = pageNumberOffset + pageIndex + 1;
+          const chrome = getPublicationPageChrome({
+            bookTitle,
+            pageNumber,
+            template,
+          });
           const wrapInsertion = wrapInsertions[pageIndex] ?? {
             character: 0,
             line: 0,
@@ -764,11 +793,13 @@ export function LiveArticlePreview({
           return (
             <article
               aria-label={`${paper.label} ${copy.title} ${pageNumber}`}
-              className={`relative w-full bg-[#fffefa] text-slate-800 shadow-[0_20px_70px_rgba(0,0,0,0.48)] ring-1 ring-black/10 transition-all duration-200 ${page.showImage && isInteracting ? "z-10 overflow-visible" : "overflow-hidden"}`}
+              className={`relative w-full bg-[#fffefa] text-slate-800 shadow-[0_20px_70px_rgba(0,0,0,0.48)] ring-black/10 transition-all duration-200 ${focused && isFirstPage ? "ring-2 ring-blue-500/40" : "ring-1"} ${page.showImage && isInteracting ? "z-10 overflow-visible" : "overflow-hidden"}`}
+              data-article-first-page={isFirstPage ? article.id : undefined}
               key={pageNumber}
               style={{
                 aspectRatio: paper.aspectRatio,
-                maxWidth: `${paper.maxWidth}px`,
+                containerType: "inline-size",
+                maxWidth: `${compact ? Math.min(250, paper.maxWidth) : paper.maxWidth}px`,
                 padding: marginStyles[template.pageMargin],
               }}
             >
@@ -779,25 +810,25 @@ export function LiveArticlePreview({
                     pageContentRefs.current[pageIndex] = element;
                   }}
                 >
-                  {isFirstPage && template.showHeader && (
+                  {chrome.showHeader && (
                     <header
-                      className="mb-4 flex items-center justify-between border-b-2 pb-2 text-[8px] font-semibold tracking-[0.14em]"
+                      className="mb-4 flex items-center justify-between border-b-2 pb-2 font-semibold tracking-[0.14em]"
                       style={{
                         borderColor: template.accentColor,
                         color: template.themeColor,
+                        fontSize: `${8 * previewScale}px`,
                         fontFamily: publicationChromeFontFamily,
                       }}
                     >
-                      <span>{template.headerText || "OPEN CLASSBOOK"}</span>
-                      {isMagazine ? <span>VOL. 01</span> : null}
+                      <span>{chrome.headerText}</span>
                     </header>
                   )}
                   {isFirstPage &&
                     showNumber &&
                     template.numberPosition === "above" && (
                       <p
-                        className="mb-3 text-xs font-medium tracking-[0.16em] text-slate-500"
-                        style={{ textAlign: template.titleAlign }}
+                        className="mb-3 font-medium tracking-[0.16em] text-slate-500"
+                        style={{ fontSize: `${12 * previewScale}px`, textAlign: template.titleAlign }}
                       >
                         {article.number}
                       </p>
@@ -806,7 +837,7 @@ export function LiveArticlePreview({
                   {isFirstPage &&
                     (showNumber && template.numberPosition === "left" ? (
                       <div className="grid grid-cols-[auto_1fr] items-baseline gap-4">
-                        <span className="text-xs font-medium tracking-[0.12em] text-slate-500">
+                        <span className="font-medium tracking-[0.12em] text-slate-500" style={{ fontSize: `${12 * previewScale}px` }}>
                           {article.number}
                         </span>
                         {title}
@@ -823,17 +854,20 @@ export function LiveArticlePreview({
                     }}
                     style={{
                       columnCount: template.columns === 2 ? 2 : undefined,
-                      columnFill: template.columns === 2 ? "auto" : undefined,
+                      // Balance shorter pages (especially the title page) so
+                      // the second column does not look artificially empty.
+                      columnFill:
+                        template.columns === 2 ? "balance" : undefined,
                       columnGap: template.columns === 2 ? "1.5em" : undefined,
                       columnRule:
                         template.columns === 2
                           ? `1px solid ${template.accentColor}33`
                           : undefined,
                       fontFamily: getFontFamilyStyle(template.bodyFont),
-                      fontSize: `${template.bodySize}px`,
+                      fontSize: `${Math.max(7.5, template.bodySize * previewScale)}px`,
                       lineHeight: template.lineHeight,
                       marginTop: isFirstPage
-                        ? `${template.titleSpacing}px`
+                        ? `${template.titleSpacing * previewScale}px`
                         : 0,
                       pointerEvents:
                         article.imageWrap === "behindText" ? "none" : undefined,
@@ -842,6 +876,14 @@ export function LiveArticlePreview({
                       zIndex: 1,
                     }}
                   >
+                    {isFirstPage && template.showAuthorMeta && article.authorMeta ? (
+                      <p
+                        className="mb-2 font-semibold tracking-wide"
+                        style={{ color: template.accentColor }}
+                      >
+                        {article.authorMeta}
+                      </p>
+                    ) : null}
                     <div
                       aria-hidden="true"
                       className="pointer-events-none absolute inset-x-0 top-0 invisible"
@@ -911,23 +953,17 @@ export function LiveArticlePreview({
                   {page.showImage && renderImage(pageIndex)}
                 </div>
 
-                {template.pageNumberPosition !== "hidden" && (
-                  <footer
-                    className="flex shrink-0 pt-5 text-[10px] tracking-[0.14em] text-slate-400"
-                    style={{
-                      justifyContent:
-                        template.pageNumberPosition === "right"
-                          ? "flex-end"
-                          : "center",
-                    }}
-                  >
-                    {"\u2014"}{" "}
-                    {language === "zh"
-                      ? `${copy.page} ${pageNumber} \u9875`
-                      : `${copy.page} ${pageNumber}`}{" "}
-                    {"\u2014"}
-                  </footer>
-                )}
+                <PublicationPageFooter
+                  footerColor={template.themeColor}
+                  footerText={chrome.footerText}
+                  pageMargin={template.pageMargin}
+                  pageNumber={pageNumber}
+                  pageNumberColor={template.accentColor}
+                  pageNumberPosition={template.pageNumberPosition}
+                  pageWidthMm={paper.widthMm}
+                  showFooter={chrome.showFooter}
+                  showPageNumber={chrome.showPageNumber}
+                />
               </div>
             </article>
           );
@@ -936,3 +972,5 @@ export function LiveArticlePreview({
     </section>
   );
 }
+
+export const LiveArticlePreview = PublicationArticlePreview;

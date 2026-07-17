@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { useBookTemplate } from "@/hooks/use-book-template";
 import {
   Table,
   TableBody,
@@ -44,6 +45,7 @@ import {
   type Author,
   type AuthorPreview,
 } from "@/repositories/authorRepository";
+import { bookRepository } from "@/repositories/bookRepository";
 import type { PreviewArticle } from "@/types/article";
 
 interface AuthorsPageProps {
@@ -76,6 +78,7 @@ const copy = {
     removeConfirm: "Remove this author and all their articles?",
     error: "Unable to load authors.",
     retry: "Retry",
+    previewLoadError: "Unable to load the publication template.",
     loading: "Loading authors",
     back: "Back to authors",
     authorArticles: "Articles by",
@@ -117,6 +120,7 @@ const copy = {
     removeConfirm: "确定移除这位作者及其全部文章吗？",
     error: "无法加载作者。",
     retry: "重试",
+    previewLoadError: "无法加载出版模板。",
     loading: "正在加载作者",
     back: "返回作者列表",
     authorArticles: "作者文章",
@@ -189,6 +193,12 @@ export function AuthorsPage({
   const [expandedArticleId, setExpandedArticleId] = useState<number | null>(null);
   const [busyArticleId, setBusyArticleId] = useState<number | null>(null);
   const [actionError, setActionError] = useState(false);
+  const [bookTitle, setBookTitle] = useState("");
+  const {
+    reload: reloadTemplate,
+    status: templateStatus,
+    template,
+  } = useBookTemplate(bookId);
 
   useEffect(() => {
     let active = true;
@@ -197,11 +207,15 @@ export function AuthorsPage({
 
     async function loadAuthors() {
       try {
-        const loadedAuthors = await authorRepository.list(bookId);
+        const [loadedAuthors, loadedBook] = await Promise.all([
+          authorRepository.list(bookId),
+          bookRepository.get(bookId),
+        ]);
         const loadedPreviews = await Promise.all(
           loadedAuthors.map((author) => authorRepository.preview(author.id)),
         );
         if (!active) return;
+        setBookTitle(loadedBook.title);
         setAuthors(loadedAuthors);
         setPreviews(
           new Map(
@@ -473,11 +487,24 @@ export function AuthorsPage({
                           {isExpanded ? (
                             <div className="mt-4 border-t border-border pt-5">
                               <div className="mx-auto max-w-2xl">
-                                <LiveArticlePreview
-                                  article={toPreviewArticle(article)}
-                                  language={language}
-                                  readOnly
-                                />
+                                {templateStatus === "error" ? (
+                                  <div className="rounded-xl border border-border bg-card p-6 text-center">
+                                    <p className="text-sm text-muted-foreground">{pageCopy.previewLoadError}</p>
+                                    <Button className="mt-4" onClick={reloadTemplate} variant="outline">
+                                      <RefreshCw className="mr-2 size-4" />
+                                      {pageCopy.retry}
+                                    </Button>
+                                  </div>
+                                ) : templateStatus === "ready" ? (
+                                  <LiveArticlePreview
+                                    article={toPreviewArticle(article)}
+                                    articlePageMode="single"
+                                    bookTitle={bookTitle}
+                                    language={language}
+                                    readOnly
+                                    template={template}
+                                  />
+                                ) : null}
                               </div>
                             </div>
                           ) : null}

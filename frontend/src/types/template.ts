@@ -74,3 +74,22 @@ export function getFontFamilyStyle(font: FontSelection) {
   const safeFamily = font.family.replace(/["\\]/g, "");
   return `"${safeFamily}", sans-serif`;
 }
+
+export function getPublicationPageChrome({
+  bookTitle,
+  pageNumber,
+  template,
+}: {
+  bookTitle: string;
+  pageNumber: number;
+  template: Template;
+}) {
+  return {
+    footerText: template.footerText || "OpenClassBook",
+    headerText: template.headerText || bookTitle,
+    showFooter: template.showFooter,
+    showHeader: template.showHeader,
+    showPageNumber:
+      pageNumber > 1 && template.pageNumberPosition !== "hidden",
+  };
+}
