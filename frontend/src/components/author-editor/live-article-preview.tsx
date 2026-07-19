@@ -17,6 +17,7 @@ import { getTemplateAssetUrl } from "@/mock/template-catalog";
 import {
   getPublicationPageChrome,
   getFontFamilyStyle,
+  getTemplateTitleBackdropStyle,
   publicationChromeFontFamily,
   type PageMargin,
   type PageSize,
@@ -1239,6 +1240,7 @@ export function PublicationArticlePreview({
       <h2
         className="break-words text-slate-950"
         style={{
+          ...getTemplateTitleBackdropStyle(template.templateId),
           fontFamily: getFontFamilyStyle(template.titleFont),
           fontSize: `${Math.max(10, template.titleSize * previewScale)}px`,
           fontWeight: template.titleBold ? 700 : 400,

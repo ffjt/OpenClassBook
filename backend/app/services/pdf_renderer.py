@@ -37,6 +37,11 @@ B5 = (176 * mm, 250 * mm)
 TEMPLATE_ASSET_ROOT = (
     Path(__file__).resolve().parents[3] / "frontend" / "public" / "templates"
 )
+TITLE_BACKDROP_COLORS = {
+    "spring-blossom": "#ffe2ea",
+    "summer-forest": "#dcefdc",
+    "graduation": "#e5e1ff",
+}
 
 
 def _draw_chrome_chip(
@@ -179,6 +184,24 @@ class QuoteParagraph(Paragraph):
         canvas.setStrokeColor(self.style.borderColor)
         canvas.setLineWidth(1.5)
         canvas.line(0, 0, 0, self.height)
+        canvas.restoreState()
+        super().draw()
+
+
+class TitleBackdropParagraph(Paragraph):
+    """Article title with a restrained translucent reading surface."""
+
+    def __init__(self, text: str, style: ParagraphStyle, backdrop_color: str) -> None:
+        super().__init__(text, style)
+        self.backdrop_color = backdrop_color
+
+    def draw(self) -> None:
+        canvas = self.canv
+        canvas.saveState()
+        if hasattr(canvas, "setFillAlpha"):
+            canvas.setFillAlpha(0.78)
+        canvas.setFillColor(colors.HexColor(self.backdrop_color))
+        canvas.roundRect(0, -4, self.width, self.height + 8, 5, stroke=0, fill=1)
         canvas.restoreState()
         super().draw()
 
@@ -604,7 +627,16 @@ class PdfRenderer:
                         Spacer(1, 1.5 * size_scale),
                     ]
                 )
-            opening.append(Paragraph(escape(article.title), styles["article_title"]))
+            title_backdrop = TITLE_BACKDROP_COLORS.get(document.template.template_id)
+            opening.append(
+                TitleBackdropParagraph(
+                    escape(article.title),
+                    styles["article_title"],
+                    title_backdrop,
+                )
+                if title_backdrop
+                else Paragraph(escape(article.title), styles["article_title"])
+            )
             subtitle = (
                 document.template.fixed_subtitle
                 if document.template.subtitle_mode == "fixed"
