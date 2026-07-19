@@ -530,6 +530,15 @@ export function FormatPanel({
             />
           </div>
         </ControlRow>
+        <ControlRow htmlFor="quote-style" label={copy.fields.quoteStyle}>
+          <Switch
+            aria-label={copy.fields.quoteStyle}
+            checked={settings.quoteStyle}
+            className="ml-auto"
+            id="quote-style"
+            onChange={(event) => onChange("quoteStyle", event.target.checked)}
+          />
+        </ControlRow>
       </PanelSection>
 
       <PanelSection icon={Image} title={copy.sections.images}>
@@ -753,15 +762,6 @@ export function FormatPanel({
             className="ml-auto"
             id="image-border"
             onChange={(event) => onChange("imageBorder", event.target.checked)}
-          />
-        </ControlRow>
-        <ControlRow htmlFor="quote-style" label={copy.fields.quoteStyle}>
-          <Switch
-            aria-label={copy.fields.quoteStyle}
-            checked={settings.quoteStyle}
-            className="ml-auto"
-            id="quote-style"
-            onChange={(event) => onChange("quoteStyle", event.target.checked)}
           />
         </ControlRow>
       </PanelSection>

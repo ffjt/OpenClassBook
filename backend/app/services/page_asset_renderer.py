@@ -363,36 +363,40 @@ def _page_chrome_overlay(
             footer_text,
         )
     overlay.setFillColor(colors.HexColor(template.accent_color))
-    overlay.setFont(normal_font, 9)
+    overlay.setFont(bold_font, 10)
     if page_number <= 1 or template.page_number_position == "hidden":
         overlay.save()
         output.seek(0)
         return PdfReader(output).pages[0]
     y = max(8, margin_y / 2)
     if template.page_number_position == "right":
+        page_number_label = f"{page_number:02d}"
         _draw_chrome_chip(
             overlay,
-            text=str(page_number),
+            text=page_number_label,
             x=page_width - margin_x,
             y=y,
-            font_name=normal_font,
-            font_size=9,
+            font_name=bold_font,
+            font_size=10,
             surface_color=template.background_color,
             align="right",
+            stroke_color=template.accent_color,
         )
-        overlay.drawRightString(page_width - margin_x, y, str(page_number))
+        overlay.drawRightString(page_width - margin_x, y, page_number_label)
     else:
+        page_number_label = f"{page_number:02d}"
         _draw_chrome_chip(
             overlay,
-            text=str(page_number),
+            text=page_number_label,
             x=page_width / 2,
             y=y,
-            font_name=normal_font,
-            font_size=9,
+            font_name=bold_font,
+            font_size=10,
             surface_color=template.background_color,
             align="center",
+            stroke_color=template.accent_color,
         )
-        overlay.drawCentredString(page_width / 2, y, str(page_number))
+        overlay.drawCentredString(page_width / 2, y, page_number_label)
     overlay.save()
     output.seek(0)
     return PdfReader(output).pages[0]

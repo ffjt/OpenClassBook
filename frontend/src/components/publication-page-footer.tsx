@@ -38,6 +38,7 @@ export function PublicationPageFooter({
   showFooter,
 }: PublicationPageFooterProps) {
   if (!showFooter && !showPageNumber) return null;
+  const pageNumberLabel = String(pageNumber).padStart(2, "0");
   const chipColor = /^#[0-9a-f]{6}$/i.test(surfaceColor)
     ? `${surfaceColor}dc`
     : "rgba(255, 254, 250, 0.86)";
@@ -73,10 +74,17 @@ export function PublicationPageFooter({
           style={{
             backgroundColor: chipColor,
             color: pageNumberColor,
-            fontSize: pointSizeInContainerWidth(9, pageWidthMm),
+            border: `1px solid ${pageNumberColor ? `${pageNumberColor}99` : "currentColor"}`,
+            fontFamily: 'Arial, "Helvetica Neue", sans-serif',
+            fontSize: pointSizeInContainerWidth(10, pageWidthMm),
+            fontVariantNumeric: "tabular-nums",
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            minWidth: "3.2em",
+            textAlign: "center",
           }}
         >
-          {pageNumber}
+          {pageNumberLabel}
         </span>
       ) : null}
     </footer>

@@ -49,6 +49,7 @@ def _draw_chrome_chip(
     font_size: float,
     surface_color: str,
     align: str = "left",
+    stroke_color: str | None = None,
 ) -> None:
     """Draw a compact reading aid without creating a full-width footer bar."""
     width = pdfmetrics.stringWidth(text, font_name, font_size)
@@ -63,6 +64,10 @@ def _draw_chrome_chip(
     if hasattr(target_canvas, "setFillAlpha"):
         target_canvas.setFillAlpha(0.86)
     target_canvas.setFillColor(colors.HexColor(surface_color))
+    if stroke_color:
+        target_canvas.setStrokeColor(colors.HexColor(stroke_color))
+        if hasattr(target_canvas, "setStrokeAlpha"):
+            target_canvas.setStrokeAlpha(0.6)
     target_canvas.roundRect(
         left,
         y - 2.5,
@@ -70,7 +75,7 @@ def _draw_chrome_chip(
         font_size + 5,
         3,
         fill=1,
-        stroke=0,
+        stroke=1 if stroke_color else 0,
     )
     target_canvas.restoreState()
 
@@ -418,22 +423,24 @@ class PdfRenderer:
                 canvas.restoreState()
                 return
             canvas.setFillColor(colors.HexColor(document.template.accent_color))
-            canvas.setFont(chrome_font, 9)
+            canvas.setFont(chrome_bold_font, 10)
             x = page_size[0] / 2 if position == "center" else page_size[0] - margin_x
+            page_number_label = f"{doc.page:02d}"
             _draw_chrome_chip(
                 canvas,
-                text=str(doc.page),
+                text=page_number_label,
                 x=x,
                 y=max(8, margin_y / 2),
-                font_name=chrome_font,
-                font_size=9,
+                font_name=chrome_bold_font,
+                font_size=10,
                 surface_color=document.template.background_color,
                 align=position,
+                stroke_color=document.template.accent_color,
             )
             if position == "center":
-                canvas.drawCentredString(x, max(8, margin_y / 2), str(doc.page))
+                canvas.drawCentredString(x, max(8, margin_y / 2), page_number_label)
             else:
-                canvas.drawRightString(x, max(8, margin_y / 2), str(doc.page))
+                canvas.drawRightString(x, max(8, margin_y / 2), page_number_label)
             canvas.restoreState()
 
         if use_columns:
