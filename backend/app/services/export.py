@@ -49,6 +49,7 @@ DEFAULT_SECTIONS = [
         "name": None,
         "file": None,
     },
+    {"id": "ending", "kind": "page", "preset": "ending", "name": None, "file": None},
     {
         "id": "back_cover",
         "kind": "page",
@@ -60,6 +61,7 @@ DEFAULT_SECTIONS = [
 
 SECTION_LABELS = {
     "cover": ("Cover", "封面"),
+    "chapter": ("Chapter", "章节页"),
     "preface": ("Preface", "前言"),
     "articles": ("Main content", "正文"),
     "principal_message": ("Principal's message", "校长寄语"),
@@ -67,6 +69,7 @@ SECTION_LABELS = {
     "afterword": ("Afterword", "后记"),
     "closing": ("Closing remarks", "结语"),
     "acknowledgement": ("Acknowledgements", "致谢"),
+    "ending": ("Ending", "尾页"),
     "back_cover": ("Back cover", "封底"),
 }
 
@@ -399,8 +402,10 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
         custom_page_width=_number(page.get("custom_width"), 210),
         custom_page_height=_number(page.get("custom_height"), 297),
         preset=preset,
+        template_id=str(presentation.get("template_id", "spring-blossom")),
         theme_color=_color(presentation.get("theme_color"), "#202124"),
         accent_color=_color(presentation.get("accent_color"), "#1f2937"),
+        background_color=_color(presentation.get("background_color"), "#fffefa"),
         columns=2 if presentation.get("columns") == 2 else 1,
         article_page_mode=(
             "flow"

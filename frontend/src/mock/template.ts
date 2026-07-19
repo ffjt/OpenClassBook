@@ -1,9 +1,11 @@
 import type { Template } from "@/types/template";
 
 export const defaultTemplate: Template = {
+  templateId: "spring-blossom",
+  backgroundColor: "#F5D7D7",
   preset: "collection",
   themeColor: "#1f2937",
-  accentColor: "#dc2626",
+  accentColor: "#805200",
   columns: 1,
   showHeader: false,
   headerText: "",

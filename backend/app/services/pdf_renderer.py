@@ -1,5 +1,6 @@
 import base64
 import binascii
+import re
 from dataclasses import dataclass
 from html import escape
 from io import BytesIO
@@ -20,6 +21,7 @@ from reportlab.platypus import (
     HRFlowable,
     Image,
     KeepTogether,
+    NextPageTemplate,
     PageBreak,
     PageTemplate,
     Paragraph,
@@ -32,6 +34,45 @@ from app.models.book import Book
 from app.schemas.export import ExportTemplateInfo
 
 B5 = (176 * mm, 250 * mm)
+TEMPLATE_ASSET_ROOT = (
+    Path(__file__).resolve().parents[3] / "frontend" / "public" / "templates"
+)
+
+
+def _draw_chrome_chip(
+    target_canvas: Any,
+    *,
+    text: str,
+    x: float,
+    y: float,
+    font_name: str,
+    font_size: float,
+    surface_color: str,
+    align: str = "left",
+) -> None:
+    """Draw a compact reading aid without creating a full-width footer bar."""
+    width = pdfmetrics.stringWidth(text, font_name, font_size)
+    padding_x = 4
+    if align == "center":
+        left = x - width / 2 - padding_x
+    elif align == "right":
+        left = x - width - padding_x
+    else:
+        left = x - padding_x
+    target_canvas.saveState()
+    if hasattr(target_canvas, "setFillAlpha"):
+        target_canvas.setFillAlpha(0.86)
+    target_canvas.setFillColor(colors.HexColor(surface_color))
+    target_canvas.roundRect(
+        left,
+        y - 2.5,
+        width + padding_x * 2,
+        font_size + 5,
+        3,
+        fill=1,
+        stroke=0,
+    )
+    target_canvas.restoreState()
 
 
 @dataclass(frozen=True)
@@ -41,6 +82,35 @@ class PdfDocumentData:
     author_names: dict[int, str]
     sections: list[dict[str, Any]]
     template: ExportTemplateInfo
+
+
+class PageBackground(Flowable):
+    """Zero-height full-page background drawn before the section content."""
+
+    def __init__(self, path: Path, page_size: tuple[float, float]) -> None:
+        super().__init__()
+        self.path = path
+        self.page_size = page_size
+
+    def wrap(
+        self, _available_width: float, _available_height: float
+    ) -> tuple[float, float]:
+        return 0, 0
+
+    def drawOn(self, canvas: Any, _x: float, _y: float, _sW: float = 0) -> None:
+        if not self.path.is_file():
+            return
+        canvas.saveState()
+        canvas.drawImage(
+            str(self.path),
+            0,
+            0,
+            width=self.page_size[0],
+            height=self.page_size[1],
+            preserveAspectRatio=False,
+            mask="auto",
+        )
+        canvas.restoreState()
 
 
 class PublicationImage(Flowable):
@@ -139,66 +209,123 @@ class PdfRenderer:
         title_font, title_bold_font = _register_fonts(document.template.title_font)
         chrome_font, chrome_bold_font = _register_fonts("sans-serif")
         page_size = _page_size(document.template)
-        margin = {
-            "narrow": 15 * mm,
-            "normal": 22 * mm,
-            "wide": 28 * mm,
-        }.get(document.template.page_margin, 22 * mm)
+        size_scale = _preview_size_scale(document.template, page_size[0])
+        margin_ratio = {
+            "narrow": (0.08, 0.07),
+            "normal": (0.11, 0.09),
+            "wide": (0.15, 0.12),
+        }.get(document.template.page_margin, (0.11, 0.09))
+        margin_x = page_size[0] * margin_ratio[0]
+        margin_y = page_size[0] * margin_ratio[1]
         column_gap = 6 * mm
-        column_width = (page_size[0] - 2 * margin - column_gap) / 2
-        column_height = page_size[1] - 2 * margin
+        column_width = (page_size[0] - 2 * margin_x - column_gap) / 2
+        column_height = page_size[1] - 2 * margin_y
         use_columns = document.template.columns == 2 and all(
             section.get("kind") == "articles" for section in document.sections
         )
         if use_columns:
+            header_reserve = 12 * mm if document.template.show_header else 0
+            first_article = document.articles[0] if document.articles else None
+            title_size = document.template.title_size * size_scale
+            opener_height = title_size * 1.25
+            if (
+                first_article is not None
+                and first_article.number
+                and document.template.numbering_style != "hidden"
+            ):
+                opener_height += (
+                    max(document.template.font_size * size_scale, 12 * size_scale)
+                    + 1.5 * size_scale
+                )
+            first_subtitle = (
+                document.template.fixed_subtitle
+                if document.template.subtitle_mode == "fixed"
+                else getattr(first_article, "subtitle", "")
+                if document.template.subtitle_mode == "free"
+                else ""
+            )
+            if first_subtitle:
+                opener_height += (
+                    max(title_size * 0.5, 12 * size_scale) * 1.4 + 4 * size_scale
+                )
+            opener_height += document.template.title_spacing * size_scale
             pdf = BaseDocTemplate(
                 str(destination),
                 pagesize=page_size,
-                leftMargin=margin,
-                rightMargin=margin,
-                topMargin=margin,
-                bottomMargin=margin,
+                leftMargin=margin_x,
+                rightMargin=margin_x,
+                topMargin=margin_y,
+                bottomMargin=margin_y,
                 title=document.book.title,
                 author=document.book.owner_name,
                 creator="OpenClassBook",
             )
             pdf.addPageTemplates(
-                PageTemplate(
-                    id="magazine",
-                    frames=[
-                        Frame(
-                            margin,
-                            margin,
-                            column_width,
-                            column_height,
-                            id="magazine-left",
-                            leftPadding=0,
-                            rightPadding=0,
-                            topPadding=0,
-                            bottomPadding=0,
-                        ),
-                        Frame(
-                            margin + column_width + column_gap,
-                            margin,
-                            column_width,
-                            column_height,
-                            id="magazine-right",
-                            leftPadding=0,
-                            rightPadding=0,
-                            topPadding=0,
-                            bottomPadding=0,
-                        ),
-                    ],
-                )
+                [
+                    PageTemplate(
+                        id="magazine-first",
+                        frames=[
+                            Frame(
+                                margin_x,
+                                margin_y,
+                                column_width,
+                                column_height,
+                                id="magazine-left",
+                                leftPadding=0,
+                                rightPadding=0,
+                                topPadding=header_reserve,
+                                bottomPadding=0,
+                            ),
+                            Frame(
+                                margin_x + column_width + column_gap,
+                                margin_y,
+                                column_width,
+                                column_height,
+                                id="magazine-right",
+                                leftPadding=0,
+                                rightPadding=0,
+                                topPadding=header_reserve + opener_height,
+                                bottomPadding=0,
+                            ),
+                        ],
+                    ),
+                    PageTemplate(
+                        id="magazine",
+                        frames=[
+                            Frame(
+                                margin_x,
+                                margin_y,
+                                column_width,
+                                column_height,
+                                id="magazine-left",
+                                leftPadding=0,
+                                rightPadding=0,
+                                topPadding=header_reserve,
+                                bottomPadding=0,
+                            ),
+                            Frame(
+                                margin_x + column_width + column_gap,
+                                margin_y,
+                                column_width,
+                                column_height,
+                                id="magazine-right",
+                                leftPadding=0,
+                                rightPadding=0,
+                                topPadding=header_reserve,
+                                bottomPadding=0,
+                            ),
+                        ],
+                    ),
+                ]
             )
         else:
             pdf = SimpleDocTemplate(
                 str(destination),
                 pagesize=page_size,
-                leftMargin=margin,
-                rightMargin=margin,
-                topMargin=margin,
-                bottomMargin=margin,
+                leftMargin=margin_x,
+                rightMargin=margin_x,
+                topMargin=margin_y,
+                bottomMargin=margin_y,
                 title=document.book.title,
                 author=document.book.owner_name,
                 creator="OpenClassBook",
@@ -209,15 +336,14 @@ class PdfRenderer:
             body_bold_font,
             title_font,
             title_bold_font,
+            size_scale,
         )
         story: list[Any] = []
-        for section in document.sections:
-            if story:
-                story.append(
-                    PageBreak()
-                    if not use_columns
-                    else Spacer(1, 4 * mm)
-                )
+        if use_columns:
+            story.append(NextPageTemplate("magazine"))
+        for section_index, section in enumerate(document.sections):
+            if section_index:
+                story.append(PageBreak() if not use_columns else Spacer(1, 4 * mm))
             if section["kind"] == "articles":
                 self._append_articles(
                     story,
@@ -225,36 +351,67 @@ class PdfRenderer:
                     styles,
                     column_width if use_columns else pdf.width,
                     column_height if use_columns else pdf.height,
+                    size_scale,
                 )
             else:
                 self._append_page_section(story, section, document, styles)
 
         page_count = 0
+        article_background = _template_asset_path(
+            document.template.template_id, "article_background"
+        )
 
         def draw_page_chrome(canvas: Any, doc: Any) -> None:
             nonlocal page_count
             page_count = max(page_count, doc.page)
             canvas.saveState()
+            if document.template.background_color.lower() != "#fffefa":
+                canvas.setFillColor(colors.HexColor(document.template.background_color))
+                canvas.rect(0, 0, page_size[0], page_size[1], fill=1, stroke=0)
+            if article_background.is_file():
+                canvas.drawImage(
+                    str(article_background),
+                    0,
+                    0,
+                    width=page_size[0],
+                    height=page_size[1],
+                    preserveAspectRatio=False,
+                    mask="auto",
+                )
+            canvas.restoreState()
+            canvas.saveState()
             if include_page_chrome and document.template.show_header:
-                header_y = page_size[1] - margin + 5
+                header_y = page_size[1] - margin_y + 5
                 canvas.setStrokeColor(colors.HexColor(document.template.accent_color))
                 canvas.setLineWidth(1.2)
-                canvas.line(margin, header_y - 4, page_size[0] - margin, header_y - 4)
+                canvas.line(
+                    margin_x, header_y - 4, page_size[0] - margin_x, header_y - 4
+                )
                 canvas.setFillColor(colors.HexColor(document.template.theme_color))
                 canvas.setFont(chrome_bold_font, 8)
                 canvas.drawString(
-                    margin,
+                    margin_x,
                     header_y + 1,
                     document.template.header_text or document.book.title,
                 )
             if include_page_chrome and document.template.show_footer:
-                footer_y = max(8, margin / 2)
+                footer_y = max(8, margin_y / 2)
+                footer_text = document.template.footer_text or "OpenClassBook"
+                _draw_chrome_chip(
+                    canvas,
+                    text=footer_text,
+                    x=margin_x,
+                    y=footer_y,
+                    font_name=chrome_font,
+                    font_size=8,
+                    surface_color=document.template.background_color,
+                )
                 canvas.setFillColor(colors.HexColor(document.template.theme_color))
                 canvas.setFont(chrome_font, 8)
                 canvas.drawString(
-                    margin,
+                    margin_x,
                     footer_y,
-                    document.template.footer_text or "OpenClassBook",
+                    footer_text,
                 )
             position = document.template.page_number_position
             if not include_page_numbers or position == "hidden" or doc.page == 1:
@@ -262,15 +419,26 @@ class PdfRenderer:
                 return
             canvas.setFillColor(colors.HexColor(document.template.accent_color))
             canvas.setFont(chrome_font, 9)
-            x = page_size[0] / 2 if position == "center" else page_size[0] - margin
+            x = page_size[0] / 2 if position == "center" else page_size[0] - margin_x
+            _draw_chrome_chip(
+                canvas,
+                text=str(doc.page),
+                x=x,
+                y=max(8, margin_y / 2),
+                font_name=chrome_font,
+                font_size=9,
+                surface_color=document.template.background_color,
+                align=position,
+            )
             if position == "center":
-                canvas.drawCentredString(x, max(8, margin / 2), str(doc.page))
+                canvas.drawCentredString(x, max(8, margin_y / 2), str(doc.page))
             else:
-                canvas.drawRightString(x, max(8, margin / 2), str(doc.page))
+                canvas.drawRightString(x, max(8, margin_y / 2), str(doc.page))
             canvas.restoreState()
 
         if use_columns:
-            pdf.pageTemplates[0].onPage = draw_page_chrome
+            for page_template in pdf.pageTemplates:
+                page_template.onPage = draw_page_chrome
             pdf.build(story)
         else:
             pdf.build(
@@ -289,6 +457,17 @@ class PdfRenderer:
     ) -> None:
         preset = section.get("preset")
         label = _section_label(section)
+        asset_kind = {
+            "cover": "cover",
+            "back_cover": "cover_back",
+            "ending": "ending",
+        }.get(str(preset), "chapter")
+        story.append(
+            PageBackground(
+                _template_asset_path(document.template.template_id, asset_kind),
+                _page_size(document.template),
+            )
+        )
         if preset == "cover":
             story.extend(
                 [
@@ -336,10 +515,15 @@ class PdfRenderer:
         styles: dict[str, ParagraphStyle],
         content_width: float,
         content_height: float,
+        size_scale: float,
     ) -> None:
         for index, article in enumerate(document.articles):
             if index and document.template.article_page_mode == "single":
+                if document.template.columns == 2:
+                    story.append(NextPageTemplate("magazine-first"))
                 story.append(PageBreak())
+                if document.template.columns == 2:
+                    story.append(NextPageTemplate("magazine"))
 
             paragraphs: list[Paragraph] = []
             normal_lines: list[str] = []
@@ -410,7 +594,7 @@ class PdfRenderer:
                 opening.extend(
                     [
                         Paragraph(escape(article.number), styles["number"]),
-                        Spacer(1, 4),
+                        Spacer(1, 1.5 * size_scale),
                     ]
                 )
             opening.append(Paragraph(escape(article.title), styles["article_title"]))
@@ -423,32 +607,38 @@ class PdfRenderer:
             )
             if subtitle:
                 opening.extend(
-                    [Spacer(1, 4), Paragraph(escape(subtitle), styles["subtitle"])]
-                )
-            author = document.author_names.get(article.author_id)
-            if author and document.template.show_author_meta:
-                opening.extend(
                     [
-                        Spacer(1, 3),
-                        Paragraph(escape(author), styles["author"]),
+                        Spacer(1, 4 * size_scale),
+                        Paragraph(escape(subtitle), styles["subtitle"]),
                     ]
                 )
+            author = document.author_names.get(article.author_id)
             if image is not None or paragraphs:
-                opening.append(Spacer(1, document.template.title_spacing))
+                opening.append(Spacer(1, document.template.title_spacing * size_scale))
             if image is not None:
                 opening.append(image)
                 if paragraphs:
-                    opening.append(Spacer(1, max(6, document.template.font_size * 0.8)))
-            if paragraphs:
-                opening.append(paragraphs[0])
+                    opening.append(
+                        Spacer(
+                            1, max(6, document.template.font_size * 0.8) * size_scale
+                        )
+                    )
+                    opening.append(paragraphs.pop(0))
 
             story.append(KeepTogether(opening))
+            if author and document.template.show_author_meta:
+                story.extend(
+                    [
+                        Paragraph(escape(author), styles["author"]),
+                        Spacer(1, 7 * size_scale),
+                    ]
+                )
             paragraph_gap = (
                 0
                 if document.template.first_line_indent > 0
-                else max(4, document.template.font_size * 0.45)
+                else max(4, document.template.font_size * 0.45) * size_scale
             )
-            for paragraph in paragraphs[1:]:
+            for paragraph in paragraphs:
                 if paragraph_gap:
                     story.append(Spacer(1, paragraph_gap))
                 story.append(paragraph)
@@ -460,7 +650,10 @@ def _styles(
     body_bold_font: str,
     title_font: str,
     title_bold_font: str,
+    size_scale: float,
 ) -> dict[str, ParagraphStyle]:
+    body_size = template.font_size * size_scale
+    title_size = template.title_size * size_scale
     alignment = {"left": TA_LEFT, "center": TA_CENTER, "right": TA_RIGHT}
     body_alignment = TA_JUSTIFY if template.body_justify else TA_LEFT
     theme_color = colors.HexColor(template.theme_color)
@@ -513,8 +706,8 @@ def _styles(
         "number": ParagraphStyle(
             "ArticleNumber",
             fontName=body_bold_font,
-            fontSize=max(template.font_size * 0.8, 9),
-            leading=max(template.font_size, 12),
+            fontSize=max(body_size * 0.8, 9 * size_scale),
+            leading=max(body_size, 12 * size_scale),
             alignment=alignment.get(template.title_align, TA_CENTER),
             textColor=accent_color,
             wordWrap="CJK",
@@ -522,16 +715,16 @@ def _styles(
         "article_title": ParagraphStyle(
             "ArticleTitle",
             fontName=title_bold_font if template.title_bold else title_font,
-            fontSize=template.title_size,
-            leading=max(template.title_size * 1.18, template.title_size + 3),
+            fontSize=title_size,
+            leading=title_size * 1.25,
             alignment=alignment.get(template.title_align, TA_CENTER),
             wordWrap="CJK",
         ),
         "subtitle": ParagraphStyle(
             "ArticleSubtitle",
             fontName=title_font,
-            fontSize=max(template.title_size * 0.5, 10),
-            leading=max(template.title_size * 0.65, 13),
+            fontSize=max(title_size * 0.5, 12 * size_scale),
+            leading=max(title_size * 0.5, 12 * size_scale) * 1.4,
             alignment=alignment.get(template.subtitle_align, TA_CENTER),
             textColor=colors.HexColor("#73777f"),
             wordWrap="CJK",
@@ -539,8 +732,8 @@ def _styles(
         "author": ParagraphStyle(
             "ArticleAuthor",
             fontName=body_bold_font,
-            fontSize=max(template.font_size * 0.82, 9),
-            leading=max(template.font_size, 12),
+            fontSize=body_size,
+            leading=body_size * template.line_height,
             alignment=alignment.get(template.title_align, TA_CENTER),
             textColor=theme_color,
             wordWrap="CJK",
@@ -548,10 +741,10 @@ def _styles(
         "body": ParagraphStyle(
             "ArticleBody",
             fontName=body_font,
-            fontSize=template.font_size,
-            leading=template.font_size * template.line_height,
+            fontSize=body_size,
+            leading=body_size * template.line_height,
             alignment=body_alignment,
-            firstLineIndent=template.font_size * template.first_line_indent,
+            firstLineIndent=body_size * template.first_line_indent,
             textColor=theme_color,
             wordWrap="CJK",
             allowWidows=0,
@@ -562,10 +755,10 @@ def _styles(
             parent=ParagraphStyle(
                 "ArticleQuoteBase",
                 fontName=body_font,
-                fontSize=template.font_size,
-                leading=template.font_size * template.line_height,
+                fontSize=body_size,
+                leading=body_size * template.line_height,
             ),
-            leftIndent=8,
+            leftIndent=body_size * 0.7,
             borderPadding=0,
             borderWidth=0,
             borderColor=accent_color,
@@ -578,6 +771,22 @@ def _styles(
     }
 
 
+def _template_asset_path(template_id: str, asset_kind: str) -> Path:
+    if not template_id:
+        return TEMPLATE_ASSET_ROOT / "__none__" / f"{asset_kind}.png"
+    safe_template_id = (
+        template_id if re.fullmatch(r"[a-z0-9-]+", template_id) else "spring-blossom"
+    )
+    safe_asset_kind = asset_kind if asset_kind in {
+        "cover",
+        "cover_back",
+        "chapter",
+        "article_background",
+        "ending",
+    } else "article_background"
+    return TEMPLATE_ASSET_ROOT / safe_template_id / f"{safe_asset_kind}.png"
+
+
 def _page_size(template: ExportTemplateInfo) -> tuple[float, float]:
     if template.page_size == "a5":
         return A5
@@ -586,6 +795,20 @@ def _page_size(template: ExportTemplateInfo) -> tuple[float, float]:
     if template.page_size == "custom":
         return (template.custom_page_width * mm, template.custom_page_height * mm)
     return A4
+
+
+def _preview_size_scale(template: ExportTemplateInfo, page_width: float) -> float:
+    preview_width = {
+        "a4": 540.0,
+        "a5": 440.0,
+        "b5": 480.0,
+    }.get(template.page_size)
+    if preview_width is None:
+        preview_width = min(
+            560.0,
+            max(360.0, (template.custom_page_width / 210.0) * 540.0),
+        )
+    return page_width / preview_width
 
 
 def _register_fonts(requested_font: str) -> tuple[str, str]:
@@ -660,10 +883,12 @@ def _article_image(
 def _section_label(section: dict[str, Any]) -> str:
     labels = {
         "preface": "前言 / Preface",
+        "chapter": "章节页 / Chapter",
         "principal_message": "校长寄语 / Principal's Message",
         "teacher_message": "教师寄语 / Teacher's Message",
         "afterword": "后记 / Afterword",
         "closing": "结语 / Closing Remarks",
         "acknowledgement": "致谢 / Acknowledgements",
+        "ending": "感谢阅读 / Thank you for reading",
     }
     return labels.get(section.get("preset"), section.get("name") or "Page")

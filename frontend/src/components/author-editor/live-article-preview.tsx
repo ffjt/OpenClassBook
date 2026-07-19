@@ -13,6 +13,7 @@ import { Rnd } from "react-rnd";
 import { PublicationPageFooter } from "@/components/publication-page-footer";
 import type { Language } from "@/lib/i18n";
 import type { ImageWrap, PreviewArticle } from "@/types/article";
+import { getTemplateAssetUrl } from "@/mock/template-catalog";
 import {
   getPublicationPageChrome,
   getFontFamilyStyle,
@@ -39,10 +40,10 @@ const previewCopy = {
   },
 } as const;
 
-const marginStyles: Record<PageMargin, string> = {
-  narrow: "7% 8%",
-  normal: "9% 11%",
-  wide: "12% 15%",
+const marginRatios: Record<PageMargin, { horizontal: number; vertical: number }> = {
+  narrow: { horizontal: 0.08, vertical: 0.07 },
+  normal: { horizontal: 0.11, vertical: 0.09 },
+  wide: { horizontal: 0.15, vertical: 0.12 },
 };
 
 const marginCapacity: Record<PageMargin, number> = {
@@ -599,6 +600,7 @@ interface PublicationArticlePreviewProps {
   pageNumberOffset?: number;
   readOnly?: boolean;
   template: Template;
+  visualScale?: number;
 }
 
 export function PublicationArticlePreview({
@@ -614,9 +616,9 @@ export function PublicationArticlePreview({
   pageNumberOffset = 0,
   readOnly = false,
   template,
+  visualScale = 1,
 }: PublicationArticlePreviewProps) {
   const copy = previewCopy[language];
-  const previewScale = compact ? 0.54 : 1;
   const paper =
     template.pageSize === "custom"
       ? {
@@ -629,6 +631,12 @@ export function PublicationArticlePreview({
           widthMm: template.customPageWidth,
         }
       : paperStyles[template.pageSize];
+  const displayedPaperWidth = compact
+    ? Math.min(250, paper.maxWidth)
+    : paper.maxWidth;
+  const previewScale = displayedPaperWidth / paper.maxWidth;
+  const pageMargin = marginRatios[template.pageMargin];
+  const pagePadding = `${displayedPaperWidth * pageMargin.vertical}px ${displayedPaperWidth * pageMargin.horizontal}px`;
   const showNumber =
     Boolean(article.number) &&
     template.showNumber &&
@@ -735,14 +743,23 @@ export function PublicationArticlePreview({
   }, [article.imagePosition, article.imageSize, isInteracting, resolvedImagePage]);
 
   useEffect(() => {
+    if (!template.allowImages || !article.imageUrl) return;
     const imageBoundsElement = pageContentRefs.current[previewImagePage];
     if (!imageBoundsElement) return;
     const updateBounds = () => {
       const bounds = imageBoundsElement.getBoundingClientRect();
-      setImageBounds({ width: bounds.width, height: bounds.height });
+      setImageBounds({
+        width: bounds.width / visualScale,
+        height: bounds.height / visualScale,
+      });
       const body = bodyRefs.current[previewImagePage];
       setImageTopBoundary(
-        body ? Math.max(0, body.getBoundingClientRect().top - bounds.top) : 0,
+        body
+          ? Math.max(
+              0,
+              (body.getBoundingClientRect().top - bounds.top) / visualScale,
+            )
+          : 0,
       );
     };
     updateBounds();
@@ -752,12 +769,14 @@ export function PublicationArticlePreview({
     if (body) observer.observe(body);
     return () => observer.disconnect();
   }, [
+    article.imageUrl,
     article.number,
     article.title,
     pages.length,
     previewImagePage,
     showNumber,
     subtitle,
+    template.allowImages,
     template.numberPosition,
     template.subtitleAlign,
     template.titleAlign,
@@ -765,6 +784,7 @@ export function PublicationArticlePreview({
     template.titleFont,
     template.titleSize,
     template.titleSpacing,
+    visualScale,
   ]);
 
   useLayoutEffect(() => {
@@ -775,17 +795,18 @@ export function PublicationArticlePreview({
 
     const normalizedBody = article.body.replace(/\r\n/g, "\n");
     const firstBodyBounds = firstBody.getBoundingClientRect();
-    const followingBody = bodyRefs.current[1];
     const header = firstContent.querySelector<HTMLElement>(":scope > header");
     const headerStyle = header ? getComputedStyle(header) : null;
     const headerHeight = header
-      ? header.getBoundingClientRect().height +
+      ? header.getBoundingClientRect().height / visualScale +
         Number.parseFloat(headerStyle?.marginTop || "0") +
         Number.parseFloat(headerStyle?.marginBottom || "0")
       : 0;
-    const followingBodyHeight = followingBody
-      ? followingBody.getBoundingClientRect().height
-      : firstContent.getBoundingClientRect().height - headerHeight;
+    // Derive continuation-page capacity from the fixed paper frame instead of
+    // reading page 2. Reading a conditionally rendered page made pagination
+    // alternate between two different capacities and caused visible shaking.
+    const followingBodyHeight =
+      firstContent.getBoundingClientRect().height / visualScale - headerHeight;
     const hasImage = template.allowImages && Boolean(article.imageUrl);
     const canMeasureImage = hasImage && imageBounds.width > 0 && imageBounds.height > 0;
 
@@ -803,7 +824,9 @@ export function PublicationArticlePreview({
           fontSize: `${bodyFontSize}px`,
           height: `${Math.max(
             1,
-            pageIndex === 0 ? firstBodyBounds.height : followingBodyHeight,
+            pageIndex === 0
+              ? firstBodyBounds.height / visualScale
+              : followingBodyHeight,
           )}px`,
           left: "-100000px",
           lineHeight: String(template.lineHeight),
@@ -815,7 +838,7 @@ export function PublicationArticlePreview({
           top: "0",
           visibility: "hidden",
           whiteSpace: "pre-wrap",
-          width: `${firstBodyBounds.width}px`,
+          width: `${firstBodyBounds.width / visualScale}px`,
         });
         if (activeColumns === 2) {
           container.style.columnCount = "2";
@@ -935,6 +958,7 @@ export function PublicationArticlePreview({
     previewImagePosition,
     previewImageSize,
     template,
+    visualScale,
   ]);
 
   useLayoutEffect(() => {
@@ -1241,7 +1265,11 @@ export function PublicationArticlePreview({
     </div>
   );
   return (
-    <section className={compact ? "contents" : "overflow-hidden rounded-xl border border-border bg-card shadow-xl"} data-article-page-mode={articlePageMode}>
+    <section
+      className={compact ? "contents" : "overflow-hidden rounded-xl border border-border bg-card shadow-xl"}
+      data-article-page-mode={articlePageMode}
+      style={{ zoom: visualScale }}
+    >
       {!compact ? <header className="flex h-12 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2.5">
           <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.55)]" />
@@ -1260,7 +1288,7 @@ export function PublicationArticlePreview({
         </div>
       </header> : null}
 
-      <div className={compact ? "flex flex-col items-center gap-4" : "flex flex-col items-center gap-6 bg-muted/40 p-5 sm:p-8 xl:p-10"}>
+      <div className={compact ? "flex flex-col items-center gap-4" : "flex flex-col items-center gap-6 overflow-x-auto bg-muted/40 p-5 sm:p-8 xl:p-10"}>
         {article.imageUrl && !readOnly && (
           <p className="flex items-center gap-2 self-center text-[10px] font-medium text-muted-foreground">
             <Move className="size-3" />
@@ -1284,14 +1312,22 @@ export function PublicationArticlePreview({
           return (
             <article
               aria-label={`${paper.label} ${copy.title} ${pageNumber}`}
-              className={`relative w-full bg-[#fffefa] text-slate-800 shadow-[0_20px_70px_rgba(0,0,0,0.48)] ring-black/10 transition-all duration-200 ${focused && isFirstPage ? "ring-2 ring-blue-500/40" : "ring-1"} ${page.showImage && isInteracting ? "z-10 overflow-visible" : "overflow-hidden"}`}
+              className={`relative w-full text-slate-800 shadow-[0_20px_70px_rgba(0,0,0,0.48)] ring-black/10 transition-all duration-200 ${focused && isFirstPage ? "ring-2 ring-blue-500/40" : "ring-1"} ${page.showImage && isInteracting ? "z-10 overflow-visible" : "overflow-hidden"}`}
               data-article-first-page={isFirstPage ? article.id : undefined}
               key={pageNumber}
               style={{
                 aspectRatio: paper.aspectRatio,
                 containerType: "inline-size",
-                maxWidth: `${compact ? Math.min(250, paper.maxWidth) : paper.maxWidth}px`,
-                padding: marginStyles[template.pageMargin],
+                // Publication pagination is based on the physical paper width,
+                // not the width of the surrounding editor/review grid. Keeping
+                // that width stable makes both surfaces match the exported PDF.
+                minWidth: compact ? undefined : `${paper.maxWidth}px`,
+                maxWidth: `${displayedPaperWidth}px`,
+                padding: pagePadding,
+                backgroundColor: template.backgroundColor,
+                backgroundImage: `url(${getTemplateAssetUrl(template.templateId, "article_background")})`,
+                backgroundPosition: "center",
+                backgroundSize: "cover",
               }}
             >
               <div className="flex h-full flex-col">
@@ -1462,6 +1498,7 @@ export function PublicationArticlePreview({
                   pageNumberColor={template.accentColor}
                   pageNumberPosition={template.pageNumberPosition}
                   pageWidthMm={paper.widthMm}
+                  surfaceColor={template.backgroundColor}
                   showFooter={chrome.showFooter}
                   showPageNumber={chrome.showPageNumber}
                 />

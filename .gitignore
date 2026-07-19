@@ -16,6 +16,7 @@ backend/.uv-cache/
 backend/tmp/
 backend/generated/
 backend/storage/books/
+tmp/
 *.pyc
 
 # SQLite

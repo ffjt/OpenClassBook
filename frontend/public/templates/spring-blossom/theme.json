@@ -1,0 +1,23 @@
+{
+  "id": "spring-blossom",
+  "name": "Spring Blossom",
+  "primaryColor": "#72A8D8",
+  "secondaryColor": "#F5D7D7",
+  "accentColor": "#E7B45F",
+  "textColor": "#333333",
+  "fontFamily": "Source Han Serif SC",
+  "cornerStyle": "soft",
+  "safeArea": {
+    "top": 120,
+    "bottom": 140,
+    "left": 80,
+    "right": 80
+  },
+  "assets": {
+    "cover": "cover.png",
+    "coverBack": "cover_back.png",
+    "chapter": "chapter.png",
+    "articleBackground": "article_background.png",
+    "ending": "ending.png"
+  }
+}

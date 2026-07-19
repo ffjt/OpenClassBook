@@ -38,8 +38,10 @@ class ExportTemplateInfo(BaseModel):
     custom_page_height: float
     # Publication-level defaults / 出版层样式（旧模板缺省为文集）
     preset: str = "collection"
+    template_id: str = ""
     theme_color: str = "#202124"
     accent_color: str = "#1f2937"
+    background_color: str = "#fffefa"
     columns: int = Field(default=1, ge=1, le=2)
     article_page_mode: str = "single"
     show_header: bool = False

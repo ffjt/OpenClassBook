@@ -16,6 +16,10 @@ export type ColumnCount = 1 | 2;
 
 /** Shared in-memory contract for every book publishing surface. */
 export interface Template {
+  /** Built-in visual system identifier; assets are resolved from /templates/<id>. */
+  templateId: string;
+  /** Safe, near-white article background shared by preview and export metadata. */
+  backgroundColor: string;
   /** Official publishing preset. Advanced settings below override its defaults. */
   preset: PublishingPreset;
   themeColor: string;

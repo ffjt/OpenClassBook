@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { getTemplateCatalogEntry } from "@/mock/template-catalog";
 import { ApiError } from "@/repositories/apiClient";
 import { bookRepository, type Book } from "@/repositories/bookRepository";
 import {
@@ -555,6 +556,7 @@ function PublicationInfo({
   preview: ExportPreview;
 }) {
   const pageCopy = copy[language];
+  const visualTemplate = getTemplateCatalogEntry(preview.template.template_id);
   return (
     <section className="rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6">
       <SectionHeading icon={BookOpenText} title={pageCopy.publication} />
@@ -572,11 +574,7 @@ function PublicationInfo({
         <InfoBlock title={pageCopy.template}>
           <InfoRow
             label={pageCopy.preset}
-            value={
-              preview.template.preset === "magazine"
-                ? language === "zh" ? "校园报刊" : "Campus Magazine"
-                : language === "zh" ? "经典文集" : "Classic Collection"
-            }
+            value={visualTemplate.name[language]}
           />
           <InfoRow
             label={pageCopy.columns}

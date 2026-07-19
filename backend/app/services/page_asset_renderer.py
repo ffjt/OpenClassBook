@@ -18,7 +18,7 @@ from xhtml2pdf import pisa
 from app.schemas.export import ExportTemplateInfo
 from app.services.docx_formatting import convert_docx_to_html
 from app.services.docx_word_converter import convert_docx_with_word
-from app.services.pdf_renderer import _page_size, _register_fonts
+from app.services.pdf_renderer import _draw_chrome_chip, _page_size, _register_fonts
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 ALLOWED_DOCX_TAGS = {
@@ -173,9 +173,7 @@ class PageAssetRenderer:
             )
 
         result = convert_docx_to_html(source)
-        class_attributes = {
-            tag: {"class"} for tag in ALLOWED_DOCX_TAGS if tag != "br"
-        }
+        class_attributes = {tag: {"class"} for tag in ALLOWED_DOCX_TAGS if tag != "br"}
         class_attributes["br"] = {"class"}
         class_attributes["a"].add("href")
         class_attributes["img"].update({"alt", "src"})
@@ -221,9 +219,7 @@ class PageAssetRenderer:
                 "Microsoft Word conversion failed; "
                 "the compatible DOCX renderer was used.",
             )
-            warnings_zh = (
-                "Microsoft Word 转换失败，已改用兼容 DOCX 渲染器。",
-            )
+            warnings_zh = ("Microsoft Word 转换失败，已改用兼容 DOCX 渲染器。",)
         if result.messages:
             warnings += ("Some Word formatting was normalized for publication.",)
             warnings_zh += ("部分 Word 格式已按出版模板标准化。",)
@@ -264,10 +260,7 @@ def assemble_fragments(
             if (
                 template.show_header
                 or template.show_footer
-                or (
-                    template.page_number_position != "hidden"
-                    and page_number > 1
-                )
+                or (template.page_number_position != "hidden" and page_number > 1)
             ):
                 target.merge_page(
                     _page_chrome_overlay(
@@ -316,9 +309,9 @@ def _fit_page(
         raise PageAssetError
     scale = min(target_width / source_width, target_height / source_height)
     translate_x = (target_width - source_width * scale) / 2 - float(box.left) * scale
-    translate_y = (
-        (target_height - source_height * scale) / 2 - float(box.bottom) * scale
-    )
+    translate_y = (target_height - source_height * scale) / 2 - float(
+        box.bottom
+    ) * scale
     target = PageObject.create_blank_page(width=target_width, height=target_height)
     target.merge_transformed_page(
         source,
@@ -336,28 +329,38 @@ def _page_chrome_overlay(
 ) -> PageObject:
     output = BytesIO()
     overlay = canvas.Canvas(output, pagesize=(page_width, page_height))
-    margin = _page_margin(template.page_margin)
+    margin_x, margin_y = _page_margins(template.page_margin, page_width)
     normal_font, bold_font = _register_fonts("sans-serif")
     if template.show_header:
-        header_y = page_height - margin + 5
+        header_y = page_height - margin_y + 5
         overlay.setStrokeColor(colors.HexColor(template.accent_color))
         overlay.setLineWidth(1.2)
-        overlay.line(margin, header_y - 4, page_width - margin, header_y - 4)
+        overlay.line(margin_x, header_y - 4, page_width - margin_x, header_y - 4)
         overlay.setFillColor(colors.HexColor(template.theme_color))
         overlay.setFont(bold_font, 8)
         overlay.drawString(
-            margin,
+            margin_x,
             header_y + 1,
             template.header_text or title,
         )
     if template.show_footer:
-        footer_y = max(8, margin / 2)
+        footer_y = max(8, margin_y / 2)
+        footer_text = template.footer_text or "OpenClassBook"
+        _draw_chrome_chip(
+            overlay,
+            text=footer_text,
+            x=margin_x,
+            y=footer_y,
+            font_name=normal_font,
+            font_size=8,
+            surface_color=template.background_color,
+        )
         overlay.setFillColor(colors.HexColor(template.theme_color))
         overlay.setFont(normal_font, 8)
         overlay.drawString(
-            margin,
+            margin_x,
             footer_y,
-            template.footer_text or "OpenClassBook",
+            footer_text,
         )
     overlay.setFillColor(colors.HexColor(template.accent_color))
     overlay.setFont(normal_font, 9)
@@ -365,10 +368,30 @@ def _page_chrome_overlay(
         overlay.save()
         output.seek(0)
         return PdfReader(output).pages[0]
-    y = max(8, margin / 2)
+    y = max(8, margin_y / 2)
     if template.page_number_position == "right":
-        overlay.drawRightString(page_width - margin, y, str(page_number))
+        _draw_chrome_chip(
+            overlay,
+            text=str(page_number),
+            x=page_width - margin_x,
+            y=y,
+            font_name=normal_font,
+            font_size=9,
+            surface_color=template.background_color,
+            align="right",
+        )
+        overlay.drawRightString(page_width - margin_x, y, str(page_number))
     else:
+        _draw_chrome_chip(
+            overlay,
+            text=str(page_number),
+            x=page_width / 2,
+            y=y,
+            font_name=normal_font,
+            font_size=9,
+            surface_color=template.background_color,
+            align="center",
+        )
         overlay.drawCentredString(page_width / 2, y, str(page_number))
     overlay.save()
     output.seek(0)
@@ -382,23 +405,25 @@ def _docx_markup(
     page_height: float,
     formatting_css: str = "",
 ) -> str:
-    margin = _page_margin(template.page_margin)
+    margin_x, margin_y = _page_margins(template.page_margin, page_width)
     alignment = "justify" if template.body_justify else "left"
     image_width = max(1, min(template.image_width, 100))
-    title_align = template.title_align if template.title_align in {
-        "left",
-        "center",
-        "right",
-    } else "center"
-    title_weight = "bold" if template.title_bold else "normal"
-    column_style = (
-        "column-count: 2; column-gap: 18pt;"
-        if template.columns == 2
-        else ""
+    title_align = (
+        template.title_align
+        if template.title_align
+        in {
+            "left",
+            "center",
+            "right",
+        }
+        else "center"
     )
+    title_weight = "bold" if template.title_bold else "normal"
+    column_style = "column-count: 2; column-gap: 18pt;" if template.columns == 2 else ""
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><style>
-@page {{ size: {page_width:.3f}pt {page_height:.3f}pt; margin: {margin:.3f}pt; }}
+@page {{ size: {page_width:.3f}pt {page_height:.3f}pt;
+  margin: {margin_y:.3f}pt {margin_x:.3f}pt; }}
 body {{ color: {template.theme_color}; font-family: STSong-Light;
   font-size: {template.font_size:.2f}pt;
   line-height: {template.line_height:.3f}; text-align: {alignment}; {column_style} }}
@@ -447,10 +472,10 @@ def _docx_image_count(source: Path) -> int:
         )
 
 
-def _page_margin(value: str) -> float:
-    from reportlab.lib.units import mm
-
-    return {"narrow": 15 * mm, "normal": 22 * mm, "wide": 28 * mm}.get(
-        value,
-        22 * mm,
-    )
+def _page_margins(value: str, page_width: float) -> tuple[float, float]:
+    horizontal, vertical = {
+        "narrow": (0.08, 0.07),
+        "normal": (0.11, 0.09),
+        "wide": (0.15, 0.12),
+    }.get(value, (0.11, 0.09))
+    return page_width * horizontal, page_width * vertical

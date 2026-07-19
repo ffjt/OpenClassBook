@@ -9,6 +9,7 @@ export type ArticlePageMode = "single" | "flow";
 export type LayoutSectionKind = "page" | "articles";
 export type LayoutSectionPreset =
   | "cover"
+  | "chapter"
   | "preface"
   | "articles"
   | "principal_message"
@@ -16,6 +17,7 @@ export type LayoutSectionPreset =
   | "afterword"
   | "closing"
   | "acknowledgement"
+  | "ending"
   | "back_cover";
 
 export interface BookLayoutSection {

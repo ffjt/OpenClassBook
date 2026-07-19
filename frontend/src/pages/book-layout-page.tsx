@@ -49,6 +49,7 @@ import { Select } from "@/components/ui/select";
 import { useBookTemplate } from "@/hooks/use-book-template";
 import type { Language } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { getTemplateAssetUrl } from "@/mock/template-catalog";
 import {
   paginateArticle,
   PublicationArticlePreview,
@@ -89,12 +90,14 @@ type ArticleSortKey = "number" | "title" | "author";
 type SortDirection = "asc" | "desc";
 
 const commonSectionPresets: LayoutSectionPreset[] = [
+  "chapter",
   "preface",
   "principal_message",
   "teacher_message",
   "afterword",
   "closing",
   "acknowledgement",
+  "ending",
 ];
 const maxUploadSize = 100 * 1024 * 1024;
 
@@ -109,6 +112,7 @@ const copy = {
     resources: "Page resources",
     sections: {
       cover: "Cover",
+      chapter: "Chapter",
       preface: "Preface",
       articles: "Main content",
       principal_message: "Principal's message",
@@ -116,6 +120,7 @@ const copy = {
       afterword: "Afterword",
       closing: "Closing remarks",
       acknowledgement: "Acknowledgements",
+      ending: "Ending",
       back_cover: "Back cover",
     },
     addPage: "Add page",
@@ -218,6 +223,7 @@ const copy = {
     resources: "页面资源管理",
     sections: {
       cover: "封面",
+      chapter: "章节页",
       preface: "前言",
       articles: "正文",
       principal_message: "校长寄语",
@@ -225,6 +231,7 @@ const copy = {
       afterword: "后记",
       closing: "结语",
       acknowledgement: "致谢",
+      ending: "尾页",
       back_cover: "封底",
     },
     addPage: "添加板块",
@@ -1876,24 +1883,36 @@ function PageSectionPreview({
   const file = section.file;
   const isCover = section.preset === "cover" || section.preset === "back_cover";
   const label = getSectionLabel(section, pageCopy);
+  const assetKind =
+    section.preset === "cover"
+      ? "cover"
+      : section.preset === "back_cover"
+        ? "cover_back"
+        : section.preset === "ending"
+          ? "ending"
+          : "chapter";
 
   return (
     <article
-      className="mx-auto flex w-full max-w-[250px] flex-col overflow-hidden bg-[#fffefa] text-slate-800 shadow-[0_18px_50px_rgba(0,0,0,0.4)] ring-1 ring-black/10"
+      className="mx-auto flex w-full max-w-[250px] flex-col overflow-hidden text-slate-800 shadow-[0_18px_50px_rgba(0,0,0,0.4)] ring-1 ring-black/10"
       style={{
         aspectRatio: getPreviewAspectRatio(template),
+        backgroundColor: template.backgroundColor,
+        backgroundImage: `url(${getTemplateAssetUrl(template.templateId, assetKind)})`,
+        backgroundPosition: "center",
+        backgroundSize: "cover",
         padding: previewPageMargins[template.pageMargin],
       }}
     >
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-center">
-        {isCover && !file ? (
+        {!file ? (
           <>
-            <Image className="size-7 text-slate-300" />
-            <h3 className="mt-6 font-serif text-xl font-semibold tracking-[-0.04em] text-slate-900">
-              {book.title}
+            {isCover ? null : <p className="text-[9px] font-semibold uppercase tracking-[0.2em]" style={{ color: template.accentColor }}>OpenClassBook</p>}
+            <h3 className="mt-6 text-xl font-semibold tracking-[-0.04em]" style={{ color: template.themeColor }}>
+              {section.preset === "ending" ? pageCopy.sections.ending : isCover ? book.title : label}
             </h3>
-            <p className="mt-3 text-[10px] text-slate-500">
-              {label} · {pageCopy.notImported}
+            <p className="mt-3 max-w-[160px] text-[10px] leading-5 text-slate-600">
+              {section.preset === "ending" ? "感谢阅读 · Thank you for reading" : isCover ? "ESSAY COLLECTION" : "Chapter 01"}
             </p>
           </>
         ) : (
@@ -2037,13 +2056,13 @@ function ArticleSectionPreview({
               article={sharedArticle}
               articlePageMode={articlePageMode}
               bookTitle={bookTitle}
-              compact
               focused={focusedArticleId === article.id}
               key={article.id}
               language={language}
               pageNumberOffset={pageIndex}
               readOnly
               template={template}
+              visualScale={0.5}
             />
           );
         }
@@ -2207,6 +2226,7 @@ function ArticleSectionPreview({
               pageNumberColor={template.accentColor}
               pageNumberPosition={template.pageNumberPosition}
               pageWidthMm={getPreviewPageWidthMm(template)}
+              surfaceColor={template.backgroundColor}
               showFooter={template.showFooter}
               showPageNumber={pageIndex > 0 && template.pageNumberPosition !== "hidden"}
             />
@@ -2264,6 +2284,13 @@ function getBookSections(book: Book): BookLayoutSection[] {
       preset: "acknowledgement",
       name: null,
       file: book.acknowledgement_file,
+    },
+    {
+      id: "ending",
+      kind: "page",
+      preset: "ending",
+      name: null,
+      file: null,
     },
     {
       id: "back_cover",

@@ -78,6 +78,14 @@ export function deserializeTemplate(stored: BookTemplate): Template {
   const presentation = isRecord(page.presentation) ? page.presentation : {};
 
   return {
+    templateId:
+      typeof presentation.template_id === "string"
+        ? presentation.template_id
+        : defaultTemplate.templateId,
+    backgroundColor:
+      typeof presentation.background_color === "string"
+        ? presentation.background_color
+        : defaultTemplate.backgroundColor,
     preset: readOption<PublishingPreset>(
       presentation.preset,
       ["collection", "magazine"],
@@ -239,6 +247,8 @@ export const templateRepository = {
           custom_width: template.customPageWidth,
           custom_height: template.customPageHeight,
           presentation: {
+            template_id: template.templateId,
+            background_color: template.backgroundColor,
             preset: template.preset,
             theme_color: template.themeColor,
             accent_color: template.accentColor,

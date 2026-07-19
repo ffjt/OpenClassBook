@@ -1,15 +1,13 @@
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import { useEffect, useState } from "react";
 import {
+  ArrowLeft,
+  ArrowRight,
   CircleAlert,
   CheckCircle2,
-  Check,
-  ChevronDown,
   Eye,
   LoaderCircle,
-  Newspaper,
   RefreshCw,
-  BookOpen,
   WandSparkles,
   X,
 } from "lucide-react";
@@ -24,6 +22,8 @@ import { useSystemFonts } from "@/hooks/use-system-fonts";
 import type { Language } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { defaultTemplate } from "@/mock/template";
+import { getTemplateAssetUrl, templateCatalog } from "@/mock/template-catalog";
+import type { TemplateCatalogEntry } from "@/mock/template-catalog";
 import { articleRepository } from "@/repositories/articleRepository";
 import {
   bookRepository,
@@ -40,13 +40,11 @@ const formatSettingsCopy = {
       "Design the publishing style for this book and see every change on the page.",
     descriptionNote: "All submitted articles will use this template.",
     presetsTitle: "Choose a publishing template",
-    presetsDescription: "Start with a complete visual system. Advanced settings remain available below.",
-    collection: "Classic Collection",
-    collectionDescription: "Single-column, spacious, reading-first essays and collections.",
-    magazine: "Campus Magazine",
-    magazineDescription: "Editorial two-column layout with accent rules, metadata and images.",
+    presetsDescription: "Choose a template on the left and inspect its live article preview on the right.",
     advanced: "Advanced settings",
     advancedHint: "Override the selected template for this book",
+    backToTemplates: "Back to template selection",
+    next: "Next: Advanced settings",
     selected: "Selected",
     save: "Save Settings",
     saving: "Saving...",
@@ -71,13 +69,11 @@ const formatSettingsCopy = {
     description: "设计这本书的出版样式，并在纸张上实时查看每一处调整。",
     descriptionNote: "所有投稿文章都会使用这套模板。",
     presetsTitle: "选择出版模板",
-    presetsDescription: "先选择一套完整的视觉系统；下方仍可按书籍需要覆盖高级设置。",
-    collection: "经典文集",
-    collectionDescription: "单栏、留白充足、阅读优先，适合作文集与毕业文集。",
-    magazine: "校园报刊",
-    magazineDescription: "双栏编辑式排版，带强调色、页眉页脚、作者信息与图片。",
+    presetsDescription: "在左侧选择模板，并在右侧查看真实文章排版预览。",
     advanced: "高级设置",
     advancedHint: "仅覆盖当前书籍，不会改变官方模板",
+    backToTemplates: "返回模板选择",
+    next: "下一步：高级设置",
     selected: "当前使用",
     save: "保存设置",
     saving: "正在保存...",
@@ -97,83 +93,6 @@ const formatSettingsCopy = {
     approveAll: "一键通过",
   },
 } as const;
-
-const presetDefaults: Record<Template["preset"], Partial<Template>> = {
-  collection: {
-    preset: "collection",
-    themeColor: "#1f2937",
-    accentColor: "#1f2937",
-    columns: 1,
-    showHeader: false,
-    headerText: "",
-    showFooter: true,
-    footerText: "OpenClassBook · 2026",
-    showAuthorMeta: true,
-    imageRadius: 0,
-    imageBorder: true,
-    quoteStyle: false,
-    titleFont: {
-      family: "serif",
-      fullName: "System Serif",
-      postscriptName: "system-serif",
-      style: "Regular",
-    },
-    titleSize: 25,
-    titleBold: true,
-    titleAlign: "center",
-    subtitleAlign: "center",
-    titleSpacing: 24,
-    bodyFont: {
-      family: "serif",
-      fullName: "System Serif",
-      postscriptName: "system-serif",
-      style: "Regular",
-    },
-    bodySize: 14,
-    lineHeight: 1.6,
-    firstLineIndent: 2,
-    justify: true,
-    imageMaxWidth: 72,
-    pageMargin: "wide",
-  },
-  magazine: {
-    preset: "magazine",
-    themeColor: "#111827",
-    accentColor: "#dc2626",
-    columns: 2,
-    showHeader: true,
-    headerText: "OPEN CLASSBOOK · CAMPUS EDITION",
-    showFooter: true,
-    footerText: "校园刊物 · 2026",
-    showAuthorMeta: true,
-    imageRadius: 0,
-    imageBorder: false,
-    quoteStyle: true,
-    titleFont: {
-      family: "sans-serif",
-      fullName: "System Sans",
-      postscriptName: "system-sans",
-      style: "Regular",
-    },
-    titleSize: 20,
-    titleBold: true,
-    titleAlign: "left",
-    subtitleAlign: "left",
-    titleSpacing: 12,
-    bodyFont: {
-      family: "serif",
-      fullName: "System Serif",
-      postscriptName: "system-serif",
-      style: "Regular",
-    },
-    bodySize: 10.5,
-    lineHeight: 1.4,
-    firstLineIndent: 0,
-    justify: true,
-    imageMaxWidth: 100,
-    pageMargin: "normal",
-  },
-};
 
 interface FormatSettingsPageProps {
   basePath: string;
@@ -238,6 +157,7 @@ export function FormatSettingsContent({
   const [bookLoadError, setBookLoadError] = useState(false);
   const [bookReloadKey, setBookReloadKey] = useState(0);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [designerStep, setDesignerStep] = useState<"templates" | "advanced">("templates");
   const [reviewAction, setReviewAction] = useState<
     "re-review" | "approve-all" | null
   >(null);
@@ -298,12 +218,25 @@ export function FormatSettingsContent({
     setTemplate((current) => ({ ...current, [key]: value }));
   };
 
-  const applyPreset = (preset: Template["preset"]) => {
+  const applyCatalogTemplate = (templateId: string) => {
+    const catalog = templateCatalog.find((entry) => entry.id === templateId);
+    if (!catalog) return;
     setSaveStatus("idle");
     setTemplate((current) => ({
       ...current,
-      ...presetDefaults[preset],
-      preset,
+      templateId: catalog.id,
+      backgroundColor: catalog.secondaryColor,
+      preset: catalog.preset,
+      themeColor: catalog.textColor,
+      accentColor: catalog.accentColor,
+      columns: catalog.preset === "magazine" ? 2 : 1,
+      bodyFont: { ...current.bodyFont, family: catalog.fontFamily, fullName: catalog.fontFamily },
+      titleFont: { ...current.titleFont, family: catalog.fontFamily, fullName: catalog.fontFamily },
+      imageRadius: catalog.cornerStyle === "soft" ? 12 : 0,
+      imageBorder: catalog.cornerStyle === "square",
+      quoteStyle: catalog.preset === "magazine",
+      showHeader: catalog.preset === "magazine",
+      showFooter: true,
     }));
   };
 
@@ -414,44 +347,58 @@ export function FormatSettingsContent({
         </div>
       </header> : null}
 
-      <section className={cn("rounded-2xl border border-border bg-card/60 p-4 sm:p-5", showHeader && "mt-6")}>
-        <div className="flex flex-col gap-1">
-          <h2 className="text-sm font-semibold text-foreground">{copy.presetsTitle}</h2>
-          <p className="text-xs leading-5 text-muted-foreground">{copy.presetsDescription}</p>
+      {designerStep === "templates" ? (
+        <section className={cn("rounded-2xl border border-border bg-card/60 p-4 sm:p-5", showHeader && "mt-6")}>
+          <div className="flex flex-col gap-1">
+            <h2 className="text-sm font-semibold text-foreground">{copy.presetsTitle}</h2>
+            <p className="text-xs leading-5 text-muted-foreground">{copy.presetsDescription}</p>
+          </div>
+          <div className="mt-5 grid items-start gap-6 lg:grid-cols-[minmax(280px,0.62fr)_minmax(0,1fr)]">
+            <div className="grid gap-3 sm:grid-cols-2 lg:max-h-[calc(100vh-13rem)] lg:grid-cols-1 lg:overflow-y-auto lg:pr-2 xl:grid-cols-2">
+              {templateCatalog.map((catalog) => (
+                <CatalogCard
+                  key={catalog.id}
+                  active={settings.templateId === catalog.id}
+                  catalog={catalog}
+                  language={language}
+                  onClick={() => applyCatalogTemplate(catalog.id)}
+                  selectedLabel={copy.selected}
+                />
+              ))}
+            </div>
+            <div className="min-w-0 lg:sticky lg:top-24">
+              <div className="hidden lg:block lg:max-h-[calc(100vh-12rem)] lg:overflow-y-auto lg:overscroll-contain">
+                <BookPagePreview
+                  authorClassName={authorClassName}
+                  bookTitle={bookTitle}
+                  language={language}
+                  numberingEnabled={numberMode !== "none"}
+                  settings={{ ...settings, showNumber: numberMode !== "none" && settings.showNumber }}
+                  articlePageMode={articlePageMode}
+                />
+              </div>
+              <div className="mt-4 flex justify-end border-t border-border pt-4">
+                <Button className="h-10 rounded-lg bg-blue-500 px-5 text-sm text-white hover:bg-blue-400" onClick={() => setDesignerStep("advanced")} type="button">
+                  {copy.next}
+                  <ArrowRight className="ml-2 size-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : (
+      <section className={cn(showHeader && "mt-6")}>
+        <button className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground" onClick={() => setDesignerStep("templates")} type="button">
+          <ArrowLeft className="size-4" />
+          {copy.backToTemplates}
+        </button>
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold text-foreground">{copy.advanced}</h2>
+          <p className="mt-1 text-xs text-muted-foreground">{copy.advancedHint}</p>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <PresetCard
-            active={settings.preset === "collection"}
-            description={copy.collectionDescription}
-            icon={BookOpen}
-            onClick={() => applyPreset("collection")}
-            selectedLabel={copy.selected}
-            title={copy.collection}
-            accent="#1f2937"
-          />
-          <PresetCard
-            active={settings.preset === "magazine"}
-            description={copy.magazineDescription}
-            icon={Newspaper}
-            onClick={() => applyPreset("magazine")}
-            selectedLabel={copy.selected}
-            title={copy.magazine}
-            accent="#dc2626"
-          />
-        </div>
-      </section>
-
-      <div className={cn("grid items-start gap-6 lg:grid-cols-[minmax(320px,0.54fr)_minmax(0,1fr)]", showHeader && "mt-6")}>
-        <aside>
-          <details className="group rounded-xl border border-border bg-card">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-sm font-semibold text-foreground [&::-webkit-details-marker]:hidden">
-              <span>
-                {copy.advanced}
-                <span className="ml-2 text-[11px] font-normal text-muted-foreground">{copy.advancedHint}</span>
-              </span>
-              <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="border-t border-border p-3">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(320px,0.54fr)_minmax(0,1fr)]">
+          <aside>
+            <div className="rounded-xl border border-border bg-card p-3">
               <FormatPanel
                 fontOptions={fontOptions}
                 fontStatus={fontStatus}
@@ -462,8 +409,7 @@ export function FormatSettingsContent({
                 settings={settings}
               />
             </div>
-          </details>
-          <div className="sticky bottom-0 mt-4 border-t border-border bg-background/95 py-4 backdrop-blur-xl">
+            <div className="sticky bottom-0 mt-4 border-t border-border bg-background/95 py-4 backdrop-blur-xl">
             <Button
               className="h-10 w-full rounded-lg bg-blue-500 px-5 text-sm text-white hover:bg-blue-400"
               disabled={saveStatus === "saving"}
@@ -490,7 +436,7 @@ export function FormatSettingsContent({
               )}
             </div>
           </div>
-        </aside>
+          </aside>
 
         <div className="hidden min-h-0 lg:sticky lg:top-24 lg:block lg:self-start lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:overscroll-contain">
           <BookPagePreview
@@ -505,7 +451,9 @@ export function FormatSettingsContent({
             articlePageMode={articlePageMode}
           />
         </div>
-      </div>
+        </div>
+      </section>
+      )}
 
       <Button
         className="fixed bottom-5 right-5 z-40 h-11 rounded-full bg-blue-500 px-4 text-white shadow-[0_12px_35px_rgba(37,99,235,0.4)] hover:bg-blue-400 lg:hidden"
@@ -628,56 +576,37 @@ export function FormatSettingsContent({
   );
 }
 
-interface PresetCardProps {
-  active: boolean;
-  accent: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  onClick: () => void;
-  selectedLabel: string;
-  title: string;
-}
-
-function PresetCard({
+function CatalogCard({
   active,
-  accent,
-  description,
-  icon: Icon,
+  catalog,
+  language,
   onClick,
   selectedLabel,
-  title,
-}: PresetCardProps) {
+}: {
+  active: boolean;
+  catalog: TemplateCatalogEntry;
+  language: Language;
+  onClick: () => void;
+  selectedLabel: string;
+}) {
   return (
     <button
       className={cn(
-        "group relative overflow-hidden rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg",
-        active
-          ? "border-blue-500/60 bg-blue-500/[0.08] shadow-md"
-          : "border-border bg-background/70 hover:border-blue-500/30",
+        "group relative overflow-hidden rounded-xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg",
+        active ? "border-blue-500/60 bg-blue-500/[0.08] shadow-md" : "border-border bg-background/70 hover:border-blue-500/30",
       )}
       onClick={onClick}
       type="button"
     >
-      <span
-        className="absolute inset-x-0 top-0 h-1"
-        style={{ backgroundColor: accent }}
-      />
-      <span className="flex items-start justify-between gap-3">
-        <span
-          className="flex size-9 items-center justify-center rounded-lg text-white"
-          style={{ backgroundColor: accent }}
-        >
-          <Icon className="size-4" />
+      <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: catalog.primaryColor }} />
+      <span className="relative flex h-36 items-end overflow-hidden rounded-lg bg-cover bg-center" style={{ backgroundColor: catalog.secondaryColor, backgroundImage: `url(${getTemplateAssetUrl(catalog.id, "cover")})` }}>
+        <span className={cn("absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-zinc-900/55 px-3 py-2 text-white backdrop-blur-sm transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100", active ? "translate-y-0 opacity-100" : "translate-y-full opacity-0")}>
+          <span className="truncate text-[10px] font-semibold tracking-[0.08em]">{catalog.name[language]}</span>
+          {active ? <span className="shrink-0 text-[10px] font-semibold">✓ {selectedLabel}</span> : null}
         </span>
-        {active ? (
-          <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-blue-500">
-            <Check className="size-3.5" />
-            {selectedLabel}
-          </span>
-        ) : null}
       </span>
-      <span className="mt-4 block text-sm font-semibold text-foreground">{title}</span>
-      <span className="mt-1 block text-xs leading-5 text-muted-foreground">{description}</span>
+      <span className="mt-3 block text-sm font-semibold text-foreground">{catalog.name[language]}</span>
+      <span className="mt-1 block text-xs leading-5 text-muted-foreground">{catalog.description[language]}</span>
     </button>
   );
 }

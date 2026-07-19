@@ -285,7 +285,15 @@ export function ReviewPage({
   }, [bookId, reloadKey, requestedArticleId, requestedReviewView]);
 
   const authorNames = useMemo(
-    () => new Map(authors.map((author) => [author.id, author.name])),
+    () =>
+      new Map(
+        authors.map((author) => [
+          author.id,
+          author.class_name
+            ? `${author.name} · ${author.class_name}`
+            : author.name,
+        ]),
+      ),
     [authors],
   );
   const getAuthorName = (article: Article) =>
@@ -731,7 +739,12 @@ export function ReviewPage({
                 </div>
               ) : templateStatus === "ready" ? (
                 <LiveArticlePreview
-                  article={previewArticle}
+                  article={{
+                    ...previewArticle,
+                    authorMeta: selectedArticle
+                      ? getAuthorName(selectedArticle)
+                      : undefined,
+                  }}
                   articlePageMode="single"
                   bookTitle={bookTitle}
                   language={language}

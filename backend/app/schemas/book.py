@@ -43,6 +43,7 @@ LAYOUT_SECTION_LIMIT = 50
 LayoutSectionKind = Literal["page", "articles"]
 LayoutSectionPreset = Literal[
     "cover",
+    "chapter",
     "preface",
     "articles",
     "principal_message",
@@ -50,6 +51,7 @@ LayoutSectionPreset = Literal[
     "afterword",
     "closing",
     "acknowledgement",
+    "ending",
     "back_cover",
 ]
 LayoutSectionId = Annotated[

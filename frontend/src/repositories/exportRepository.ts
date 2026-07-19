@@ -19,8 +19,10 @@ export interface ExportTemplateInfo {
   custom_page_width: number;
   custom_page_height: number;
   preset: "collection" | "magazine" | string;
+  template_id: string;
   theme_color: string;
   accent_color: string;
+  background_color: string;
   columns: number;
   article_page_mode: "single" | "flow" | string;
   show_header: boolean;

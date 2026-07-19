@@ -1,0 +1,23 @@
+{
+  "id": "ocean-fairytale",
+  "name": "Ocean Fairytale",
+  "primaryColor": "#176B87",
+  "secondaryColor": "#E4F4F8",
+  "accentColor": "#E9B44C",
+  "textColor": "#17324D",
+  "fontFamily": "Source Han Sans SC",
+  "cornerStyle": "soft",
+  "safeArea": {
+    "top": 120,
+    "bottom": 140,
+    "left": 80,
+    "right": 80
+  },
+  "assets": {
+    "cover": "cover.png",
+    "coverBack": "cover_back.png",
+    "chapter": "chapter.png",
+    "articleBackground": "article_background.png",
+    "ending": "ending.png"
+  }
+}
