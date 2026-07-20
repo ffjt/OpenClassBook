@@ -330,7 +330,8 @@ def _page_chrome_overlay(
     output = BytesIO()
     overlay = canvas.Canvas(output, pagesize=(page_width, page_height))
     margin_x, margin_y = _page_margins(template.page_margin, page_width)
-    normal_font, bold_font = _register_fonts("sans-serif")
+    _, bold_font = _register_fonts("sans-serif")
+    footer_font, _ = _register_fonts(template.footer_font)
     if template.show_header:
         header_y = page_height - margin_y + 5
         overlay.setStrokeColor(colors.HexColor(template.accent_color))
@@ -351,12 +352,12 @@ def _page_chrome_overlay(
             text=footer_text,
             x=margin_x,
             y=footer_y,
-            font_name=normal_font,
-            font_size=8,
-            surface_color=template.background_color,
+            font_name=footer_font,
+            font_size=template.footer_size,
+            surface_opacity=template.chrome_surface_opacity / 100,
         )
         overlay.setFillColor(colors.HexColor(template.theme_color))
-        overlay.setFont(normal_font, 8)
+        overlay.setFont(footer_font, template.footer_size)
         overlay.drawString(
             margin_x,
             footer_y,
@@ -378,9 +379,8 @@ def _page_chrome_overlay(
             y=y,
             font_name=bold_font,
             font_size=10,
-            surface_color=template.background_color,
+            surface_opacity=template.chrome_surface_opacity / 100,
             align="right",
-            stroke_color=template.accent_color,
         )
         overlay.drawRightString(page_width - margin_x, y, page_number_label)
     else:
@@ -392,9 +392,8 @@ def _page_chrome_overlay(
             y=y,
             font_name=bold_font,
             font_size=10,
-            surface_color=template.background_color,
+            surface_opacity=template.chrome_surface_opacity / 100,
             align="center",
-            stroke_color=template.accent_color,
         )
         overlay.drawCentredString(page_width / 2, y, page_number_label)
     overlay.save()

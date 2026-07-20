@@ -10,12 +10,12 @@ from PIL import Image, ImageEnhance, ImageOps
 
 
 THEMES = {
-    "spring-blossom": ("Spring Blossom", "#72A8D8", "#F5D7D7", "#E7B45F", "#333333", "Source Han Serif SC", "soft"),
-    "summer-forest": ("Summer Forest", "#3E7C59", "#E5F0E8", "#D69E2E", "#26352B", "Source Han Serif SC", "soft"),
+    "spring-blossom": ("Spring Blossom", "#72A8D8", "#F5D7D7", "#6B2E3B", "#333333", "Source Han Serif SC", "soft"),
+    "summer-forest": ("Summer Forest", "#3E7C59", "#E5F0E8", "#1E5636", "#26352B", "Source Han Serif SC", "soft"),
     "autumn-ginkgo": ("Autumn Ginkgo", "#9A6A2F", "#F7E8C5", "#C05621", "#3B2F22", "Source Han Serif SC", "soft"),
     "winter-sun": ("Winter Sun", "#4A647A", "#EAF2F7", "#D69E2E", "#26323B", "Source Han Sans SC", "soft"),
     "misty-mountain": ("Misty Mountain", "#52656F", "#E8EEEC", "#8A9A5B", "#293438", "Source Han Serif SC", "square"),
-    "rice-paper": ("Rice Paper", "#4B5563", "#F4F1EA", "#9A6A2F", "#2F3437", "Source Han Serif SC", "square"),
+    "rice-paper": ("Rice Paper", "#4B5563", "#F4F1EA", "#4A3420", "#2F3437", "Source Han Serif SC", "square"),
     "new-chinese": ("New Chinese Blank", "#7C3F3F", "#F7F1EA", "#B7791F", "#352D2D", "Source Han Serif SC", "square"),
     "campus-morning": ("Campus Morning", "#2563A6", "#E7F1FB", "#F59E0B", "#1F2937", "Source Han Sans SC", "soft"),
     "graduation": ("Graduation", "#4C5A8A", "#EEF0FA", "#D97706", "#252A43", "Source Han Serif SC", "soft"),

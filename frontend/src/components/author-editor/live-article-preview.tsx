@@ -16,6 +16,7 @@ import type { ImageWrap, PreviewArticle } from "@/types/article";
 import { getTemplateAssetUrl } from "@/mock/template-catalog";
 import {
   getPublicationPageChrome,
+  getTemplateSubtitle,
   getFontFamilyStyle,
   publicationChromeFontFamily,
   type PageMargin,
@@ -232,7 +233,35 @@ interface MeasuredParagraph {
   displayStart: number;
   element: HTMLParagraphElement;
   isEmpty: boolean;
+  isFlowTitle: boolean;
   lineStart: number;
+}
+
+const FLOW_ARTICLE_TITLE_MARKER = "\ue000openclassbook-flow-title:";
+
+interface FlowPreviewArticle {
+  body: string;
+  title: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function buildFlowPreviewBody(
+  body: string,
+  continuations: FlowPreviewArticle[],
+) {
+  return [
+    body,
+    ...continuations.map(
+      (article, index) =>
+        `${FLOW_ARTICLE_TITLE_MARKER}${index}\n${article.body}`,
+    ),
+  ].join("\n\n\n\n");
+}
+
+function getFlowTitleIndex(line: string) {
+  if (!line.startsWith(FLOW_ARTICLE_TITLE_MARKER)) return null;
+  const index = Number(line.slice(FLOW_ARTICLE_TITLE_MARKER.length));
+  return Number.isInteger(index) && index >= 0 ? index : null;
 }
 
 function getMeasuredPageLines(body: string, start: number, end: number) {
@@ -247,38 +276,69 @@ function appendMeasuredParagraphs(
   body: string,
   start: number,
   template: Template,
+  flowArticles: FlowPreviewArticle[],
 ) {
   const paragraphs: MeasuredParagraph[] = [];
   let lineStart = start;
 
   body.slice(start).split("\n").forEach((line, lineIndex) => {
     const paragraph = document.createElement("p");
+    const flowTitleIndex = getFlowTitleIndex(line);
+    const flowTitle =
+      flowTitleIndex === null ? undefined : flowArticles[flowTitleIndex]?.title;
     const trimmed = line.trimStart();
-    const quotePrefix = template.quoteStyle ? trimmed.match(/^>\s?/)?.[0] : undefined;
+    const quotePrefix =
+      flowTitle === undefined && template.quoteStyle
+        ? trimmed.match(/^>\s?/)?.[0]
+        : undefined;
     const leadingWhitespace = line.length - trimmed.length;
     const removedCharacters = quotePrefix
       ? leadingWhitespace + quotePrefix.length
       : 0;
-    const displayLine = quotePrefix ? trimmed.slice(quotePrefix.length) : line;
+    const displayLine = flowTitle ?? (quotePrefix ? trimmed.slice(quotePrefix.length) : line);
 
     paragraph.dataset.measureLine = String(lineIndex + 1);
+    paragraph.dataset.measureQuote = quotePrefix ? "true" : "false";
     paragraph.style.borderLeft = quotePrefix
       ? `2px solid ${template.accentColor}`
       : "";
     paragraph.style.boxSizing = "border-box";
     paragraph.style.fontStyle = quotePrefix ? "italic" : "";
     paragraph.style.margin = "0";
-    paragraph.style.minHeight = `${template.lineHeight}em`;
+    paragraph.style.minHeight = flowTitle
+      ? `${Math.max(10, template.titleSize * 0.5) * 1.25}px`
+      : `${template.lineHeight}em`;
     paragraph.style.paddingLeft = quotePrefix ? "0.7em" : "";
-    paragraph.style.textIndent = line
+    paragraph.style.textIndent = line && !flowTitle
       ? `${template.firstLineIndent}em`
       : "0";
+    if (flowTitle) {
+      paragraph.dataset.measureFlowTitle = "true";
+      paragraph.style.breakInside = "avoid";
+      paragraph.style.color = template.themeColor;
+      paragraph.style.fontFamily = getFontFamilyStyle(template.titleFont);
+      paragraph.style.fontSize = `${Math.max(10, template.titleSize * 0.5)}px`;
+      paragraph.style.fontWeight = template.titleBold ? "700" : "400";
+      paragraph.style.lineHeight = "1.25";
+      paragraph.style.maxWidth = "100%";
+      paragraph.style.width = template.titleSurfaceEnabled ? "fit-content" : "100%";
+      paragraph.style.marginLeft =
+        template.titleAlign === "right" || template.titleAlign === "center"
+          ? "auto"
+          : "0";
+      paragraph.style.marginRight =
+        template.titleAlign === "left" || template.titleAlign === "center"
+          ? "auto"
+          : "0";
+      paragraph.style.textAlign = template.titleAlign;
+    }
     paragraph.textContent = displayLine || "\u00a0";
     container.append(paragraph);
     paragraphs.push({
       displayStart: lineStart + removedCharacters,
       element: paragraph,
       isEmpty: displayLine.length === 0,
+      isFlowTitle: flowTitle !== undefined,
       lineStart,
     });
     lineStart += line.length + 1;
@@ -382,7 +442,9 @@ function getMeasuredPageEnd(
   const paragraph = paragraphs.find((candidate) =>
     candidate.element.contains(firstOverflow.node),
   );
-  return firstOverflow.firstInParagraph && paragraph
+  return paragraph?.isFlowTitle
+    ? paragraph.lineStart
+    : firstOverflow.firstInParagraph && paragraph
     ? paragraph.lineStart
     : firstOverflow.sourceOffset;
 }
@@ -499,6 +561,7 @@ function findWrapInsertion(
 
   let closest: (WrapInsertion & { distance: number; top: number }) | null = null;
   for (const [line, paragraph] of paragraphs.entries()) {
+    if (paragraph.dataset.measureQuote === "true") continue;
     const textNode = paragraph.firstChild;
     const text = textNode?.textContent ?? "";
     if (!(textNode instanceof Text) || !text) continue;
@@ -575,7 +638,13 @@ function findWrapInsertion(
     return { character, line: closest.line };
   }
 
-  const lastLine = Math.max(0, paragraphs.length - 1);
+  let lastLine = Math.max(0, paragraphs.length - 1);
+  while (
+    lastLine > 0 &&
+    paragraphs[lastLine]?.dataset.measureQuote === "true"
+  ) {
+    lastLine -= 1;
+  }
   return {
     character: paragraphs[lastLine]?.textContent?.length ?? 0,
     line: lastLine,
@@ -593,6 +662,7 @@ interface PublicationArticlePreviewProps {
   bookTitle: string;
   compact?: boolean;
   focused?: boolean;
+  flowArticles?: PublicationPreviewArticle[];
   language: Language;
   onImagePageChange?: (page: number) => void;
   onImagePositionChange?: (position: PreviewArticle["imagePosition"]) => void;
@@ -609,6 +679,7 @@ export function PublicationArticlePreview({
   bookTitle,
   compact = false,
   focused = false,
+  flowArticles = [],
   language,
   onImagePageChange,
   onImagePositionChange,
@@ -641,21 +712,23 @@ export function PublicationArticlePreview({
     Boolean(article.number) &&
     template.showNumber &&
     template.numberPosition !== "hidden";
-  const subtitle =
-    template.subtitleMode === "fixed"
-      ? template.fixedSubtitle
-      : template.subtitleMode === "free"
-        ? article.subtitle
-        : "";
+  const subtitle = getTemplateSubtitle(template, article.subtitle);
+  const publicationBody = useMemo(
+    () =>
+      articlePageMode === "flow" && flowArticles.length
+        ? buildFlowPreviewBody(article.body, flowArticles)
+        : article.body,
+    [article.body, articlePageMode, flowArticles],
+  );
   const estimatedPages = useMemo(
     () =>
       paginateArticle(
-        article.body,
+        publicationBody,
         article.imageUrl,
         article.imagePage,
         template,
       ),
-    [article.body, article.imagePage, article.imageUrl, template],
+    [article.imagePage, article.imageUrl, publicationBody, template],
   );
   const estimatedImagePage = Math.max(
     0,
@@ -670,7 +743,7 @@ export function PublicationArticlePreview({
   const paginationKey = JSON.stringify({
     article: {
       authorMeta: article.authorMeta,
-      body: article.body,
+      body: publicationBody,
       imageUrl: article.imageUrl,
       number: article.number,
       subtitle,
@@ -793,7 +866,7 @@ export function PublicationArticlePreview({
     const firstContent = pageContentRefs.current[0];
     if (!firstBody || !firstContent) return;
 
-    const normalizedBody = article.body.replace(/\r\n/g, "\n");
+    const normalizedBody = publicationBody.replace(/\r\n/g, "\n");
     const firstBodyBounds = firstBody.getBoundingClientRect();
     const header = firstContent.querySelector<HTMLElement>(":scope > header");
     const headerStyle = header ? getComputedStyle(header) : null;
@@ -868,6 +941,7 @@ export function PublicationArticlePreview({
           normalizedBody,
           start,
           template,
+          flowArticles,
         );
         const showsImage = imagePage === pageIndex;
         if (showsImage && canMeasureImage && !isOverlayImage) {
@@ -942,7 +1016,6 @@ export function PublicationArticlePreview({
   }, [
     activeColumns,
     article.authorMeta,
-    article.body,
     article.imagePage,
     article.imageUrl,
     article.imageWrap,
@@ -957,6 +1030,8 @@ export function PublicationArticlePreview({
     previewImagePage,
     previewImagePosition,
     previewImageSize,
+    publicationBody,
+    flowArticles,
     template,
     visualScale,
   ]);
@@ -1243,9 +1318,15 @@ export function PublicationArticlePreview({
     center: "center",
     right: "flex-end",
   }[template.titleAlign];
-  const title = (
+  const renderTitle = (
+    titleText: string,
+    subtitleText = "",
+    isFlowTitle = false,
+  ) => (
     <div
+      data-flow-article-title={isFlowTitle ? "true" : undefined}
       style={{
+        breakInside: isFlowTitle ? "avoid" : undefined,
         display: "flex",
         justifyContent: titleJustifyContent,
       }}
@@ -1260,6 +1341,7 @@ export function PublicationArticlePreview({
         {template.titleSurfaceEnabled && (
           <span
             aria-hidden="true"
+            data-title-surface="true"
             style={{
               backdropFilter:
                 titleSurfaceOpacity > 0
@@ -1288,9 +1370,9 @@ export function PublicationArticlePreview({
             color: template.themeColor,
           }}
         >
-          {article.title || "\u00a0"}
+          {titleText || "\u00a0"}
         </h2>
-        {subtitle && (
+        {subtitleText && (
           <p
             className="relative mt-2 break-words text-slate-500"
             style={{
@@ -1300,12 +1382,13 @@ export function PublicationArticlePreview({
               textAlign: template.subtitleAlign,
             }}
           >
-            {subtitle}
+            {subtitleText}
           </p>
         )}
       </div>
     </div>
   );
+  const title = renderTitle(article.title, subtitle);
   return (
     <section
       className={compact ? "contents" : "overflow-hidden rounded-xl border border-border bg-card shadow-xl"}
@@ -1448,20 +1531,26 @@ export function PublicationArticlePreview({
                         height: pageColumns === 2 ? "100%" : undefined,
                       }}
                     >
-                      {page.lines.map((line, lineIndex) => (
-                        <p
-                          data-measure-line={lineIndex + 1}
-                          key={`${lineIndex}-${line.slice(0, 12)}`}
-                          style={{
-                            minHeight: `${template.lineHeight}em`,
-                            textIndent: line
-                              ? `${template.firstLineIndent}em`
-                              : 0,
-                          }}
-                        >
-                          {line || "\u00a0"}
-                        </p>
-                        ))}
+                      {page.lines.map((line, lineIndex) => {
+                        const isQuoteLine =
+                          template.quoteStyle &&
+                          line.trimStart().startsWith(">");
+                        return (
+                          <p
+                            data-measure-line={lineIndex + 1}
+                            data-measure-quote={isQuoteLine ? "true" : "false"}
+                            key={`${lineIndex}-${line.slice(0, 12)}`}
+                            style={{
+                              minHeight: `${template.lineHeight}em`,
+                              textIndent: line
+                                ? `${template.firstLineIndent}em`
+                                : 0,
+                            }}
+                          >
+                            {line || "\u00a0"}
+                          </p>
+                        );
+                      })}
                     </div>
                     <div
                       data-preview-flow={pageNumber}
@@ -1485,6 +1574,28 @@ export function PublicationArticlePreview({
                         </p>
                       ) : null}
                       {page.lines.map((line, lineIndex) => {
+                        const flowTitleIndex = getFlowTitleIndex(line);
+                        const flowArticle =
+                          flowTitleIndex === null
+                            ? undefined
+                            : flowArticles[flowTitleIndex];
+                        if (flowArticle !== undefined) {
+                          return (
+                            <div
+                              data-measure-flow-title="true"
+                              key={`${lineIndex}-${flowArticle.title}`}
+                            >
+                              {renderTitle(
+                                flowArticle.title,
+                                getTemplateSubtitle(
+                                  template,
+                                  flowArticle.subtitle,
+                                ),
+                                true,
+                              )}
+                            </div>
+                          );
+                        }
                         const insertsImage =
                           page.showImage &&
                           !isOverlayImage &&
@@ -1497,31 +1608,59 @@ export function PublicationArticlePreview({
                         const displayLine = isQuoteLine
                           ? line.trimStart().replace(/^>\s?/, "")
                           : line;
+                        const displayCharacter = clamp(
+                          character,
+                          0,
+                          displayLine.length,
+                        );
+                        const renderLineText = (text: string) =>
+                          isQuoteLine ? (
+                            <span
+                              style={{
+                                borderLeft: `2px solid ${template.accentColor}`,
+                                display: "block",
+                                fontStyle: "italic",
+                                minHeight: `${template.lineHeight}em`,
+                                paddingLeft: "0.7em",
+                                textIndent: text
+                                  ? `${template.firstLineIndent}em`
+                                  : 0,
+                              }}
+                            >
+                              {text || "\u00a0"}
+                            </span>
+                          ) : (
+                            text || "\u00a0"
+                          );
 
                         return (
                           <p
                             data-preview-line={lineIndex + 1}
                             key={`${lineIndex}-${line.slice(0, 12)}`}
                             style={{
-                              borderLeft: isQuoteLine
-                                ? `2px solid ${template.accentColor}`
-                                : undefined,
-                              fontStyle: isQuoteLine ? "italic" : undefined,
                               minHeight: `${template.lineHeight}em`,
-                              paddingLeft: isQuoteLine ? "0.7em" : undefined,
-                              textIndent: line
+                              textIndent: line && !isQuoteLine
                                 ? `${template.firstLineIndent}em`
                                 : 0,
                             }}
                           >
                             {insertsImage ? (
                               <>
-                                {displayLine.slice(0, character)}
+                                {displayCharacter > 0
+                                  ? renderLineText(
+                                      displayLine.slice(0, displayCharacter),
+                                    )
+                                  : null}
                                 {renderWrapSpacer()}
-                                {displayLine.slice(character) || "\u00a0"}
+                                {displayCharacter < displayLine.length ||
+                                displayLine.length === 0
+                                  ? renderLineText(
+                                      displayLine.slice(displayCharacter),
+                                    )
+                                  : null}
                               </>
                             ) : (
-                              displayLine || "\u00a0"
+                              renderLineText(displayLine)
                             )}
                           </p>
                         );
@@ -1534,13 +1673,15 @@ export function PublicationArticlePreview({
 
                 <PublicationPageFooter
                   footerColor={template.themeColor}
+                  footerFontFamily={getFontFamilyStyle(template.footerFont)}
+                  footerFontSize={template.footerSize}
                   footerText={chrome.footerText}
                   pageMargin={template.pageMargin}
                   pageNumber={pageNumber}
                   pageNumberColor={template.accentColor}
                   pageNumberPosition={template.pageNumberPosition}
                   pageWidthMm={paper.widthMm}
-                  surfaceColor={template.backgroundColor}
+                  surfaceOpacity={template.chromeSurfaceOpacity}
                   showFooter={chrome.showFooter}
                   showPageNumber={chrome.showPageNumber}
                 />

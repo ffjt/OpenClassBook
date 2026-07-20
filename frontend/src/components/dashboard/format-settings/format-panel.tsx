@@ -14,7 +14,6 @@ import {
 
 import type {
   Alignment,
-  BookFormatSettings,
   FontSelection,
 } from "@/components/dashboard/format-settings/format-settings-types";
 import { FontPicker } from "@/components/dashboard/format-settings/font-picker";
@@ -32,6 +31,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { Language } from "@/lib/i18n";
 import type { SystemFontStatus } from "@/hooks/use-system-fonts";
+import type { Template } from "@/types/template";
 
 const panelCopy = {
   en: {
@@ -73,11 +73,13 @@ const panelCopy = {
       margin: "Margins",
       pageNumber: "Page number",
       numberingUnavailable: "Unavailable because this book does not use article numbers.",
-      columns: "Columns",
       showHeader: "Show header",
       headerText: "Header text",
       showFooter: "Show footer",
       footerText: "Footer text",
+      footerFont: "Footer font",
+      footerSize: "Footer size",
+      chromeSurfaceOpacity: "Footer and page number opacity",
       showAuthorMeta: "Show author and class",
       themeColor: "Text color",
       accentColor: "Accent color",
@@ -98,8 +100,6 @@ const panelCopy = {
       bottomCenter: "Bottom center",
       bottomRight: "Bottom right",
       custom: "Custom",
-      oneColumn: "Single column",
-      twoColumns: "Two columns",
     },
   },
   zh: {
@@ -136,11 +136,13 @@ const panelCopy = {
       margin: "页边距",
       pageNumber: "页码位置",
       numberingUnavailable: "当前书籍选择了“我不需要编号”，编号格式不可用。",
-      columns: "分栏布局",
       showHeader: "显示页眉",
       headerText: "页眉文字",
       showFooter: "显示页脚",
       footerText: "页脚文字",
+      footerFont: "页脚字体",
+      footerSize: "页脚字号",
+      chromeSurfaceOpacity: "页脚与页码透明度",
       showAuthorMeta: "显示作者与班级",
       themeColor: "正文颜色",
       accentColor: "强调色",
@@ -161,8 +163,6 @@ const panelCopy = {
       bottomCenter: "底部居中",
       bottomRight: "底部右侧",
       custom: "自定义",
-      oneColumn: "单栏",
-      twoColumns: "双栏",
     },
   },
 } as const;
@@ -172,11 +172,11 @@ interface FormatPanelProps {
   fontStatus: SystemFontStatus;
   language: Language;
   onLoadSystemFonts: () => void;
-  onChange: <Key extends keyof BookFormatSettings>(
+  onChange: <Key extends keyof Template>(
     key: Key,
-    value: BookFormatSettings[Key],
+    value: Template[Key],
   ) => void;
-  settings: BookFormatSettings;
+  settings: Template;
   numberingEnabled: boolean;
 }
 
@@ -269,7 +269,7 @@ export function FormatPanel({
   const copy = panelCopy[language];
   const selectableFontOptions = Array.from(
     new Map(
-      [settings.titleFont, settings.bodyFont, ...fontOptions].map((font) => [
+      [settings.titleFont, settings.bodyFont, settings.footerFont, ...fontOptions].map((font) => [
         font.postscriptName,
         font,
       ]),
@@ -371,7 +371,7 @@ export function FormatPanel({
             onChange={(event) =>
               onChange(
                 "subtitleMode",
-                event.target.value as BookFormatSettings["subtitleMode"],
+                event.target.value as Template["subtitleMode"],
               )
             }
             value={settings.subtitleMode}
@@ -444,7 +444,7 @@ export function FormatPanel({
               onChange={(event) =>
                 onChange(
                   "numberPosition",
-                  event.target.value as BookFormatSettings["numberPosition"],
+                  event.target.value as Template["numberPosition"],
                 )
               }
               value={settings.numberPosition}
@@ -581,7 +581,7 @@ export function FormatPanel({
             className="h-9 text-xs"
             id="paper-size"
             onChange={(event) =>
-              onChange("pageSize", event.target.value as BookFormatSettings["pageSize"])
+              onChange("pageSize", event.target.value as Template["pageSize"])
             }
             value={settings.pageSize}
           >
@@ -638,7 +638,7 @@ export function FormatPanel({
             className="h-9 text-xs"
             id="page-margin"
             onChange={(event) =>
-              onChange("pageMargin", event.target.value as BookFormatSettings["pageMargin"])
+              onChange("pageMargin", event.target.value as Template["pageMargin"])
             }
             value={settings.pageMargin}
           >
@@ -654,7 +654,7 @@ export function FormatPanel({
             onChange={(event) =>
               onChange(
                 "pageNumberPosition",
-                event.target.value as BookFormatSettings["pageNumberPosition"],
+                event.target.value as Template["pageNumberPosition"],
               )
             }
             value={settings.pageNumberPosition}
@@ -667,19 +667,6 @@ export function FormatPanel({
       </PanelSection>
 
       <PanelSection icon={Columns3} title={copy.sections.presentation}>
-        <ControlRow htmlFor="columns" label={copy.fields.columns}>
-          <Select
-            className="h-9 text-xs"
-            id="columns"
-            onChange={(event) =>
-              onChange("columns", Number(event.target.value) as 1 | 2)
-            }
-            value={settings.columns}
-          >
-            <option value={1}>{copy.values.oneColumn}</option>
-            <option value={2}>{copy.values.twoColumns}</option>
-          </Select>
-        </ControlRow>
         <ControlRow htmlFor="theme-color" label={copy.fields.themeColor}>
           <Input
             className="h-9 rounded-lg border-input bg-background px-2 text-xs"
@@ -727,13 +714,70 @@ export function FormatPanel({
           />
         </ControlRow>
         {settings.showFooter && (
-          <ControlRow htmlFor="footer-text" label={copy.fields.footerText}>
-            <Input
-              className="h-9 rounded-lg border-input bg-background px-3 text-xs text-foreground"
-              id="footer-text"
-              onChange={(event) => onChange("footerText", event.target.value)}
-              value={settings.footerText}
-            />
+          <>
+            <ControlRow htmlFor="footer-text" label={copy.fields.footerText}>
+              <Input
+                className="h-9 rounded-lg border-input bg-background px-3 text-xs text-foreground"
+                id="footer-text"
+                onChange={(event) => onChange("footerText", event.target.value)}
+                value={settings.footerText}
+              />
+            </ControlRow>
+            <ControlRow label={copy.fields.footerFont}>
+              <FontPicker
+                ariaLabel={copy.fields.footerFont}
+                fontOptions={selectableFontOptions}
+                language={language}
+                onOpen={fontStatus === "idle" ? onLoadSystemFonts : undefined}
+                onValueChange={(value) => onChange("footerFont", value)}
+                value={settings.footerFont}
+              />
+            </ControlRow>
+            <ControlRow htmlFor="footer-size" label={copy.fields.footerSize}>
+              <div className="relative">
+                <Input
+                  className="h-9 rounded-lg border-input bg-background px-3 pr-10 text-xs text-foreground focus-visible:ring-2 focus-visible:ring-blue-500/20"
+                  id="footer-size"
+                  inputMode="decimal"
+                  max={18}
+                  min={6}
+                  onChange={(event) =>
+                    onChange("footerSize", Number(event.target.value))
+                  }
+                  step={0.5}
+                  type="number"
+                  value={settings.footerSize}
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
+                  pt
+                </span>
+              </div>
+            </ControlRow>
+          </>
+        )}
+        {(settings.showFooter || settings.pageNumberPosition !== "hidden") && (
+          <ControlRow
+            htmlFor="chrome-surface-opacity"
+            label={copy.fields.chromeSurfaceOpacity}
+          >
+            <div className="flex items-center gap-3">
+              <Slider
+                id="chrome-surface-opacity"
+                max={100}
+                min={0}
+                onChange={(event) =>
+                  onChange(
+                    "chromeSurfaceOpacity",
+                    Number(event.target.value),
+                  )
+                }
+                step={5}
+                value={settings.chromeSurfaceOpacity}
+              />
+              <span className="w-9 text-right text-[11px] tabular-nums text-muted-foreground">
+                {settings.chromeSurfaceOpacity}%
+              </span>
+            </div>
           </ControlRow>
         )}
         <ControlRow htmlFor="show-author-meta" label={copy.fields.showAuthorMeta}>

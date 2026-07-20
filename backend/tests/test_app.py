@@ -1525,6 +1525,12 @@ def test_export_generates_and_downloads_printable_pdf(
                     "template_id": "nordic-forest",
                     "title_surface_enabled": True,
                     "title_surface_opacity": 35,
+                    "chrome_surface_opacity": 45,
+                    "footer_font": {
+                        "family": "serif",
+                        "fullName": "System Serif",
+                    },
+                    "footer_size": 12,
                 },
             },
         },
@@ -1555,6 +1561,9 @@ def test_export_generates_and_downloads_printable_pdf(
     assert preview_data["template"]["page_size"] == "a5"
     assert preview_data["template"]["title_surface_enabled"] is True
     assert preview_data["template"]["title_surface_opacity"] == 35
+    assert preview_data["template"]["chrome_surface_opacity"] == 45
+    assert preview_data["template"]["footer_font"] == "System Serif"
+    assert preview_data["template"]["footer_size"] == 12
     assert preview_data["stats"]["article_count"] == 2
     assert [section["preset"] for section in preview_data["sections"]] == [
         "cover",

@@ -6,13 +6,14 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image as PillowImage
 from pypdf import PdfReader
+from pypdf.generic import ContentStream
 
 from app.schemas.export import ExportTemplateInfo
 from app.services import page_asset_renderer
-from app.services.pdf_renderer import PdfDocumentData, PdfRenderer
+from app.services.pdf_renderer import PdfDocumentData, PdfRenderer, _draw_chrome_chip
 
 
-def _magazine_template() -> ExportTemplateInfo:
+def _publication_template() -> ExportTemplateInfo:
     return ExportTemplateInfo(
         font="serif",
         font_size=10,
@@ -34,7 +35,6 @@ def _magazine_template() -> ExportTemplateInfo:
         page_number_position="right",
         custom_page_width=210,
         custom_page_height=297,
-        preset="magazine",
         theme_color="#111827",
         accent_color="#dc2626",
         columns=2,
@@ -54,7 +54,64 @@ def _image_data_uri() -> str:
     return f"data:image/png;base64,{encoded}"
 
 
-def test_final_page_chrome_uses_export_safe_sans_font(
+def test_export_template_has_no_publication_category() -> None:
+    assert "preset" not in _publication_template().model_dump()
+
+
+class _ChromeCanvasRecorder:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, float | None]] = []
+        self.fill_alphas: list[float] = []
+        self.stroke_alphas: list[float] = []
+
+    def saveState(self) -> None:  # noqa: N802 - ReportLab canvas API
+        pass
+
+    def restoreState(self) -> None:  # noqa: N802 - ReportLab canvas API
+        pass
+
+    def setFillAlpha(self, alpha: float) -> None:  # noqa: N802
+        self.events.append(("fill_alpha", alpha))
+        self.fill_alphas.append(alpha)
+
+    def setStrokeAlpha(self, alpha: float) -> None:  # noqa: N802
+        self.stroke_alphas.append(alpha)
+
+    def setFillColor(self, _color: object) -> None:  # noqa: N802
+        self.events.append(("fill_color", None))
+
+    def setStrokeColor(self, _color: object) -> None:  # noqa: N802
+        pass
+
+    def roundRect(self, *_args: object, **_kwargs: object) -> None:  # noqa: N802
+        pass
+
+
+def test_footer_and_page_number_surface_uses_configured_opacity() -> None:
+    canvas = _ChromeCanvasRecorder()
+
+    _draw_chrome_chip(
+        canvas,
+        text="02",
+        x=100,
+        y=20,
+        font_name="Helvetica-Bold",
+        font_size=10,
+        surface_opacity=0.35,
+        align="center",
+    )
+
+    assert canvas.fill_alphas == pytest.approx([0.035, 0.35])
+    assert canvas.stroke_alphas == pytest.approx([0.2625])
+    assert canvas.events[:4] == [
+        ("fill_color", None),
+        ("fill_alpha", pytest.approx(0.035)),
+        ("fill_color", None),
+        ("fill_alpha", pytest.approx(0.35)),
+    ]
+
+
+def test_final_page_chrome_keeps_safe_font_and_uses_configured_footer_font(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     requested_fonts: list[str] = []
@@ -65,15 +122,19 @@ def test_final_page_chrome_uses_export_safe_sans_font(
 
     monkeypatch.setattr(page_asset_renderer, "_register_fonts", register_fonts)
 
+    template = _publication_template().model_copy(
+        update={"footer_font": "serif"}
+    )
+
     page_asset_renderer._page_chrome_overlay(
         1,
         595,
         842,
-        _magazine_template(),
+        template,
         "OpenClassBook",
     )
 
-    assert requested_fonts == ["sans-serif"]
+    assert requested_fonts == ["sans-serif", "serif"]
 
 
 @pytest.fixture
@@ -113,7 +174,7 @@ def bilingual_flow_document() -> PdfDocumentData:
             image=None,
         ),
     ]
-    template = _magazine_template().model_copy(
+    template = _publication_template().model_copy(
         update={
             "allow_images": True,
             "image_align": "left",
@@ -188,17 +249,17 @@ def _page_layout(
     return positions, image_matrices
 
 
-def test_magazine_template_renders_real_columns_and_publication_chrome(
+def test_template_renders_real_columns_and_publication_chrome(
     tmp_path: Path,
 ) -> None:
     book = SimpleNamespace(
-        title="Magazine test",
+        title="Two-column test",
         description="A test publication",
         owner_name="Editor",
     )
     content = "\n\n".join(
         f"Paragraph {index} with enough words to occupy a line and demonstrate "
-        "magazine columns in the generated publication."
+        "two columns in the generated publication."
         for index in range(120)
     )
     article = SimpleNamespace(
@@ -209,7 +270,7 @@ def test_magazine_template_renders_real_columns_and_publication_chrome(
         content=f"> A pull quote\n\n{content}",
         image=None,
     )
-    destination = tmp_path / "magazine.pdf"
+    destination = tmp_path / "two-column.pdf"
 
     page_count = PdfRenderer().render(
         PdfDocumentData(
@@ -217,7 +278,7 @@ def test_magazine_template_renders_real_columns_and_publication_chrome(
             articles=[article],
             author_names={1: "Student"},
             sections=[{"kind": "articles"}],
-            template=_magazine_template(),
+            template=_publication_template(),
         ),
         destination,
     )
@@ -240,6 +301,75 @@ def test_magazine_template_renders_real_columns_and_publication_chrome(
     assert len(set(positions)) >= 3
 
 
+def test_flowing_short_articles_fill_both_columns_before_a_new_page(
+    tmp_path: Path,
+) -> None:
+    image = _image_data_uri()
+    articles = [
+        SimpleNamespace(
+            number="001",
+            title="First",
+            subtitle="",
+            author_id=1,
+            content="First article content " * 30,
+            image=image,
+        ),
+        SimpleNamespace(
+            number="002",
+            title="Second",
+            subtitle="",
+            author_id=1,
+            content="Second article content " * 8,
+            image=image,
+        ),
+        SimpleNamespace(
+            number="003",
+            title="Third",
+            subtitle="",
+            author_id=1,
+            content="Third article content.",
+            image=None,
+        ),
+        SimpleNamespace(
+            number="004",
+            title="Fourth",
+            subtitle="",
+            author_id=1,
+            content="Fourth article content.",
+            image=None,
+        ),
+    ]
+    template = _publication_template().model_copy(
+        update={
+            "allow_images": True,
+            "article_page_mode": "flow",
+            "image_width": 72,
+            "show_footer": False,
+            "show_header": False,
+            "title_size": 25,
+            "title_spacing": 24,
+            "title_surface_enabled": True,
+        }
+    )
+
+    page_count = PdfRenderer().render(
+        PdfDocumentData(
+            book=SimpleNamespace(
+                title="Column fill test",
+                description="",
+                owner_name="Editor",
+            ),
+            articles=articles,
+            author_names={1: "Student"},
+            sections=[{"kind": "articles"}],
+            template=template,
+        ),
+        tmp_path / "column-fill.pdf",
+    )
+
+    assert page_count == 1
+
+
 def test_long_bilingual_quote_matches_preview_across_columns(tmp_path: Path) -> None:
     destination = tmp_path / "long-bilingual-quote.pdf"
     quote = "引用内容 Quote content " * 180
@@ -251,7 +381,7 @@ def test_long_bilingual_quote_matches_preview_across_columns(tmp_path: Path) -> 
         content=f"> {quote}\nNormal paragraph after quote / 引用后的普通正文。",
         image=None,
     )
-    template = _magazine_template().model_copy(
+    template = _publication_template().model_copy(
         update={
             "show_header": False,
             "show_footer": False,
@@ -290,7 +420,7 @@ def test_long_bilingual_quote_matches_preview_across_columns(tmp_path: Path) -> 
 
 
 def test_flow_mode_places_multiple_articles_on_one_page(tmp_path: Path) -> None:
-    template = _magazine_template().model_copy(
+    template = _publication_template().model_copy(
         update={
             "columns": 1,
             "article_page_mode": "flow",
@@ -343,7 +473,7 @@ def test_title_surface_keeps_title_and_body_left_edges_aligned(
     tmp_path: Path,
 ) -> None:
     destination = tmp_path / "aligned-title-surface.pdf"
-    template = _magazine_template().model_copy(
+    template = _publication_template().model_copy(
         update={
             "columns": 1,
             "numbering_style": "hidden",
@@ -377,26 +507,43 @@ def test_title_surface_keeps_title_and_body_left_edges_aligned(
         include_page_chrome=False,
     )
 
+    reader = PdfReader(destination)
+    page = reader.pages[0]
     positions, _ = _page_layout(
-        PdfReader(destination).pages[0],
+        page,
         ("ALIGNED TITLE", "ALIGNED BODY"),
     )
     assert positions.keys() >= {"ALIGNED TITLE", "ALIGNED BODY"}
     assert abs(positions["ALIGNED TITLE"][0] - positions["ALIGNED BODY"][0]) <= 1
+
+    fill_color: tuple[float, float, float] | None = None
+    fill_alpha = 1.0
+    translucent_white_surface = False
+    ext_gstates = page["/Resources"]["/ExtGState"]
+    for operands, operator in ContentStream(page["/Contents"], reader).operations:
+        if operator == b"rg":
+            fill_color = tuple(float(value) for value in operands)
+        elif operator == b"gs" and "/ca" in ext_gstates[operands[0]]:
+            fill_alpha = float(ext_gstates[operands[0]]["/ca"])
+        elif operator in {b"f", b"f*", b"B", b"B*"}:
+            if fill_color == (1.0, 1.0, 1.0) and fill_alpha == pytest.approx(0.35):
+                translucent_white_surface = True
+                break
+    assert translucent_white_surface
 
 
 def test_magazine_chapter_page_uses_the_full_page_width(tmp_path: Path) -> None:
     destination = tmp_path / "acknowledgements.pdf"
     document = PdfDocumentData(
         book=SimpleNamespace(
-            title="Magazine test",
+            title="Two-column test",
             description="",
             owner_name="Editor",
         ),
         articles=[],
         author_names={},
         sections=[{"kind": "page", "preset": "acknowledgement"}],
-        template=_magazine_template(),
+        template=_publication_template(),
     )
 
     page_count = PdfRenderer().render(document, destination)

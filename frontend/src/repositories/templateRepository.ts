@@ -9,7 +9,6 @@ import {
   type PageMargin,
   type PageNumberPosition,
   type PageSize,
-  type PublishingPreset,
   type SubtitleMode,
   type Template,
 } from "@/types/template";
@@ -88,11 +87,6 @@ export function deserializeTemplate(stored: BookTemplate): Template {
       typeof presentation.background_color === "string"
         ? presentation.background_color
         : defaultTemplate.backgroundColor,
-    preset: readOption<PublishingPreset>(
-      presentation.preset,
-      ["collection", "magazine"],
-      defaultTemplate.preset,
-    ),
     themeColor:
       typeof presentation.theme_color === "string"
         ? presentation.theme_color
@@ -116,6 +110,24 @@ export function deserializeTemplate(stored: BookTemplate): Template {
       typeof presentation.footer_text === "string"
         ? presentation.footer_text
         : defaultTemplate.footerText,
+    footerFont: readFont(presentation.footer_font, defaultTemplate.footerFont),
+    footerSize: Math.min(
+      18,
+      Math.max(
+        6,
+        readNumber(presentation.footer_size, defaultTemplate.footerSize),
+      ),
+    ),
+    chromeSurfaceOpacity: Math.min(
+      100,
+      Math.max(
+        0,
+        readNumber(
+          presentation.chrome_surface_opacity,
+          defaultTemplate.chromeSurfaceOpacity,
+        ),
+      ),
+    ),
     showAuthorMeta: readBoolean(
       presentation.show_author_meta,
       defaultTemplate.showAuthorMeta,
@@ -265,7 +277,6 @@ export const templateRepository = {
           presentation: {
             template_id: template.templateId,
             background_color: template.backgroundColor,
-            preset: template.preset,
             theme_color: template.themeColor,
             accent_color: template.accentColor,
             columns: template.columns,
@@ -273,6 +284,9 @@ export const templateRepository = {
             header_text: template.headerText,
             show_footer: template.showFooter,
             footer_text: template.footerText,
+            footer_font: template.footerFont,
+            footer_size: template.footerSize,
+            chrome_surface_opacity: template.chromeSurfaceOpacity,
             show_author_meta: template.showAuthorMeta,
             image_radius: template.imageRadius,
             image_border: template.imageBorder,

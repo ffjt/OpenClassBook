@@ -37,6 +37,19 @@ B5 = (176 * mm, 250 * mm)
 TEMPLATE_ASSET_ROOT = (
     Path(__file__).resolve().parents[3] / "frontend" / "public" / "templates"
 )
+
+
+def _set_fill_color_alpha(
+    target_canvas: Any,
+    color: colors.Color,
+    alpha: float,
+) -> None:
+    """Set color before alpha because ReportLab colors reset fill opacity."""
+    target_canvas.setFillColor(color)
+    if hasattr(target_canvas, "setFillAlpha"):
+        target_canvas.setFillAlpha(alpha)
+
+
 class LayeredTitleBlock(Flowable):
     """A neutral translucent title surface that keeps theme art visible beneath it."""
 
@@ -110,9 +123,11 @@ class LayeredTitleBlock(Flowable):
         left = content_left - self.horizontal_padding
 
         self.canv.saveState()
-        if hasattr(self.canv, "setFillAlpha"):
-            self.canv.setFillAlpha(self.opacity * 0.1)
-        self.canv.setFillColor(colors.HexColor("#0f172a"))
+        _set_fill_color_alpha(
+            self.canv,
+            colors.HexColor("#0f172a"),
+            self.opacity * 0.1,
+        )
         self.canv.roundRect(
             left,
             -1,
@@ -122,12 +137,10 @@ class LayeredTitleBlock(Flowable):
             stroke=0,
             fill=1,
         )
-        if hasattr(self.canv, "setFillAlpha"):
-            self.canv.setFillAlpha(self.opacity)
-        self.canv.setFillColor(colors.white)
+        _set_fill_color_alpha(self.canv, colors.white, self.opacity)
+        self.canv.setStrokeColor(colors.white)
         if hasattr(self.canv, "setStrokeAlpha"):
             self.canv.setStrokeAlpha(self.opacity * 0.75)
-        self.canv.setStrokeColor(colors.white)
         self.canv.roundRect(
             left,
             0,
@@ -157,13 +170,13 @@ def _draw_chrome_chip(
     y: float,
     font_name: str,
     font_size: float,
-    surface_color: str,
+    surface_opacity: float,
     align: str = "left",
-    stroke_color: str | None = None,
 ) -> None:
-    """Draw a compact reading aid without creating a full-width footer bar."""
+    """Draw chrome on the same translucent white surface used by titles."""
     width = pdfmetrics.stringWidth(text, font_name, font_size)
     padding_x = 4
+    opacity = max(0.0, min(1.0, surface_opacity))
     if align == "center":
         left = x - width / 2 - padding_x
     elif align == "right":
@@ -171,13 +184,24 @@ def _draw_chrome_chip(
     else:
         left = x - padding_x
     target_canvas.saveState()
-    if hasattr(target_canvas, "setFillAlpha"):
-        target_canvas.setFillAlpha(0.86)
-    target_canvas.setFillColor(colors.HexColor(surface_color))
-    if stroke_color:
-        target_canvas.setStrokeColor(colors.HexColor(stroke_color))
-        if hasattr(target_canvas, "setStrokeAlpha"):
-            target_canvas.setStrokeAlpha(0.6)
+    _set_fill_color_alpha(
+        target_canvas,
+        colors.HexColor("#0f172a"),
+        opacity * 0.1,
+    )
+    target_canvas.roundRect(
+        left,
+        y - 3.5,
+        width + padding_x * 2,
+        font_size + 5,
+        3,
+        fill=1,
+        stroke=0,
+    )
+    _set_fill_color_alpha(target_canvas, colors.white, opacity)
+    target_canvas.setStrokeColor(colors.white)
+    if hasattr(target_canvas, "setStrokeAlpha"):
+        target_canvas.setStrokeAlpha(opacity * 0.75)
     target_canvas.roundRect(
         left,
         y - 2.5,
@@ -185,7 +209,7 @@ def _draw_chrome_chip(
         font_size + 5,
         3,
         fill=1,
-        stroke=1 if stroke_color else 0,
+        stroke=1,
     )
     target_canvas.restoreState()
 
@@ -322,7 +346,8 @@ class PdfRenderer:
         destination.parent.mkdir(parents=True, exist_ok=True)
         body_font, body_bold_font = _register_fonts(document.template.font)
         title_font, title_bold_font = _register_fonts(document.template.title_font)
-        chrome_font, chrome_bold_font = _register_fonts("sans-serif")
+        footer_font, _ = _register_fonts(document.template.footer_font)
+        _, chrome_bold_font = _register_fonts("sans-serif")
         page_size = _page_size(document.template)
         size_scale = _preview_size_scale(document.template, page_size[0])
         margin_ratio = {
@@ -340,30 +365,6 @@ class PdfRenderer:
         )
         if use_columns:
             header_reserve = 12 * mm if document.template.show_header else 0
-            first_article = document.articles[0] if document.articles else None
-            title_size = document.template.title_size * size_scale
-            opener_height = title_size * 1.25
-            if (
-                first_article is not None
-                and first_article.number
-                and document.template.numbering_style != "hidden"
-            ):
-                opener_height += (
-                    max(document.template.font_size * size_scale, 12 * size_scale)
-                    + 1.5 * size_scale
-                )
-            first_subtitle = (
-                document.template.fixed_subtitle
-                if document.template.subtitle_mode == "fixed"
-                else getattr(first_article, "subtitle", "")
-                if document.template.subtitle_mode == "free"
-                else ""
-            )
-            if first_subtitle:
-                opener_height += (
-                    max(title_size * 0.5, 12 * size_scale) * 1.4 + 4 * size_scale
-                )
-            opener_height += document.template.title_spacing * size_scale
             pdf = BaseDocTemplate(
                 str(destination),
                 pagesize=page_size,
@@ -378,14 +379,14 @@ class PdfRenderer:
             pdf.addPageTemplates(
                 [
                     PageTemplate(
-                        id="magazine-first",
+                        id="two-column-first",
                         frames=[
                             Frame(
                                 margin_x,
                                 margin_y,
                                 column_width,
                                 column_height,
-                                id="magazine-left",
+                                id="two-column-left",
                                 leftPadding=0,
                                 rightPadding=0,
                                 topPadding=header_reserve,
@@ -396,23 +397,23 @@ class PdfRenderer:
                                 margin_y,
                                 column_width,
                                 column_height,
-                                id="magazine-right",
+                                id="two-column-right",
                                 leftPadding=0,
                                 rightPadding=0,
-                                topPadding=header_reserve + opener_height,
+                                topPadding=header_reserve,
                                 bottomPadding=0,
                             ),
                         ],
                     ),
                     PageTemplate(
-                        id="magazine",
+                        id="two-column",
                         frames=[
                             Frame(
                                 margin_x,
                                 margin_y,
                                 column_width,
                                 column_height,
-                                id="magazine-left",
+                                id="two-column-left",
                                 leftPadding=0,
                                 rightPadding=0,
                                 topPadding=header_reserve,
@@ -423,7 +424,7 @@ class PdfRenderer:
                                 margin_y,
                                 column_width,
                                 column_height,
-                                id="magazine-right",
+                                id="two-column-right",
                                 leftPadding=0,
                                 rightPadding=0,
                                 topPadding=header_reserve,
@@ -455,7 +456,7 @@ class PdfRenderer:
         )
         story: list[Any] = []
         if use_columns:
-            story.append(NextPageTemplate("magazine"))
+            story.append(NextPageTemplate("two-column"))
         for section_index, section in enumerate(document.sections):
             if section_index:
                 story.append(PageBreak() if not use_columns else Spacer(1, 4 * mm))
@@ -517,12 +518,12 @@ class PdfRenderer:
                     text=footer_text,
                     x=margin_x,
                     y=footer_y,
-                    font_name=chrome_font,
-                    font_size=8,
-                    surface_color=document.template.background_color,
+                    font_name=footer_font,
+                    font_size=document.template.footer_size,
+                    surface_opacity=document.template.chrome_surface_opacity / 100,
                 )
                 canvas.setFillColor(colors.HexColor(document.template.theme_color))
-                canvas.setFont(chrome_font, 8)
+                canvas.setFont(footer_font, document.template.footer_size)
                 canvas.drawString(
                     margin_x,
                     footer_y,
@@ -543,9 +544,8 @@ class PdfRenderer:
                 y=max(8, margin_y / 2),
                 font_name=chrome_bold_font,
                 font_size=10,
-                surface_color=document.template.background_color,
+                surface_opacity=document.template.chrome_surface_opacity / 100,
                 align=position,
-                stroke_color=document.template.accent_color,
             )
             if position == "center":
                 canvas.drawCentredString(x, max(8, margin_y / 2), page_number_label)
@@ -637,10 +637,10 @@ class PdfRenderer:
         for index, article in enumerate(document.articles):
             if index and document.template.article_page_mode == "single":
                 if document.template.columns == 2:
-                    story.append(NextPageTemplate("magazine-first"))
+                    story.append(NextPageTemplate("two-column-first"))
                 story.append(PageBreak())
                 if document.template.columns == 2:
-                    story.append(NextPageTemplate("magazine"))
+                    story.append(NextPageTemplate("two-column"))
 
             paragraphs: list[Paragraph] = []
             normal_lines: list[str] = []

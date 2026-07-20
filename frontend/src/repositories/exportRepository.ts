@@ -18,7 +18,6 @@ export interface ExportTemplateInfo {
   page_number_position: string;
   custom_page_width: number;
   custom_page_height: number;
-  preset: "collection" | "magazine" | string;
   template_id: string;
   theme_color: string;
   accent_color: string;
@@ -29,6 +28,9 @@ export interface ExportTemplateInfo {
   header_text: string;
   show_footer: boolean;
   footer_text: string;
+  footer_font: string;
+  footer_size: number;
+  chrome_surface_opacity: number;
   show_author_meta: boolean;
   image_radius: number;
   image_border: boolean;

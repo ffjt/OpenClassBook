@@ -14,7 +14,7 @@ import {
 
 import { BookPagePreview } from "@/components/dashboard/format-settings/book-page-preview";
 import { FormatPanel } from "@/components/dashboard/format-settings/format-panel";
-import type { Template } from "@/types/template";
+import { withColumnLayout, type Template } from "@/types/template";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { useBookTemplate } from "@/hooks/use-book-template";
@@ -41,6 +41,12 @@ const formatSettingsCopy = {
     descriptionNote: "All submitted articles will use this template.",
     presetsTitle: "Choose a publishing template",
     presetsDescription: "Choose a template on the left and inspect its live article preview on the right.",
+    columnsTitle: "Choose the page layout",
+    columnsDescription: "Set the reading structure first, then choose the visual template.",
+    singleColumn: "Single column",
+    singleColumnHint: "Calm, continuous reading",
+    doubleColumn: "Two columns",
+    doubleColumnHint: "Compact editorial rhythm",
     advanced: "Advanced settings",
     advancedHint: "Override the selected template for this book",
     backToTemplates: "Back to template selection",
@@ -70,6 +76,12 @@ const formatSettingsCopy = {
     descriptionNote: "所有投稿文章都会使用这套模板。",
     presetsTitle: "选择出版模板",
     presetsDescription: "在左侧选择模板，并在右侧查看真实文章排版预览。",
+    columnsTitle: "选择页面分栏",
+    columnsDescription: "先确定正文阅读结构，再选择视觉模板。",
+    singleColumn: "单栏",
+    singleColumnHint: "舒展、连续的阅读体验",
+    doubleColumn: "双栏",
+    doubleColumnHint: "紧凑的刊物排版节奏",
     advanced: "高级设置",
     advancedHint: "仅覆盖当前书籍，不会改变官方模板",
     backToTemplates: "返回模板选择",
@@ -218,6 +230,11 @@ export function FormatSettingsContent({
     setTemplate((current) => ({ ...current, [key]: value }));
   };
 
+  const updateColumns = (columns: 1 | 2) => {
+    setSaveStatus("idle");
+    setTemplate((current) => withColumnLayout(current, columns));
+  };
+
   const applyCatalogTemplate = (templateId: string) => {
     const catalog = templateCatalog.find((entry) => entry.id === templateId);
     if (!catalog) return;
@@ -226,17 +243,14 @@ export function FormatSettingsContent({
       ...current,
       templateId: catalog.id,
       backgroundColor: catalog.secondaryColor,
-      preset: catalog.preset,
       themeColor: catalog.textColor,
       accentColor: catalog.accentColor,
-      columns: catalog.preset === "magazine" ? 2 : 1,
       bodyFont: { ...current.bodyFont, family: catalog.fontFamily, fullName: catalog.fontFamily },
       titleFont: { ...current.titleFont, family: catalog.fontFamily, fullName: catalog.fontFamily },
+      titleSpacing: 12,
       imageRadius: catalog.cornerStyle === "soft" ? 12 : 0,
       imageBorder: catalog.cornerStyle === "square",
-      quoteStyle: catalog.preset === "magazine",
-      showHeader: catalog.preset === "magazine",
-      showFooter: true,
+      quoteStyle: true,
     }));
   };
 
@@ -349,6 +363,65 @@ export function FormatSettingsContent({
 
       {designerStep === "templates" ? (
         <section className={cn("rounded-2xl border border-border bg-card/60 p-4 sm:p-5", showHeader && "mt-6")}>
+          <div className="mb-7 rounded-2xl border border-blue-500/25 bg-gradient-to-br from-blue-500/12 via-blue-500/[0.05] to-transparent p-4 sm:p-5">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-400">
+                {copy.columnsTitle}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {copy.columnsDescription}
+              </p>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <button
+                aria-pressed={settings.columns === 1}
+                className={cn(
+                  "group flex min-h-28 items-center gap-5 rounded-xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                  settings.columns === 1
+                    ? "border-blue-400 bg-blue-500/15 shadow-[0_12px_30px_rgba(37,99,235,0.16)]"
+                    : "border-border bg-background/70 hover:border-blue-500/40 hover:bg-blue-500/[0.06]",
+                )}
+                onClick={() => updateColumns(1)}
+                type="button"
+              >
+                <span className="flex h-20 w-14 shrink-0 rounded-md border border-current/20 bg-white/95 p-2 shadow-sm">
+                  <span className="w-full rounded-sm bg-slate-300/85" />
+                </span>
+                <span>
+                  <span className="block text-lg font-semibold tracking-[-0.02em] text-foreground">
+                    {copy.singleColumn}
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                    {copy.singleColumnHint}
+                  </span>
+                </span>
+              </button>
+              <button
+                aria-pressed={settings.columns === 2}
+                className={cn(
+                  "group flex min-h-28 items-center gap-5 rounded-xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                  settings.columns === 2
+                    ? "border-blue-400 bg-blue-500/15 shadow-[0_12px_30px_rgba(37,99,235,0.16)]"
+                    : "border-border bg-background/70 hover:border-blue-500/40 hover:bg-blue-500/[0.06]",
+                )}
+                onClick={() => updateColumns(2)}
+                type="button"
+              >
+                <span className="grid h-20 w-14 shrink-0 grid-cols-2 gap-1 rounded-md border border-current/20 bg-white/95 p-2 shadow-sm">
+                  <span className="rounded-sm bg-slate-300/85" />
+                  <span className="rounded-sm bg-slate-300/85" />
+                </span>
+                <span>
+                  <span className="block text-lg font-semibold tracking-[-0.02em] text-foreground">
+                    {copy.doubleColumn}
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                    {copy.doubleColumnHint}
+                  </span>
+                </span>
+              </button>
+            </div>
+          </div>
           <div className="flex flex-col gap-1">
             <h2 className="text-sm font-semibold text-foreground">{copy.presetsTitle}</h2>
             <p className="text-xs leading-5 text-muted-foreground">{copy.presetsDescription}</p>

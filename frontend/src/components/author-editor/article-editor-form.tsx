@@ -13,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { useTemplate } from "@/hooks/use-template";
 import type { Language } from "@/lib/i18n";
 import type { ImageWrap, PreviewArticle } from "@/types/article";
@@ -29,8 +28,6 @@ const editorCopy = {
     behindText: "Behind text",
     inFrontOfText: "In front of text",
     title: "Article Editor",
-    magazineMode: "Campus Magazine",
-    collectionMode: "Classic Collection",
     description: "Write your story. The book template controls its appearance.",
     number: "Article Number",
     numberHint: "Unique within this book",
@@ -64,8 +61,6 @@ const editorCopy = {
     behindText: "\u886c\u4e8e\u6587\u5b57\u4e0b\u65b9",
     inFrontOfText: "\u6d6e\u4e8e\u6587\u5b57\u4e0a\u65b9",
     title: "\u6587\u7ae0\u7f16\u8f91\u5668",
-    magazineMode: "\u6821\u56ed\u62a5\u520a",
-    collectionMode: "\u7ecf\u5178\u6587\u96c6",
     description: "\u53ea\u9700\u4e13\u6ce8\u4e66\u5199\uff0c\u4e66\u7c4d\u6a21\u677f\u4f1a\u7edf\u4e00\u63a7\u5236\u6587\u7ae0\u6837\u5f0f\u3002",
     number: "\u6587\u7ae0\u7f16\u53f7",
     numberHint: "\u5728\u6574\u672c\u4e66\u4e2d\u552f\u4e00",
@@ -192,20 +187,7 @@ export function ArticleEditorForm({
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-card shadow-xl">
       <header className="border-b border-border px-5 py-5 sm:px-6">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-foreground">{copy.title}</h2>
-          <Badge
-            className={
-              template.preset === "magazine"
-                ? "border-red-500/25 bg-red-500/10 text-red-300"
-                : "border-border bg-muted text-muted-foreground"
-            }
-          >
-            {template.preset === "magazine"
-              ? copy.magazineMode
-              : copy.collectionMode}
-          </Badge>
-        </div>
+        <h2 className="text-sm font-semibold text-foreground">{copy.title}</h2>
         <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
           {copy.description}
         </p>

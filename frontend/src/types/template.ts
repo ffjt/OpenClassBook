@@ -11,7 +11,6 @@ export type PageMargin = "narrow" | "normal" | "wide";
 export type PageNumberPosition = "center" | "right" | "hidden";
 export type PageSize = "a4" | "a5" | "b5" | "custom";
 export type SubtitleMode = "disabled" | "fixed" | "free";
-export type PublishingPreset = "collection" | "magazine";
 export type ColumnCount = 1 | 2;
 
 /** Shared in-memory contract for every book publishing surface. */
@@ -20,8 +19,6 @@ export interface Template {
   templateId: string;
   /** Safe, near-white article background shared by preview and export metadata. */
   backgroundColor: string;
-  /** Official publishing preset. Advanced settings below override its defaults. */
-  preset: PublishingPreset;
   themeColor: string;
   accentColor: string;
   columns: ColumnCount;
@@ -29,6 +26,11 @@ export interface Template {
   headerText: string;
   showFooter: boolean;
   footerText: string;
+  footerFont: FontSelection;
+  /** Footer font size in points. */
+  footerSize: number;
+  /** Translucent footer and page-number surface opacity from 0 to 100. */
+  chromeSurfaceOpacity: number;
   showAuthorMeta: boolean;
   imageRadius: number;
   imageBorder: boolean;
@@ -68,6 +70,33 @@ export interface Template {
 }
 
 export type BookTemplate = Template;
+
+export function withColumnLayout(
+  template: Template,
+  columns: ColumnCount,
+): Template {
+  const isTwoColumn = columns === 2;
+  return {
+    ...template,
+    columns,
+    pageNumberPosition: "center",
+    showFooter: isTwoColumn,
+    showHeader: isTwoColumn,
+    subtitleAlign: isTwoColumn ? template.subtitleAlign : "center",
+    titleAlign: isTwoColumn ? "left" : "center",
+    titleSurfaceEnabled: isTwoColumn,
+    titleSurfaceOpacity: isTwoColumn ? 15 : template.titleSurfaceOpacity,
+  };
+}
+
+export function getTemplateSubtitle(
+  template: Template,
+  articleSubtitle = "",
+): string {
+  if (template.subtitleMode === "fixed") return template.fixedSubtitle;
+  if (template.subtitleMode === "free") return articleSubtitle;
+  return "";
+}
 
 /** Matches the CJK-safe sans font embedded by the PDF renderer for page chrome. */
 export const publicationChromeFontFamily =

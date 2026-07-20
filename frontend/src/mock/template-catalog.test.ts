@@ -54,4 +54,16 @@ describe("template catalog", () => {
       ).toBeGreaterThanOrEqual(4.5);
     }
   });
+
+  it("uses high-contrast author colors for the refined themes", () => {
+    const refinedThemeIds = new Set(["spring-blossom", "summer-forest", "rice-paper"]);
+
+    for (const template of templateCatalog.filter(({ id }) => refinedThemeIds.has(id))) {
+      expect(
+        contrastRatio(template.accentColor, template.secondaryColor),
+        template.id,
+      ).toBeGreaterThanOrEqual(7);
+    }
+  });
+
 });

@@ -36,8 +36,6 @@ class ExportTemplateInfo(BaseModel):
     page_number_position: str
     custom_page_width: float
     custom_page_height: float
-    # Publication-level defaults / 出版层样式（旧模板缺省为文集）
-    preset: str = "collection"
     template_id: str = ""
     theme_color: str = "#202124"
     accent_color: str = "#1f2937"
@@ -48,10 +46,13 @@ class ExportTemplateInfo(BaseModel):
     header_text: str = ""
     show_footer: bool = True
     footer_text: str = "OpenClassBook"
+    footer_font: str = "sans-serif"
+    footer_size: float = Field(default=8, ge=6, le=18)
+    chrome_surface_opacity: float = Field(default=70, ge=0, le=100)
     show_author_meta: bool = True
     image_radius: float = Field(default=0, ge=0, le=24)
     image_border: bool = True
-    quote_style: bool = False
+    quote_style: bool = True
     title_surface_enabled: bool = False
     title_surface_opacity: float = Field(default=70, ge=0, le=100)
 

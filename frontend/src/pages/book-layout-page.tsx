@@ -1912,7 +1912,7 @@ function PageSectionPreview({
               {section.preset === "ending" ? pageCopy.sections.ending : isCover ? book.title : label}
             </h3>
             <p className="mt-3 max-w-[160px] text-[10px] leading-5 text-slate-600">
-              {section.preset === "ending" ? "感谢阅读 · Thank you for reading" : isCover ? "ESSAY COLLECTION" : "Chapter 01"}
+              {section.preset === "ending" ? "感谢阅读 · Thank you for reading" : isCover ? "SCHOOL PUBLICATION" : "Chapter 01"}
             </p>
           </>
         ) : (
@@ -1962,15 +1962,29 @@ function ArticleSectionPreview({
     if (articlePageMode !== "flow" || articles.length <= 1) return articles;
     const firstArticle = articles[0];
     if (!firstArticle) return articles;
-    return [
-      {
-        ...firstArticle,
-        content: articles
-          .map((article) => `${article.title}\n${article.content || ""}`)
-          .join("\n\n\n\n"),
-      },
-    ];
+    return [firstArticle];
   }, [articlePageMode, articles]);
+  const flowArticles = useMemo<PublicationPreviewArticle[]>(
+    () =>
+      articlePageMode === "flow"
+        ? articles.slice(1).map((article) => ({
+            authorMeta:
+              authorNames.get(article.author_id) ??
+              `${pageCopy.author} #${article.author_id}`,
+            body: article.content || "",
+            id: article.id,
+            imagePage: article.image_settings?.page ?? -1,
+            imagePosition: article.image_settings?.position ?? { x: 50, y: 50 },
+            imageSize: article.image_settings?.size ?? { width: 72, height: 32 },
+            imageUrl: article.image ?? "",
+            imageWrap: article.image_settings?.wrap ?? "topBottom",
+            number: hasNumbering ? article.number : "",
+            subtitle: article.subtitle,
+            title: article.title,
+          }))
+        : [],
+    [articlePageMode, articles, authorNames, hasNumbering, pageCopy.author],
+  );
   const pages = useMemo(
     () =>
       previewArticles.flatMap((article) =>
@@ -2057,6 +2071,7 @@ function ArticleSectionPreview({
               articlePageMode={articlePageMode}
               bookTitle={bookTitle}
               focused={focusedArticleId === article.id}
+              flowArticles={flowArticles}
               key={article.id}
               language={language}
               pageNumberOffset={pageIndex}
@@ -2220,13 +2235,15 @@ function ArticleSectionPreview({
 
             <PublicationPageFooter
               footerColor={template.themeColor}
+              footerFontFamily={getFontFamilyStyle(template.footerFont)}
+              footerFontSize={template.footerSize}
               footerText={template.footerText}
               pageMargin={template.pageMargin}
               pageNumber={pageIndex + 1}
               pageNumberColor={template.accentColor}
               pageNumberPosition={template.pageNumberPosition}
               pageWidthMm={getPreviewPageWidthMm(template)}
-              surfaceColor={template.backgroundColor}
+              surfaceOpacity={template.chromeSurfaceOpacity}
               showFooter={template.showFooter}
               showPageNumber={pageIndex > 0 && template.pageNumberPosition !== "hidden"}
             />

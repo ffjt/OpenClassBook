@@ -370,7 +370,13 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
         title_font = (
             title_font.get("fullName") or title_font.get("family") or "sans-serif"
         )
-    preset = str(presentation.get("preset", "collection"))
+    footer_font = presentation.get("footer_font", "sans-serif")
+    if isinstance(footer_font, dict):
+        footer_font = (
+            footer_font.get("fullName")
+            or footer_font.get("family")
+            or "sans-serif"
+        )
     return ExportTemplateInfo(
         font=str(body_font),
         title_font=str(title_font),
@@ -389,7 +395,7 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
         title_size=_number(title.get("size"), 24),
         title_spacing=_number(
             title.get("spacing"),
-            12 if preset == "magazine" else 24,
+            12,
         ),
         title_align=str(title.get("align", "center")),
         title_bold=bool(title.get("bold", True)),
@@ -401,7 +407,6 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
         page_number_position=str(page.get("number_position", "center")),
         custom_page_width=_number(page.get("custom_width"), 210),
         custom_page_height=_number(page.get("custom_height"), 297),
-        preset=preset,
         template_id=str(presentation.get("template_id", "spring-blossom")),
         theme_color=_color(presentation.get("theme_color"), "#202124"),
         accent_color=_color(presentation.get("accent_color"), "#1f2937"),
@@ -416,10 +421,19 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
         header_text=str(presentation.get("header_text", "")),
         show_footer=bool(presentation.get("show_footer", True)),
         footer_text=str(presentation.get("footer_text", "OpenClassBook")),
+        footer_font=str(footer_font),
+        footer_size=min(
+            18,
+            max(6, _number(presentation.get("footer_size"), 8)),
+        ),
+        chrome_surface_opacity=min(
+            100,
+            max(0, _number(presentation.get("chrome_surface_opacity"), 70)),
+        ),
         show_author_meta=bool(presentation.get("show_author_meta", True)),
         image_radius=_number(presentation.get("image_radius"), 0),
         image_border=bool(presentation.get("image_border", True)),
-        quote_style=bool(presentation.get("quote_style", False)),
+        quote_style=bool(presentation.get("quote_style", True)),
         title_surface_enabled=bool(
             presentation.get(
                 "title_surface_enabled",

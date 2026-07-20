@@ -14,35 +14,42 @@ const pointSizeInContainerWidth = (points: number, pageWidthMm: number) =>
 
 interface PublicationPageFooterProps {
   footerColor?: string;
+  footerFontFamily: string;
+  footerFontSize: number;
   footerText: string;
   pageMargin: PageMargin;
   pageNumber: number;
   pageNumberPosition: PageNumberPosition;
   pageWidthMm: number;
   pageNumberColor?: string;
-  surfaceColor: string;
+  surfaceOpacity: number;
   showPageNumber: boolean;
   showFooter: boolean;
 }
 
 export function PublicationPageFooter({
   footerColor,
+  footerFontFamily,
+  footerFontSize,
   footerText,
   pageMargin,
   pageNumber,
   pageNumberPosition,
   pageWidthMm,
   pageNumberColor,
-  surfaceColor,
+  surfaceOpacity,
   showPageNumber,
   showFooter,
 }: PublicationPageFooterProps) {
   if (!showFooter && !showPageNumber) return null;
   const pageNumberLabel = String(pageNumber).padStart(2, "0");
-  const chipColor = /^#[0-9a-f]{6}$/i.test(surfaceColor)
-    ? `${surfaceColor}dc`
-    : "rgba(255, 254, 250, 0.86)";
-  const chipClassName = "rounded-[0.45em] px-[0.6em] py-[0.28em] shadow-[0_1px_4px_rgba(15,23,42,0.12)] backdrop-blur-[2px]";
+  const opacity = Math.min(100, Math.max(0, surfaceOpacity)) / 100;
+  const chipClassName = "rounded-[0.45em] border px-[0.6em] py-[0.28em] backdrop-blur-[2px]";
+  const chipSurfaceStyle = {
+    backgroundColor: `rgba(255,255,255,${opacity})`,
+    borderColor: `rgba(255,255,255,${opacity * 0.75})`,
+    boxShadow: `0 1px 4px rgba(15,23,42,${opacity * 0.14})`,
+  };
 
   return (
     <footer
@@ -54,11 +61,12 @@ export function PublicationPageFooter({
     >
       {showFooter ? (
         <span
-          className={`${chipClassName} min-w-0 truncate whitespace-nowrap`}
+          className={`${chipClassName} min-w-0 w-fit max-w-full justify-self-start truncate whitespace-nowrap`}
           style={{
-            backgroundColor: chipColor,
+            ...chipSurfaceStyle,
             color: footerColor,
-            fontSize: pointSizeInContainerWidth(8, pageWidthMm),
+            fontFamily: footerFontFamily,
+            fontSize: pointSizeInContainerWidth(footerFontSize, pageWidthMm),
           }}
         >
           {footerText || "OpenClassBook"}
@@ -72,9 +80,8 @@ export function PublicationPageFooter({
               : "col-start-2 justify-self-center whitespace-nowrap"
           }`}
           style={{
-            backgroundColor: chipColor,
+            ...chipSurfaceStyle,
             color: pageNumberColor,
-            border: `1px solid ${pageNumberColor ? `${pageNumberColor}99` : "currentColor"}`,
             fontFamily: 'Arial, "Helvetica Neue", sans-serif',
             fontSize: pointSizeInContainerWidth(10, pageWidthMm),
             fontVariantNumeric: "tabular-nums",
