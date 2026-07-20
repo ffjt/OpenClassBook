@@ -1,5 +1,3 @@
-import type { CSSProperties } from "react";
-
 export interface FontSelection {
   family: string;
   fullName: string;
@@ -67,23 +65,6 @@ export interface Template {
 }
 
 export type BookTemplate = Template;
-
-const titleBackdropColors: Record<string, string> = {
-  "spring-blossom": "#ffe2ea",
-  "summer-forest": "#dcefdc",
-  graduation: "#e5e1ff",
-};
-
-export function getTemplateTitleBackdropStyle(templateId: string): CSSProperties {
-  const color = titleBackdropColors[templateId];
-  return color
-    ? {
-        backgroundColor: `${color}c7`,
-        borderRadius: "0.45em",
-        padding: "0.32em 0.55em",
-      }
-    : {};
-}
 
 /** Matches the CJK-safe sans font embedded by the PDF renderer for page chrome. */
 export const publicationChromeFontFamily =
