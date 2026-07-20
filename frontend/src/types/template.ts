@@ -70,6 +70,16 @@ export type BookTemplate = Template;
 export const publicationChromeFontFamily =
   '"Microsoft YaHei", "PingFang SC", sans-serif';
 
+const layeredTitleTemplateIds = new Set([
+  "spring-blossom",
+  "summer-forest",
+  "graduation",
+]);
+
+export function usesLayeredTitleSurface(templateId: string) {
+  return layeredTitleTemplateIds.has(templateId);
+}
+
 export function getFontFamilyStyle(font: FontSelection) {
   if (font.family === "serif" || font.family === "sans-serif") {
     return font.family;

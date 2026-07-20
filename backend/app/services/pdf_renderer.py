@@ -37,6 +37,116 @@ B5 = (176 * mm, 250 * mm)
 TEMPLATE_ASSET_ROOT = (
     Path(__file__).resolve().parents[3] / "frontend" / "public" / "templates"
 )
+LAYERED_TITLE_TEMPLATE_IDS = {"spring-blossom", "summer-forest", "graduation"}
+
+
+class LayeredTitleBlock(Flowable):
+    """A neutral translucent title surface that keeps theme art visible beneath it."""
+
+    def __init__(
+        self,
+        title: str,
+        title_style: ParagraphStyle,
+        subtitle: str,
+        subtitle_style: ParagraphStyle,
+    ) -> None:
+        super().__init__()
+        self.title_text = title
+        self.subtitle_text = subtitle
+        self.title = Paragraph(title, title_style)
+        self.subtitle = Paragraph(subtitle, subtitle_style) if subtitle else None
+        self.alignment = title_style.alignment
+        self.horizontal_padding = 10
+        self.vertical_padding = 6
+        self.gap = 4 if self.subtitle else 0
+        self.surface_width = 0.0
+        self.title_height = 0.0
+        self.subtitle_height = 0.0
+
+    def wrap(
+        self, available_width: float, available_height: float
+    ) -> tuple[float, float]:
+        plain_title = re.sub(r"<[^>]+>", "", self.title_text)
+        title_width = pdfmetrics.stringWidth(
+            plain_title,
+            self.title.style.fontName,
+            self.title.style.fontSize,
+        )
+        subtitle_width = (
+            pdfmetrics.stringWidth(
+                re.sub(r"<[^>]+>", "", self.subtitle_text),
+                self.subtitle.style.fontName,
+                self.subtitle.style.fontSize,
+            )
+            if self.subtitle
+            else 0
+        )
+        self.surface_width = min(
+            available_width,
+            max(title_width, subtitle_width) + self.horizontal_padding * 2,
+        )
+        content_width = self.surface_width - self.horizontal_padding * 2
+        _, self.title_height = self.title.wrap(content_width, available_height)
+        if self.subtitle:
+            _, self.subtitle_height = self.subtitle.wrap(
+                content_width, available_height
+            )
+        self.width = available_width
+        self.height = (
+            self.vertical_padding * 2
+            + self.title_height
+            + self.gap
+            + self.subtitle_height
+        )
+        return self.width, self.height
+
+    def draw(self) -> None:
+        if self.alignment == TA_CENTER:
+            left = (self.width - self.surface_width) / 2
+        elif self.alignment == TA_RIGHT:
+            left = self.width - self.surface_width
+        else:
+            left = 0
+
+        self.canv.saveState()
+        if hasattr(self.canv, "setFillAlpha"):
+            self.canv.setFillAlpha(0.06)
+        self.canv.setFillColor(colors.HexColor("#0f172a"))
+        self.canv.roundRect(
+            left,
+            -1,
+            self.surface_width,
+            self.height,
+            7,
+            stroke=0,
+            fill=1,
+        )
+        if hasattr(self.canv, "setFillAlpha"):
+            self.canv.setFillAlpha(0.7)
+        self.canv.setFillColor(colors.white)
+        if hasattr(self.canv, "setStrokeAlpha"):
+            self.canv.setStrokeAlpha(0.62)
+        self.canv.setStrokeColor(colors.white)
+        self.canv.roundRect(
+            left,
+            0,
+            self.surface_width,
+            self.height,
+            7,
+            stroke=1,
+            fill=1,
+        )
+        self.canv.restoreState()
+
+        content_left = left + self.horizontal_padding
+        title_y = self.height - self.vertical_padding - self.title_height
+        self.title.drawOn(self.canv, content_left, title_y)
+        if self.subtitle:
+            self.subtitle.drawOn(
+                self.canv,
+                content_left,
+                self.vertical_padding,
+            )
 
 
 def _draw_chrome_chip(
@@ -604,7 +714,6 @@ class PdfRenderer:
                         Spacer(1, 1.5 * size_scale),
                     ]
                 )
-            opening.append(Paragraph(escape(article.title), styles["article_title"]))
             subtitle = (
                 document.template.fixed_subtitle
                 if document.template.subtitle_mode == "fixed"
@@ -612,7 +721,23 @@ class PdfRenderer:
                 if document.template.subtitle_mode == "free"
                 else ""
             )
-            if subtitle:
+            if document.template.template_id in LAYERED_TITLE_TEMPLATE_IDS:
+                opening.append(
+                    LayeredTitleBlock(
+                        escape(article.title),
+                        styles["article_title"],
+                        escape(subtitle) if subtitle else "",
+                        styles["subtitle"],
+                    )
+                )
+            else:
+                opening.append(
+                    Paragraph(escape(article.title), styles["article_title"])
+                )
+            if (
+                subtitle
+                and document.template.template_id not in LAYERED_TITLE_TEMPLATE_IDS
+            ):
                 opening.extend(
                     [
                         Spacer(1, 4 * size_scale),

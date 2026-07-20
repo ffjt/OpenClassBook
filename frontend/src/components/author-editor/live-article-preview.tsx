@@ -18,6 +18,7 @@ import {
   getPublicationPageChrome,
   getFontFamilyStyle,
   publicationChromeFontFamily,
+  usesLayeredTitleSurface,
   type PageMargin,
   type PageSize,
   type Template,
@@ -1234,8 +1235,37 @@ export function PublicationArticlePreview({
     </Rnd>
   );
 
+  const hasLayeredTitleSurface = usesLayeredTitleSurface(template.templateId);
+  const titleJustifyContent = {
+    left: "flex-start",
+    center: "center",
+    right: "flex-end",
+  }[template.titleAlign];
   const title = (
-    <div>
+    <div
+      style={{
+        display: "flex",
+        justifyContent: titleJustifyContent,
+      }}
+    >
+      <div
+        style={
+          hasLayeredTitleSurface
+            ? {
+                backdropFilter: "blur(5px) saturate(0.9)",
+                background:
+                  "linear-gradient(135deg, rgba(255,255,255,0.76), rgba(255,255,255,0.52))",
+                border: "1px solid rgba(255,255,255,0.7)",
+                borderRadius: `${Math.max(7, 11 * previewScale)}px`,
+                boxShadow: `0 ${Math.max(3, 5 * previewScale)}px ${Math.max(10, 18 * previewScale)}px rgba(15,23,42,0.1)`,
+                boxSizing: "border-box",
+                maxWidth: "100%",
+                padding: `${Math.max(4, 7 * previewScale)}px ${Math.max(8, 13 * previewScale)}px`,
+                width: "fit-content",
+              }
+            : { width: "100%" }
+        }
+      >
       <h2
         className="break-words text-slate-950"
         style={{
@@ -1262,6 +1292,7 @@ export function PublicationArticlePreview({
           {subtitle}
         </p>
       )}
+      </div>
     </div>
   );
   return (
