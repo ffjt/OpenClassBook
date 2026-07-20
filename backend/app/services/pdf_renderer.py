@@ -37,9 +37,6 @@ B5 = (176 * mm, 250 * mm)
 TEMPLATE_ASSET_ROOT = (
     Path(__file__).resolve().parents[3] / "frontend" / "public" / "templates"
 )
-LAYERED_TITLE_TEMPLATE_IDS = {"spring-blossom", "summer-forest", "graduation"}
-
-
 class LayeredTitleBlock(Flowable):
     """A neutral translucent title surface that keeps theme art visible beneath it."""
 
@@ -49,6 +46,7 @@ class LayeredTitleBlock(Flowable):
         title_style: ParagraphStyle,
         subtitle: str,
         subtitle_style: ParagraphStyle,
+        opacity: float,
     ) -> None:
         super().__init__()
         self.title_text = title
@@ -56,10 +54,12 @@ class LayeredTitleBlock(Flowable):
         self.title = Paragraph(title, title_style)
         self.subtitle = Paragraph(subtitle, subtitle_style) if subtitle else None
         self.alignment = title_style.alignment
+        self.opacity = max(0.0, min(1.0, opacity))
         self.horizontal_padding = 10
         self.vertical_padding = 6
         self.gap = 4 if self.subtitle else 0
         self.surface_width = 0.0
+        self.content_width = 0.0
         self.title_height = 0.0
         self.subtitle_height = 0.0
 
@@ -85,11 +85,11 @@ class LayeredTitleBlock(Flowable):
             available_width,
             max(title_width, subtitle_width) + self.horizontal_padding * 2,
         )
-        content_width = self.surface_width - self.horizontal_padding * 2
-        _, self.title_height = self.title.wrap(content_width, available_height)
+        self.content_width = self.surface_width - self.horizontal_padding * 2
+        _, self.title_height = self.title.wrap(self.content_width, available_height)
         if self.subtitle:
             _, self.subtitle_height = self.subtitle.wrap(
-                content_width, available_height
+                self.content_width, available_height
             )
         self.width = available_width
         self.height = (
@@ -102,15 +102,16 @@ class LayeredTitleBlock(Flowable):
 
     def draw(self) -> None:
         if self.alignment == TA_CENTER:
-            left = (self.width - self.surface_width) / 2
+            content_left = (self.width - self.content_width) / 2
         elif self.alignment == TA_RIGHT:
-            left = self.width - self.surface_width
+            content_left = self.width - self.content_width
         else:
-            left = 0
+            content_left = 0
+        left = content_left - self.horizontal_padding
 
         self.canv.saveState()
         if hasattr(self.canv, "setFillAlpha"):
-            self.canv.setFillAlpha(0.06)
+            self.canv.setFillAlpha(self.opacity * 0.1)
         self.canv.setFillColor(colors.HexColor("#0f172a"))
         self.canv.roundRect(
             left,
@@ -122,10 +123,10 @@ class LayeredTitleBlock(Flowable):
             fill=1,
         )
         if hasattr(self.canv, "setFillAlpha"):
-            self.canv.setFillAlpha(0.7)
+            self.canv.setFillAlpha(self.opacity)
         self.canv.setFillColor(colors.white)
         if hasattr(self.canv, "setStrokeAlpha"):
-            self.canv.setStrokeAlpha(0.62)
+            self.canv.setStrokeAlpha(self.opacity * 0.75)
         self.canv.setStrokeColor(colors.white)
         self.canv.roundRect(
             left,
@@ -138,7 +139,6 @@ class LayeredTitleBlock(Flowable):
         )
         self.canv.restoreState()
 
-        content_left = left + self.horizontal_padding
         title_y = self.height - self.vertical_padding - self.title_height
         self.title.drawOn(self.canv, content_left, title_y)
         if self.subtitle:
@@ -721,13 +721,14 @@ class PdfRenderer:
                 if document.template.subtitle_mode == "free"
                 else ""
             )
-            if document.template.template_id in LAYERED_TITLE_TEMPLATE_IDS:
+            if document.template.title_surface_enabled:
                 opening.append(
                     LayeredTitleBlock(
                         escape(article.title),
                         styles["article_title"],
                         escape(subtitle) if subtitle else "",
                         styles["subtitle"],
+                        document.template.title_surface_opacity / 100,
                     )
                 )
             else:
@@ -736,7 +737,7 @@ class PdfRenderer:
                 )
             if (
                 subtitle
-                and document.template.template_id not in LAYERED_TITLE_TEMPLATE_IDS
+                and not document.template.title_surface_enabled
             ):
                 opening.extend(
                     [

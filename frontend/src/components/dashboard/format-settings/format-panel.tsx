@@ -84,6 +84,8 @@ const panelCopy = {
       imageRadius: "Image corner radius",
       imageBorder: "Image border",
       quoteStyle: "Quote styling",
+      titleSurface: "Translucent title background",
+      titleSurfaceOpacity: "Background opacity",
     },
     values: {
       above: "Above title",
@@ -145,6 +147,8 @@ const panelCopy = {
       imageRadius: "图片圆角",
       imageBorder: "图片边框",
       quoteStyle: "引用样式",
+      titleSurface: "标题半透明背景",
+      titleSurfaceOpacity: "背景透明度",
     },
     values: {
       above: "标题上方",
@@ -741,6 +745,42 @@ export function FormatPanel({
             onChange={(event) => onChange("showAuthorMeta", event.target.checked)}
           />
         </ControlRow>
+        <ControlRow htmlFor="title-surface" label={copy.fields.titleSurface}>
+          <Switch
+            aria-label={copy.fields.titleSurface}
+            checked={settings.titleSurfaceEnabled}
+            className="ml-auto"
+            id="title-surface"
+            onChange={(event) =>
+              onChange("titleSurfaceEnabled", event.target.checked)
+            }
+          />
+        </ControlRow>
+        {settings.titleSurfaceEnabled && (
+          <ControlRow
+            htmlFor="title-surface-opacity"
+            label={copy.fields.titleSurfaceOpacity}
+          >
+            <div className="flex items-center gap-3">
+              <Slider
+                id="title-surface-opacity"
+                max={100}
+                min={0}
+                onChange={(event) =>
+                  onChange(
+                    "titleSurfaceOpacity",
+                    Number(event.target.value),
+                  )
+                }
+                step={5}
+                value={settings.titleSurfaceOpacity}
+              />
+              <span className="w-9 text-right text-[11px] tabular-nums text-muted-foreground">
+                {settings.titleSurfaceOpacity}%
+              </span>
+            </div>
+          </ControlRow>
+        )}
         <ControlRow htmlFor="image-radius" label={copy.fields.imageRadius}>
           <div className="flex items-center gap-3">
             <Slider

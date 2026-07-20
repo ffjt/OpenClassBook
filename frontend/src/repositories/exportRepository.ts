@@ -33,6 +33,8 @@ export interface ExportTemplateInfo {
   image_radius: number;
   image_border: boolean;
   quote_style: boolean;
+  title_surface_enabled: boolean;
+  title_surface_opacity: number;
 }
 
 export interface ExportStats {

@@ -52,6 +52,8 @@ class ExportTemplateInfo(BaseModel):
     image_radius: float = Field(default=0, ge=0, le=24)
     image_border: bool = True
     quote_style: bool = False
+    title_surface_enabled: bool = False
+    title_surface_opacity: float = Field(default=70, ge=0, le=100)
 
 
 class ExportStats(BaseModel):

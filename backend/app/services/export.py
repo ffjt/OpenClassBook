@@ -420,6 +420,17 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
         image_radius=_number(presentation.get("image_radius"), 0),
         image_border=bool(presentation.get("image_border", True)),
         quote_style=bool(presentation.get("quote_style", False)),
+        title_surface_enabled=bool(
+            presentation.get(
+                "title_surface_enabled",
+                str(presentation.get("template_id", "spring-blossom"))
+                in {"spring-blossom", "summer-forest", "graduation"},
+            )
+        ),
+        title_surface_opacity=min(
+            100,
+            max(0, _number(presentation.get("title_surface_opacity"), 70)),
+        ),
     )
 
 

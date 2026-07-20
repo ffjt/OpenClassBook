@@ -33,6 +33,9 @@ export interface Template {
   imageRadius: number;
   imageBorder: boolean;
   quoteStyle: boolean;
+  titleSurfaceEnabled: boolean;
+  /** White title-surface opacity as a percentage from 0 to 100. */
+  titleSurfaceOpacity: number;
 
   titleFont: FontSelection;
   titleSize: number;
@@ -70,14 +73,14 @@ export type BookTemplate = Template;
 export const publicationChromeFontFamily =
   '"Microsoft YaHei", "PingFang SC", sans-serif';
 
-const layeredTitleTemplateIds = new Set([
+const defaultLayeredTitleTemplateIds = new Set([
   "spring-blossom",
   "summer-forest",
   "graduation",
 ]);
 
-export function usesLayeredTitleSurface(templateId: string) {
-  return layeredTitleTemplateIds.has(templateId);
+export function isTitleSurfaceEnabledByDefault(templateId: string) {
+  return defaultLayeredTitleTemplateIds.has(templateId);
 }
 
 export function getFontFamilyStyle(font: FontSelection) {

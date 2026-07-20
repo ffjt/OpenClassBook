@@ -18,7 +18,6 @@ import {
   getPublicationPageChrome,
   getFontFamilyStyle,
   publicationChromeFontFamily,
-  usesLayeredTitleSurface,
   type PageMargin,
   type PageSize,
   type Template,
@@ -1235,7 +1234,10 @@ export function PublicationArticlePreview({
     </Rnd>
   );
 
-  const hasLayeredTitleSurface = usesLayeredTitleSurface(template.templateId);
+  const titleSurfaceOpacity =
+    clamp(template.titleSurfaceOpacity, 0, 100) / 100;
+  const titleSurfacePaddingX = Math.max(8, 13 * previewScale);
+  const titleSurfacePaddingY = Math.max(4, 7 * previewScale);
   const titleJustifyContent = {
     left: "flex-start",
     center: "center",
@@ -1249,49 +1251,58 @@ export function PublicationArticlePreview({
       }}
     >
       <div
-        style={
-          hasLayeredTitleSurface
-            ? {
-                backdropFilter: "blur(5px) saturate(0.9)",
-                background:
-                  "linear-gradient(135deg, rgba(255,255,255,0.76), rgba(255,255,255,0.52))",
-                border: "1px solid rgba(255,255,255,0.7)",
-                borderRadius: `${Math.max(7, 11 * previewScale)}px`,
-                boxShadow: `0 ${Math.max(3, 5 * previewScale)}px ${Math.max(10, 18 * previewScale)}px rgba(15,23,42,0.1)`,
-                boxSizing: "border-box",
-                maxWidth: "100%",
-                padding: `${Math.max(4, 7 * previewScale)}px ${Math.max(8, 13 * previewScale)}px`,
-                width: "fit-content",
-              }
-            : { width: "100%" }
-        }
-      >
-      <h2
-        className="break-words text-slate-950"
         style={{
-          fontFamily: getFontFamilyStyle(template.titleFont),
-          fontSize: `${Math.max(10, template.titleSize * previewScale)}px`,
-          fontWeight: template.titleBold ? 700 : 400,
-          lineHeight: 1.25,
-          textAlign: template.titleAlign,
-          color: template.themeColor,
+          maxWidth: "100%",
+          position: "relative",
+          width: template.titleSurfaceEnabled ? "fit-content" : "100%",
         }}
       >
-        {article.title || "\u00a0"}
-      </h2>
-      {subtitle && (
-        <p
-          className="mt-2 break-words text-slate-500"
+        {template.titleSurfaceEnabled && (
+          <span
+            aria-hidden="true"
+            style={{
+              backdropFilter:
+                titleSurfaceOpacity > 0
+                  ? "blur(5px) saturate(0.9)"
+                  : undefined,
+              background: `rgba(255,255,255,${titleSurfaceOpacity})`,
+              border: `1px solid rgba(255,255,255,${titleSurfaceOpacity * 0.75})`,
+              borderRadius: `${Math.max(7, 11 * previewScale)}px`,
+              bottom: `-${titleSurfacePaddingY}px`,
+              boxShadow: `0 ${Math.max(3, 5 * previewScale)}px ${Math.max(10, 18 * previewScale)}px rgba(15,23,42,${titleSurfaceOpacity * 0.14})`,
+              left: `-${titleSurfacePaddingX}px`,
+              position: "absolute",
+              right: `-${titleSurfacePaddingX}px`,
+              top: `-${titleSurfacePaddingY}px`,
+            }}
+          />
+        )}
+        <h2
+          className="relative break-words text-slate-950"
           style={{
             fontFamily: getFontFamilyStyle(template.titleFont),
-            fontSize: `${Math.max(compact ? 7 : 12, template.titleSize * 0.5 * previewScale)}px`,
-            lineHeight: 1.4,
-            textAlign: template.subtitleAlign,
+            fontSize: `${Math.max(10, template.titleSize * previewScale)}px`,
+            fontWeight: template.titleBold ? 700 : 400,
+            lineHeight: 1.25,
+            textAlign: template.titleAlign,
+            color: template.themeColor,
           }}
         >
-          {subtitle}
-        </p>
-      )}
+          {article.title || "\u00a0"}
+        </h2>
+        {subtitle && (
+          <p
+            className="relative mt-2 break-words text-slate-500"
+            style={{
+              fontFamily: getFontFamilyStyle(template.titleFont),
+              fontSize: `${Math.max(compact ? 7 : 12, template.titleSize * 0.5 * previewScale)}px`,
+              lineHeight: 1.4,
+              textAlign: template.subtitleAlign,
+            }}
+          >
+            {subtitle}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -1363,7 +1374,7 @@ export function PublicationArticlePreview({
             >
               <div className="flex h-full flex-col">
                 <div
-                  className={`relative flex min-h-0 flex-1 flex-col ${page.showImage && isInteracting ? "overflow-visible" : "overflow-hidden"}`}
+                  className={`relative flex min-h-0 flex-1 flex-col ${template.titleSurfaceEnabled || (page.showImage && isInteracting) ? "overflow-visible" : "overflow-hidden"}`}
                   ref={(element) => {
                     pageContentRefs.current[pageIndex] = element;
                   }}

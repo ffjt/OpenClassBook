@@ -339,6 +339,52 @@ def test_flow_mode_places_multiple_articles_on_one_page(tmp_path: Path) -> None:
     assert "Second story" in text
 
 
+def test_title_surface_keeps_title_and_body_left_edges_aligned(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "aligned-title-surface.pdf"
+    template = _magazine_template().model_copy(
+        update={
+            "columns": 1,
+            "numbering_style": "hidden",
+            "show_header": False,
+            "show_footer": False,
+            "show_author_meta": False,
+            "title_surface_enabled": True,
+            "title_surface_opacity": 35,
+            "first_line_indent": 0,
+        }
+    )
+    article = SimpleNamespace(
+        number="",
+        title="ALIGNED TITLE",
+        subtitle="",
+        author_id=1,
+        content="ALIGNED BODY",
+        image=None,
+    )
+
+    PdfRenderer().render(
+        PdfDocumentData(
+            book=SimpleNamespace(title="Alignment", description="", owner_name=""),
+            articles=[article],
+            author_names={1: ""},
+            sections=[{"kind": "articles"}],
+            template=template,
+        ),
+        destination,
+        include_page_numbers=False,
+        include_page_chrome=False,
+    )
+
+    positions, _ = _page_layout(
+        PdfReader(destination).pages[0],
+        ("ALIGNED TITLE", "ALIGNED BODY"),
+    )
+    assert positions.keys() >= {"ALIGNED TITLE", "ALIGNED BODY"}
+    assert abs(positions["ALIGNED TITLE"][0] - positions["ALIGNED BODY"][0]) <= 1
+
+
 def test_magazine_chapter_page_uses_the_full_page_width(tmp_path: Path) -> None:
     destination = tmp_path / "acknowledgements.pdf"
     document = PdfDocumentData(

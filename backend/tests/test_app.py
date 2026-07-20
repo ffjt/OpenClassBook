@@ -1521,6 +1521,11 @@ def test_export_generates_and_downloads_printable_pdf(
                 "size": "a5",
                 "margin": "normal",
                 "number_position": "center",
+                "presentation": {
+                    "template_id": "nordic-forest",
+                    "title_surface_enabled": True,
+                    "title_surface_opacity": 35,
+                },
             },
         },
     )
@@ -1548,6 +1553,8 @@ def test_export_generates_and_downloads_printable_pdf(
     preview_data = preview.json()
     assert preview_data["can_export"] is True
     assert preview_data["template"]["page_size"] == "a5"
+    assert preview_data["template"]["title_surface_enabled"] is True
+    assert preview_data["template"]["title_surface_opacity"] == 35
     assert preview_data["stats"]["article_count"] == 2
     assert [section["preset"] for section in preview_data["sections"]] == [
         "cover",

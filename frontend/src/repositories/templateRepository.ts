@@ -1,16 +1,17 @@
 import { ApiError, apiRequest } from "@/repositories/apiClient";
 import { defaultTemplate } from "@/mock/template";
-import type {
-  Alignment,
-  ColumnCount,
-  FontSelection,
-  NumberPosition,
-  PageMargin,
-  PageNumberPosition,
-  PageSize,
-  PublishingPreset,
-  SubtitleMode,
-  Template,
+import {
+  isTitleSurfaceEnabledByDefault,
+  type Alignment,
+  type ColumnCount,
+  type FontSelection,
+  type NumberPosition,
+  type PageMargin,
+  type PageNumberPosition,
+  type PageSize,
+  type PublishingPreset,
+  type SubtitleMode,
+  type Template,
 } from "@/types/template";
 
 export interface BookTemplate {
@@ -76,12 +77,13 @@ export function deserializeTemplate(stored: BookTemplate): Template {
   const numbering = stored.numbering_rules ?? {};
   const page = stored.page_rules ?? {};
   const presentation = isRecord(page.presentation) ? page.presentation : {};
+  const templateId =
+    typeof presentation.template_id === "string"
+      ? presentation.template_id
+      : defaultTemplate.templateId;
 
   return {
-    templateId:
-      typeof presentation.template_id === "string"
-        ? presentation.template_id
-        : defaultTemplate.templateId,
+    templateId,
     backgroundColor:
       typeof presentation.background_color === "string"
         ? presentation.background_color
@@ -121,6 +123,20 @@ export function deserializeTemplate(stored: BookTemplate): Template {
     imageRadius: readNumber(presentation.image_radius, defaultTemplate.imageRadius),
     imageBorder: readBoolean(presentation.image_border, defaultTemplate.imageBorder),
     quoteStyle: readBoolean(presentation.quote_style, defaultTemplate.quoteStyle),
+    titleSurfaceEnabled: readBoolean(
+      presentation.title_surface_enabled,
+      isTitleSurfaceEnabledByDefault(templateId),
+    ),
+    titleSurfaceOpacity: Math.min(
+      100,
+      Math.max(
+        0,
+        readNumber(
+          presentation.title_surface_opacity,
+          defaultTemplate.titleSurfaceOpacity,
+        ),
+      ),
+    ),
     titleFont: readFont(title.font, defaultTemplate.titleFont),
     titleSize: readNumber(title.size, defaultTemplate.titleSize),
     titleBold: readBoolean(title.bold, defaultTemplate.titleBold),
@@ -261,6 +277,8 @@ export const templateRepository = {
             image_radius: template.imageRadius,
             image_border: template.imageBorder,
             quote_style: template.quoteStyle,
+            title_surface_enabled: template.titleSurfaceEnabled,
+            title_surface_opacity: template.titleSurfaceOpacity,
           },
         },
       }),

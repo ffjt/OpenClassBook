@@ -15,6 +15,8 @@ export const defaultTemplate: Template = {
   imageRadius: 0,
   imageBorder: true,
   quoteStyle: false,
+  titleSurfaceEnabled: true,
+  titleSurfaceOpacity: 70,
   titleFont: {
     family: "serif",
     fullName: "System Serif",
