@@ -45,6 +45,7 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _upgrade_scaffold_book_table()
     _repair_legacy_layout_sections()
+    _normalize_layout_section_options()
     _upgrade_author_identity_model()
     _upgrade_author_class_field()
     _upgrade_article_content_fields()
@@ -201,7 +202,11 @@ def _repair_legacy_layout_sections() -> None:
         ).fetchall()
         for book_id, cover_file, back_cover_file, raw_sections in rows:
             try:
-                sections = json.loads(raw_sections) if isinstance(raw_sections, str) else raw_sections
+                sections = (
+                    json.loads(raw_sections)
+                    if isinstance(raw_sections, str)
+                    else raw_sections
+                )
             except (TypeError, json.JSONDecodeError):
                 continue
             if not isinstance(sections, list):
@@ -249,6 +254,55 @@ def _repair_legacy_layout_sections() -> None:
                 "UPDATE books SET layout_sections = ? WHERE id = ?",
                 (json.dumps(normalized_sections, ensure_ascii=False), book_id),
             )
+
+
+def _normalize_layout_section_options() -> None:
+    """Upgrade old chapter blocks and give every saved section visibility defaults."""
+    if not settings.database_url.startswith("sqlite"):
+        return
+
+    with engine.begin() as connection:
+        rows = connection.exec_driver_sql(
+            "SELECT id, layout_sections FROM books WHERE layout_sections IS NOT NULL"
+        ).fetchall()
+        for book_id, raw_sections in rows:
+            try:
+                sections = (
+                    json.loads(raw_sections)
+                    if isinstance(raw_sections, str)
+                    else raw_sections
+                )
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(sections, list):
+                continue
+
+            changed = False
+            normalized: list[object] = []
+            for raw_section in sections:
+                if not isinstance(raw_section, dict):
+                    normalized.append(raw_section)
+                    continue
+                section = dict(raw_section)
+                if section.get("preset") == "chapter":
+                    section["preset"] = "contents"
+                    changed = True
+                if "hidden" not in section:
+                    section["hidden"] = False
+                    changed = True
+                if section.get("preset") == "contents":
+                    if "show_author" not in section:
+                        section["show_author"] = True
+                        changed = True
+                    if "show_class" not in section:
+                        section["show_class"] = False
+                        changed = True
+                normalized.append(section)
+            if changed:
+                connection.exec_driver_sql(
+                    "UPDATE books SET layout_sections = ? WHERE id = ?",
+                    (json.dumps(normalized, ensure_ascii=False), book_id),
+                )
 
 
 def _column_expression(columns: set[str], *candidates: str, fallback: str) -> str:

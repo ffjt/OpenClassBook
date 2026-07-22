@@ -11,10 +11,39 @@ export interface TemplateCatalogEntry {
   /** Official typography defaults applied without renderer conditionals. */
   titleFont?: { family: string; fullName: string; postscriptName: string; style: string };
   titleSize?: number;
-  coverTextColor?: string;
+  /** Default color applied to font layers when this exterior theme is chosen. */
+  coverTextColor: string;
+  backCoverTextColor: string;
+  spineColor: string;
 }
 
 /** The first-party catalog is data-driven so community templates can be added without UI changes. */
+const monetPalettes: Record<string, Pick<TemplateCatalogEntry, "primaryColor" | "secondaryColor" | "accentColor" | "textColor" | "coverTextColor" | "backCoverTextColor" | "spineColor">> = {
+  "spring-blossom": { primaryColor: "#E3BD95", secondaryColor: "#FDF7EC", accentColor: "#625033", textColor: "#4E3D27", coverTextColor: "#4E3D27", backCoverTextColor: "#4E3D27", spineColor: "#9A6B50" },
+  "summer-forest": { primaryColor: "#727F5A", secondaryColor: "#FCF8EB", accentColor: "#3E4A2E", textColor: "#26341E", coverTextColor: "#26341E", backCoverTextColor: "#26341E", spineColor: "#536848" },
+  "autumn-ginkgo": { primaryColor: "#CD9C4B", secondaryColor: "#FBF6EF", accentColor: "#744814", textColor: "#49341C", coverTextColor: "#49341C", backCoverTextColor: "#49341C", spineColor: "#A56A24" },
+  "winter-sun": { primaryColor: "#87663F", secondaryColor: "#FDFCFA", accentColor: "#4A331C", textColor: "#382719", coverTextColor: "#382719", backCoverTextColor: "#382719", spineColor: "#6B543A" },
+  "misty-mountain": { primaryColor: "#7D7D70", secondaryColor: "#F8F7F5", accentColor: "#4F534B", textColor: "#363A34", coverTextColor: "#363A34", backCoverTextColor: "#363A34", spineColor: "#62665E" },
+  "rice-paper": { primaryColor: "#97836A", secondaryColor: "#FBF3E4", accentColor: "#4A3F30", textColor: "#241B0F", coverTextColor: "#241B0F", backCoverTextColor: "#241B0F", spineColor: "#786552" },
+  "new-chinese": { primaryColor: "#A28C72", secondaryColor: "#F9F2E6", accentColor: "#604631", textColor: "#44352A", coverTextColor: "#3E2F22", backCoverTextColor: "#3E2F22", spineColor: "#7D5949" },
+  "campus-morning": { primaryColor: "#6F7657", secondaryColor: "#FDFBF7", accentColor: "#485140", textColor: "#343B2F", coverTextColor: "#343B2F", backCoverTextColor: "#343B2F", spineColor: "#4E6D7B" },
+  graduation: { primaryColor: "#B6897C", secondaryColor: "#F8F7F2", accentColor: "#483521", textColor: "#302627", coverTextColor: "#302627", backCoverTextColor: "#302627", spineColor: "#9C6F6D" },
+  "youth-dream": { primaryColor: "#488BDB", secondaryColor: "#FDFAF7", accentColor: "#1754A6", textColor: "#173B5C", coverTextColor: "#173B5C", backCoverTextColor: "#173B5C", spineColor: "#357FA6" },
+  "nordic-forest": { primaryColor: "#ACAD96", secondaryColor: "#FDF8EB", accentColor: "#4F544A", textColor: "#373C34", coverTextColor: "#373C34", backCoverTextColor: "#373C34", spineColor: "#7A8E77" },
+  "ocean-fairytale": { primaryColor: "#90BDD0", secondaryColor: "#F7F7F8", accentColor: "#25566A", textColor: "#1F4558", coverTextColor: "#1F4558", backCoverTextColor: "#1F4558", spineColor: "#4F92AD" },
+  "starry-dream": { primaryColor: "#455EC1", secondaryColor: "#E9E5F1", accentColor: "#1B3894", textColor: "#010D31", coverTextColor: "#3F3A63", backCoverTextColor: "#3F3A63", spineColor: "#8170AF" },
+};
+
+/** Previous independent spine defaults are migrated to the shared cover/back color. */
+const legacySpineTextColors: Record<string, string> = {
+  "spring-blossom": "#FFFFFF", "summer-forest": "#FFFFFF", "autumn-ginkgo": "#FFFFFF", "winter-sun": "#FFFFFF",
+  "misty-mountain": "#F8F7F5", "rice-paper": "#FFFFFF", "new-chinese": "#F9F2E6", "campus-morning": "#FFFFFF",
+  graduation: "#FFFFFF", "youth-dream": "#FFFFFF", "nordic-forest": "#FFFFFF", "ocean-fairytale": "#FFFFFF", "starry-dream": "#F7F5FC",
+};
+
+export const isLegacyDefaultSpineTextColor = (templateId: string, color: unknown) =>
+  typeof color === "string" && color.toUpperCase() === legacySpineTextColors[templateId]?.toUpperCase();
+
 export const templateCatalog: TemplateCatalogEntry[] = [
   ["spring-blossom", "Spring Blossom", "春日桃花", "Soft spring editorial", "柔和的春日出版风", "#72A8D8", "#F5D7D7", "#6B2E3B", "#333333", "serif", "soft"],
   ["summer-forest", "Summer Forest", "夏日森林", "Fresh woodland pages", "清新的森林页面", "#3E7C59", "#E5F0E8", "#1E5636", "#26352B", "serif", "soft"],
@@ -42,12 +71,44 @@ export const templateCatalog: TemplateCatalogEntry[] = [
   ...(id === "spring-blossom" ? {
     titleFont: { family: "literary-serif", fullName: "LXGW WenKai / Source Han Serif SC", postscriptName: "literary-serif", style: "Regular" },
     titleSize: 28,
-    coverTextColor: "#5A392E",
   } : {}),
-})) as TemplateCatalogEntry[];
+})).map((template) => ({ ...template, ...monetPalettes[template.id] })) as TemplateCatalogEntry[];
 
 export function getTemplateCatalogEntry(id: string) {
   return templateCatalog.find((entry) => entry.id === id) ?? templateCatalog[0];
+}
+
+export function applyTemplateAppearanceColorDefaults(
+  appearance: BookAppearance,
+  template: TemplateCatalogEntry,
+  font: FontSelection = template.titleFont ?? {
+    family: template.fontFamily,
+    fullName: template.fontFamily,
+    postscriptName: template.fontFamily,
+    style: "Regular",
+  },
+): BookAppearance {
+  const applyTextDefaults = (color: string) => (object: BookAppearance["frontCover"]["canvasObjects"][number]) =>
+    object.type === "text" || object.type === "logo" ? { ...object, color, fontFamily: { ...font } } : object;
+
+  return {
+    ...appearance,
+    frontCover: {
+      ...appearance.frontCover,
+      palette: { ...appearance.frontCover.palette, text: template.coverTextColor },
+      canvasObjects: appearance.frontCover.canvasObjects.map(applyTextDefaults(template.coverTextColor)),
+    },
+    spine: {
+      ...appearance.spine,
+      backgroundColor: template.spineColor,
+      textColor: template.coverTextColor,
+      canvasObjects: appearance.spine.canvasObjects.map(applyTextDefaults(template.coverTextColor)),
+    },
+    backCover: {
+      ...appearance.backCover,
+      canvasObjects: appearance.backCover.canvasObjects.map(applyTextDefaults(template.backCoverTextColor)),
+    },
+  };
 }
 
 export type TemplateAssetKind =
@@ -63,3 +124,4 @@ export function getTemplateAssetUrl(id: string, kind: TemplateAssetKind) {
     : templateCatalog[0].id;
   return `/templates/${safeId}/${kind}.png`;
 }
+import type { BookAppearance, FontSelection } from "@/types/template";

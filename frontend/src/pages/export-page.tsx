@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowDown,
@@ -22,9 +22,9 @@ import type { Language } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { getTemplateCatalogEntry } from "@/mock/template-catalog";
 import { ApiError } from "@/repositories/apiClient";
-import { bookRepository, type Book } from "@/repositories/bookRepository";
 import {
   exportRepository,
+  type ExportBookInfo,
   type ExportPreview,
   type ExportResult,
 } from "@/repositories/exportRepository";
@@ -76,6 +76,7 @@ const copy = {
     renderingPreview: "Rendering actual pages...",
     previewReady: "Actual PDF preview",
     previewFailed: "Unable to render the PDF preview.",
+    previewFileUnavailable: "The generated PDF could not be loaded.",
     previewRetryHint: "Try rendering the preview again.",
     renderAgain: "Render again",
     previewFrameTitle: "Rendered book PDF preview",
@@ -88,6 +89,8 @@ const copy = {
     generated: "PDF generated successfully",
     generatedPages: (count: number) => `${count} pages ready to download`,
     exportFailed: "Export failed.",
+    fileUnavailable: "The generated PDF is unavailable. Generate it again.",
+    downloadFailed: "Unable to start the PDF download. Try again.",
     retryHint: "Please try again later.",
     retry: "Retry",
     emptyTitle: "No publishable content.",
@@ -99,6 +102,7 @@ const copy = {
     downloading: "Preparing download...",
     sections: {
       cover: "Cover",
+      contents: "Contents",
       preface: "Preface",
       articles: "Main content",
       afterword: "Afterword",
@@ -148,6 +152,7 @@ const copy = {
     renderingPreview: "正在渲染实际页面……",
     previewReady: "实际 PDF 预览",
     previewFailed: "无法渲染 PDF 预览。",
+    previewFileUnavailable: "无法加载已生成的 PDF。",
     previewRetryHint: "请重新尝试渲染预览。",
     renderAgain: "重新渲染",
     previewFrameTitle: "已渲染的书籍 PDF 预览",
@@ -160,6 +165,8 @@ const copy = {
     generated: "PDF 生成成功",
     generatedPages: (count: number) => `共 ${count} 页，可以下载`,
     exportFailed: "导出失败。",
+    fileUnavailable: "已生成的 PDF 不可用，请重新生成。",
+    downloadFailed: "无法开始下载 PDF，请重试。",
     retryHint: "请稍后重试。",
     retry: "重试",
     emptyTitle: "暂无可出版内容。",
@@ -171,6 +178,7 @@ const copy = {
     downloading: "正在准备下载……",
     sections: {
       cover: "封面",
+      contents: "目录",
       preface: "前言",
       articles: "正文",
       afterword: "后记",
@@ -182,6 +190,7 @@ const copy = {
 
 const fixedContentSections = [
   "cover",
+  "contents",
   "preface",
   "articles",
   "afterword",
@@ -205,7 +214,6 @@ export function ExportPage({
   onToggleLanguage,
 }: ExportPageProps) {
   const pageCopy = copy[language];
-  const [book, setBook] = useState<Book | null>(null);
   const [preview, setPreview] = useState<ExportPreview | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadError, setHasLoadError] = useState(false);
@@ -218,7 +226,14 @@ export function ExportPage({
   const [previewRenderStatus, setPreviewRenderStatus] =
     useState<PreviewRenderStatus>("idle");
   const [previewRenderError, setPreviewRenderError] = useState<string | null>(null);
-  const [renderedPreviewUrl, setRenderedPreviewUrl] = useState<string | null>(null);
+  const [renderedPreview, setRenderedPreview] = useState<{
+    requestId: number;
+    url: string;
+  } | null>(null);
+  const generationPromiseRef = useRef<Promise<ExportResult> | null>(null);
+  const previewRequestIdRef = useRef(0);
+  const currentBookIdRef = useRef(bookId);
+  currentBookIdRef.current = bookId;
 
   useEffect(() => {
     let active = true;
@@ -231,17 +246,16 @@ export function ExportPage({
     setGenerationStatus("idle");
     setPreviewRenderStatus("idle");
     setPreviewRenderError(null);
-    setRenderedPreviewUrl(null);
-    Promise.all([
-      bookRepository.get(bookId),
-      exportRepository.getPreview(bookId, {
+    setRenderedPreview(null);
+    generationPromiseRef.current = null;
+    previewRequestIdRef.current += 1;
+    exportRepository
+      .getPreview(bookId, {
         preflight: false,
         signal: controller.signal,
-      }),
-    ])
-      .then(([loadedBook, loadedPreview]) => {
+      })
+      .then((loadedPreview) => {
         if (!active) return;
-        setBook(loadedBook);
         setPreview(loadedPreview);
       })
       .catch(() => active && setHasLoadError(true))
@@ -256,32 +270,38 @@ export function ExportPage({
     };
   }, [bookId, reloadKey]);
 
-  useEffect(
-    () => () => {
-      if (renderedPreviewUrl) URL.revokeObjectURL(renderedPreviewUrl);
-    },
-    [renderedPreviewUrl],
-  );
-
   const createExport = useCallback(async () => {
     if (!preview?.can_export) return;
+    if (generationPromiseRef.current) return generationPromiseRef.current;
+    const requestBookId = bookId;
     setGenerationStatus("generating");
     setResult(null);
     setGenerationError(null);
+    const request = exportRepository.generate(bookId);
+    generationPromiseRef.current = request;
     try {
-      const generated = await exportRepository.generate(bookId);
+      const generated = await request;
+      if (currentBookIdRef.current !== requestBookId) return generated;
       setResult(generated);
       setGenerationStatus("success");
       return generated;
     } catch (error) {
-      setGenerationError(localizedApiError(error, language));
+      if (currentBookIdRef.current !== requestBookId) return;
+      setGenerationError(
+        localizedApiError(error, language) || copy[language].fileUnavailable,
+      );
       setGenerationStatus("error");
       throw error;
+    } finally {
+      if (generationPromiseRef.current === request) {
+        generationPromiseRef.current = null;
+      }
     }
   }, [bookId, language, preview?.can_export]);
 
   const generate = useCallback(async () => {
-    setRenderedPreviewUrl(null);
+    previewRequestIdRef.current += 1;
+    setRenderedPreview(null);
     setPreviewRenderStatus("idle");
     setPreviewRenderError(null);
     try {
@@ -292,35 +312,86 @@ export function ExportPage({
   }, [createExport]);
 
   const renderPreview = useCallback(async () => {
+    const requestId = ++previewRequestIdRef.current;
     setPreviewRenderStatus("rendering");
     setPreviewRenderError(null);
     try {
-      const generated = renderedPreviewUrl ? await createExport() : result ?? await createExport();
+      const generated = renderedPreview ? await createExport() : result ?? await createExport();
       if (!generated) return;
-      const blob = await exportRepository.download(generated.download_url);
-      setRenderedPreviewUrl(URL.createObjectURL(blob));
-      setPreviewRenderStatus("success");
+      const url = await exportRepository.ensureFileAvailable(generated.download_url, {
+        inline: true,
+      });
+      if (previewRequestIdRef.current !== requestId) return;
+      setRenderedPreview({
+        requestId,
+        url,
+      });
     } catch (error) {
-      setPreviewRenderError(localizedApiError(error, language));
+      if (previewRequestIdRef.current !== requestId) return;
+      const message =
+        localizedApiError(error, language) || copy[language].previewFileUnavailable;
+      setRenderedPreview(null);
+      setPreviewRenderError(message);
       setPreviewRenderStatus("error");
+      setGenerationError(message);
+      setGenerationStatus("error");
+      setResult(null);
     }
-  }, [createExport, language, renderedPreviewUrl, result]);
+  }, [createExport, language, renderedPreview, result]);
+
+  const handlePreviewLoad = useCallback(
+    (requestId: number) => {
+      if (
+        previewRequestIdRef.current !== requestId ||
+        renderedPreview?.requestId !== requestId
+      ) {
+        return;
+      }
+      setPreviewRenderStatus("success");
+    },
+    [renderedPreview?.requestId],
+  );
+
+  const handlePreviewError = useCallback(
+    (requestId: number) => {
+      if (
+        previewRequestIdRef.current !== requestId ||
+        renderedPreview?.requestId !== requestId
+      ) {
+        return;
+      }
+      const message = copy[language].previewFileUnavailable;
+      setRenderedPreview(null);
+      setPreviewRenderError(message);
+      setPreviewRenderStatus("error");
+      setGenerationError(message);
+      setGenerationStatus("error");
+      setResult(null);
+    },
+    [language, renderedPreview?.requestId],
+  );
 
   const download = useCallback(async () => {
     if (!result) return;
     setIsDownloading(true);
     try {
-      const blob = await exportRepository.download(result.download_url);
-      const url = URL.createObjectURL(blob);
+      const url = await exportRepository.ensureFileAvailable(result.download_url);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `${book?.title || "openclassbook"}.pdf`;
+      document.body.append(anchor);
       anchor.click();
-      URL.revokeObjectURL(url);
+      anchor.remove();
+    } catch (error) {
+      setGenerationError(
+        localizedApiError(error, language) || copy[language].downloadFailed,
+      );
+      setGenerationStatus("error");
     } finally {
       setIsDownloading(false);
     }
-  }, [book?.title, result]);
+  }, [language, result]);
+
+  const book = preview?.book ?? null;
 
   const shellProps = {
     activeSection: "Export" as const,
@@ -405,9 +476,12 @@ export function ExportPage({
           canRender={preview.can_export}
           generationStatus={generationStatus}
           language={language}
+          onFrameError={handlePreviewError}
+          onFrameLoad={handlePreviewLoad}
           onRender={() => void renderPreview()}
           previewError={previewRenderError}
-          previewUrl={renderedPreviewUrl}
+          previewRequestId={renderedPreview?.requestId ?? null}
+          previewUrl={renderedPreview?.url ?? null}
           status={previewRenderStatus}
         />
       </div>
@@ -551,7 +625,7 @@ function PublicationInfo({
   language,
   preview,
 }: {
-  book: Book;
+  book: ExportBookInfo;
   language: Language;
   preview: ExportPreview;
 }) {
@@ -651,16 +725,22 @@ function PdfPreview({
   canRender,
   generationStatus,
   language,
+  onFrameError,
+  onFrameLoad,
   onRender,
   previewError,
+  previewRequestId,
   previewUrl,
   status,
 }: {
   canRender: boolean;
   generationStatus: GenerationStatus;
   language: Language;
+  onFrameError: (requestId: number) => void;
+  onFrameLoad: (requestId: number) => void;
   onRender: () => void;
   previewError: string | null;
+  previewRequestId: number | null;
   previewUrl: string | null;
   status: PreviewRenderStatus;
 }) {
@@ -673,7 +753,11 @@ function PdfPreview({
         {previewUrl ? (
           <div>
             <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2.5">
-              <p className="text-xs font-medium text-foreground">{pageCopy.previewReady}</p>
+              <p className="text-xs font-medium text-foreground">
+                {status === "success"
+                  ? pageCopy.previewReady
+                  : pageCopy.renderingPreview}
+              </p>
               <Button
                 className="h-8 px-3 text-xs"
                 disabled={status === "rendering" || generationStatus === "generating"}
@@ -690,6 +774,13 @@ function PdfPreview({
             </div>
             <iframe
               className="h-[720px] w-full bg-[#525659]"
+              key={previewRequestId}
+              onError={() => {
+                if (previewRequestId !== null) onFrameError(previewRequestId);
+              }}
+              onLoad={() => {
+                if (previewRequestId !== null) onFrameLoad(previewRequestId);
+              }}
               src={previewUrl}
               title={pageCopy.previewFrameTitle}
             />

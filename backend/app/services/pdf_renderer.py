@@ -1,12 +1,13 @@
 import base64
 import binascii
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from html import escape
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+from reportlab import rl_config
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4, A5
@@ -34,10 +35,44 @@ from app.models.article import Article
 from app.models.book import Book
 from app.schemas.export import ExportTemplateInfo
 
+# PDF supports binary streams directly. Avoid ReportLab's CPU-heavy ASCII85 pass.
+rl_config.useA85 = False
+
 B5 = (176 * mm, 250 * mm)
 TEMPLATE_ASSET_ROOT = (
     Path(__file__).resolve().parents[3] / "frontend" / "public" / "templates"
 )
+DEFAULT_SPINE_PALETTES = {
+    "spring-blossom": ("#9A6B50", "#4E3D27"),
+    "summer-forest": ("#536848", "#26341E"),
+    "autumn-ginkgo": ("#A56A24", "#49341C"),
+    "winter-sun": ("#6B543A", "#382719"),
+    "misty-mountain": ("#62665E", "#363A34"),
+    "rice-paper": ("#786552", "#241B0F"),
+    "new-chinese": ("#7D5949", "#3E2F22"),
+    "campus-morning": ("#4E6D7B", "#343B2F"),
+    "graduation": ("#9C6F6D", "#302627"),
+    "youth-dream": ("#357FA6", "#173B5C"),
+    "nordic-forest": ("#7A8E77", "#373C34"),
+    "ocean-fairytale": ("#4F92AD", "#1F4558"),
+    "starry-dream": ("#8170AF", "#3F3A63"),
+}
+
+LEGACY_DEFAULT_SPINE_TEXT_COLORS = {
+    "spring-blossom": "#FFFFFF",
+    "summer-forest": "#FFFFFF",
+    "autumn-ginkgo": "#FFFFFF",
+    "winter-sun": "#FFFFFF",
+    "misty-mountain": "#F8F7F5",
+    "rice-paper": "#FFFFFF",
+    "new-chinese": "#F9F2E6",
+    "campus-morning": "#FFFFFF",
+    "graduation": "#FFFFFF",
+    "youth-dream": "#FFFFFF",
+    "nordic-forest": "#FFFFFF",
+    "ocean-fairytale": "#FFFFFF",
+    "starry-dream": "#F7F5FC",
+}
 
 
 def _number(value: object, fallback: float) -> float:
@@ -109,6 +144,7 @@ def _draw_canvas_text_objects(
     cover_font: str,
     body_font: str,
     fallback_color: str,
+    line_fallback_color: str | None = None,
 ) -> None:
     """Render persisted publishing-canvas text layers without reinterpreting slots."""
     source_text = {
@@ -125,18 +161,34 @@ def _draw_canvas_text_objects(
     for item in objects:
         if not isinstance(item, dict) or item.get("hidden") is True:
             continue
-        source = str(item.get("source", "custom"))
-        content = str(item.get("content", "")) if source == "custom" else source_text.get(source, "")
-        if not content:
-            continue
         x, y, width, height = _area_points(
             _appearance_area(item, (0, 0, 20, 5)), page_width, page_height, x_offset
         )
+        opacity = min(1, max(0, _number(item.get("opacity"), 100) / 100))
+        if item.get("type") == "line":
+            color = _color(line_fallback_color, fallback_color)
+            target.saveState()
+            _set_fill_color_alpha(target, colors.HexColor(color), opacity)
+            rotation = _number(item.get("rotation"), 0)
+            if rotation:
+                target.translate(x + width / 2, y + height / 2)
+                target.rotate(-rotation)
+                x, y = -width / 2, -height / 2
+            target.rect(x, y, width, height, stroke=0, fill=1)
+            target.restoreState()
+            continue
+        source = str(item.get("source", "custom"))
+        content = (
+            str(item.get("content", ""))
+            if source == "custom"
+            else source_text.get(source, "")
+        )
+        if not content:
+            continue
         font_size = max(6, _number(item.get("font_size"), 6) * 3)
         font_name = cover_font if source in {"title", "subtitle"} else body_font
         alignment = str(item.get("align", "center"))
         color = _color(item.get("color"), fallback_color)
-        opacity = min(1, max(0, _number(item.get("opacity"), 100) / 100))
         leading = font_size * max(0.8, _number(item.get("line_height"), 1.25))
         target.saveState()
         _set_fill_color_alpha(target, colors.HexColor(color), opacity)
@@ -408,6 +460,7 @@ class PdfDocumentData:
     author_names: dict[int, str]
     sections: list[dict[str, Any]]
     template: ExportTemplateInfo
+    author_details: dict[int, tuple[str, str | None]] = field(default_factory=dict)
 
 
 class PageBackground(Flowable):
@@ -521,6 +574,149 @@ def _append_normal_paragraph(
 
 class PdfRenderer:
     """ReportLab-backed renderer kept independent from API and persistence."""
+
+    def render_appearance_page(
+        self,
+        book: Book,
+        template: ExportTemplateInfo,
+        destination: Path,
+        *,
+        surface: str,
+    ) -> int:
+        """Render one editable exterior surface for the reading-book PDF."""
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        page_width, page_height = _page_size(template)
+        appearance = (
+            template.appearance if isinstance(template.appearance, dict) else {}
+        )
+        is_front = surface == "front"
+        asset = _template_asset_path(
+            template.template_id, "cover" if is_front else "cover_back"
+        )
+        pdf = canvas.Canvas(str(destination), pagesize=(page_width, page_height))
+        if asset.is_file():
+            pdf.drawImage(
+                str(asset), 0, 0, width=page_width, height=page_height,
+                preserveAspectRatio=False, mask="auto",
+            )
+        else:
+            pdf.setFillColor(colors.HexColor(template.background_color))
+            pdf.rect(0, 0, page_width, page_height, stroke=0, fill=1)
+
+        cover_font = _register_cover_font(
+            template.template_id, _register_fonts(template.title_font)[0]
+        )
+        body_font, _ = _register_fonts(template.font)
+        if is_front:
+            front = appearance.get("front_cover", {})
+            front = front if isinstance(front, dict) else {}
+            palette = front.get("palette", {})
+            text_color = _color(
+                palette.get("text") if isinstance(palette, dict) else None,
+                template.theme_color,
+            )
+            objects = front.get("canvas_objects", [])
+            if isinstance(objects, list) and objects:
+                _draw_canvas_text_objects(
+                    pdf, objects, book, page_width, page_height, 0,
+                    cover_font, body_font, text_color,
+                )
+            else:
+                self._draw_default_appearance_front(
+                    pdf, book, front, page_width, page_height, cover_font, body_font,
+                    text_color,
+                )
+        else:
+            back = appearance.get("back_cover", {})
+            back = back if isinstance(back, dict) else {}
+            objects = back.get("canvas_objects", [])
+            if isinstance(objects, list) and objects:
+                _draw_canvas_text_objects(
+                    pdf, objects, book, page_width, page_height, 0,
+                    cover_font, body_font, template.theme_color, template.accent_color,
+                )
+            else:
+                summary_area = _appearance_area(
+                    back.get("summary_area"), (13, 25, 74, 42)
+                )
+                x, y, width, height = _area_points(
+                    summary_area, page_width, page_height, 0
+                )
+                _draw_wrapped(
+                    pdf,
+                    (book.description or "")[
+                        : int(_number(back.get("summary_max_length"), 600))
+                    ],
+                    body_font,
+                    10,
+                    x,
+                    y,
+                    width,
+                    height,
+                    template.theme_color,
+                )
+        pdf.showPage()
+        pdf.save()
+        return 1
+
+    @staticmethod
+    def _draw_default_appearance_front(
+        pdf: canvas.Canvas,
+        book: Book,
+        front: dict[str, object],
+        page_width: float,
+        page_height: float,
+        cover_font: str,
+        body_font: str,
+        text_color: str,
+    ) -> None:
+        typography = front.get("typography", {})
+        typography = typography if isinstance(typography, dict) else {}
+        layout = typography.get("layout", {})
+        layout = layout if isinstance(layout, dict) else {}
+        slots = {
+            "title": (book.title, cover_font, 42, (37, 42, 48, 10, "center", 1.0)),
+            "subtitle": (
+                book.subtitle or "",
+                cover_font,
+                19,
+                (39, 55.5, 44, 5, "center", 0.58),
+            ),
+            "author": (
+                book.owner_name,
+                body_font,
+                12,
+                (40, 65, 42, 4, "center", 0.36),
+            ),
+            "school": (
+                book.school or "",
+                body_font,
+                12,
+                (40, 70, 42, 3.5, "center", 0.28),
+            ),
+            "publisher": (
+                book.publisher or "",
+                body_font,
+                12,
+                (40, 76, 42, 3, "center", 0.24),
+            ),
+            "year": (
+                str(book.created_at.year),
+                body_font,
+                12,
+                (40, 80, 42, 3, "center", 0.22),
+            ),
+        }
+        pdf.setFillColor(colors.HexColor(text_color))
+        for slot_name, (content, font_name, base_size, fallback) in slots.items():
+            if not content:
+                continue
+            area, alignment, scale = _appearance_slot(layout, slot_name, fallback)
+            x, y, width, height = _area_points(area, page_width, page_height, 0)
+            pdf.setFont(font_name, base_size * scale)
+            _draw_aligned(
+                pdf, content, x, y + height - base_size * scale, width, alignment
+            )
 
     def render(
         self,
@@ -767,6 +963,23 @@ class PdfRenderer:
         page_width, page_height = _page_size(template)
         appearance = template.appearance
         spine = appearance.get("spine", {}) if isinstance(appearance, dict) else {}
+        default_spine_color, default_spine_text_color = DEFAULT_SPINE_PALETTES.get(
+            template.template_id, (template.accent_color, "#FFFFFF")
+        )
+        spine_color = _color(
+            spine.get("background_color") if isinstance(spine, dict) else None,
+            default_spine_color,
+        )
+        saved_spine_text_color = (
+            spine.get("text_color") if isinstance(spine, dict) else None
+        )
+        if (
+            isinstance(saved_spine_text_color, str)
+            and saved_spine_text_color.upper()
+            == LEGACY_DEFAULT_SPINE_TEXT_COLORS.get(template.template_id)
+        ):
+            saved_spine_text_color = None
+        spine_text_color = _color(saved_spine_text_color, default_spine_text_color)
         base_width = _number(spine.get("baseWidthMm"), 2)
         mm_per_page = _number(spine.get("mmPerPage"), 0.0085)
         spine_mm = max(
@@ -791,7 +1004,7 @@ class PdfRenderer:
             else:
                 pdf.setFillColor(colors.HexColor(template.background_color))
                 pdf.rect(x, 0, page_width, page_height, stroke=0, fill=1)
-        pdf.setFillColor(colors.HexColor(template.accent_color))
+        pdf.setFillColor(colors.HexColor(spine_color))
         pdf.rect(page_width, 0, spine_width, page_height, stroke=0, fill=1)
         title_font, _ = _register_fonts(template.title_font)
         cover_font = _register_cover_font(template.template_id, title_font)
@@ -837,7 +1050,9 @@ class PdfRenderer:
                 (40, 80, 42, 3, "center", 0.22),
             ),
         }
-        canvas_objects = front.get("canvas_objects", []) if isinstance(front, dict) else []
+        canvas_objects = (
+            front.get("canvas_objects", []) if isinstance(front, dict) else []
+        )
         if isinstance(canvas_objects, list) and canvas_objects:
             _draw_canvas_text_objects(
                 pdf,
@@ -851,7 +1066,12 @@ class PdfRenderer:
                 text_color,
             )
         else:
-            for slot_name, (content, font_name, base_size, fallback) in fixed_slots.items():
+            for slot_name, (
+                content,
+                font_name,
+                base_size,
+                fallback,
+            ) in fixed_slots.items():
                 if not content:
                     continue
                 area, alignment, scale = _appearance_slot(layout, slot_name, fallback)
@@ -881,11 +1101,19 @@ class PdfRenderer:
         if isinstance(back_objects, list) and back_objects:
             _draw_canvas_text_objects(
                 pdf, back_objects, book, page_width, page_height, 0,
-                cover_font, body_font, template.theme_color,
+                cover_font, body_font, template.theme_color, template.accent_color,
             )
         else:
             _draw_wrapped(
-                pdf, summary, body_font, 10, bx, by, bwidth, bheight, template.theme_color
+                pdf,
+                summary,
+                body_font,
+                10,
+                bx,
+                by,
+                bwidth,
+                bheight,
+                template.theme_color,
             )
         footer_area = (
             _appearance_area(back.get("footer_area"), (13, 82, 74, 10))
@@ -904,11 +1132,13 @@ class PdfRenderer:
                 else "OpenClassBook"
             ),
         )
-        spine_objects = spine.get("canvas_objects", []) if isinstance(spine, dict) else []
+        spine_objects = (
+            spine.get("canvas_objects", []) if isinstance(spine, dict) else []
+        )
         if isinstance(spine_objects, list) and spine_objects:
             _draw_canvas_text_objects(
                 pdf, spine_objects, book, spine_width, page_height, page_width,
-                title_font, body_font, "#ffffff",
+                title_font, body_font, spine_text_color,
             )
         else:
             spine_text = " · ".join(
@@ -921,18 +1151,32 @@ class PdfRenderer:
             )
             if value
         )
-            pdf.setFillColor(colors.white)
+            pdf.setFillColor(colors.HexColor(spine_text_color))
             spine_size = max(
                 5, min(10, spine_width * 0.6 * _number(spine.get("fontScale"), 1))
             )
             pdf.setFont(title_font, spine_size)
             if spine.get("direction", "vertical") == "horizontal":
-                _draw_aligned(pdf, spine_text, page_width, page_height / 2, spine_width, str(spine.get("alignment", "center")))
+                _draw_aligned(
+                    pdf,
+                    spine_text,
+                    page_width,
+                    page_height / 2,
+                    spine_width,
+                    str(spine.get("alignment", "center")),
+                )
             else:
                 pdf.saveState()
                 pdf.translate(page_width + spine_width / 2, page_height * 0.08)
                 pdf.rotate(90)
-                _draw_aligned(pdf, spine_text, 0, 0, page_height * 0.84, str(spine.get("alignment", "center")))
+                _draw_aligned(
+                    pdf,
+                    spine_text,
+                    0,
+                    0,
+                    page_height * 0.84,
+                    str(spine.get("alignment", "center")),
+                )
                 pdf.restoreState()
         pdf.showPage()
         pdf.save()
@@ -951,6 +1195,7 @@ class PdfRenderer:
             "cover": "cover",
             "back_cover": "cover_back",
             "ending": "ending",
+            "contents": "article_background",
         }.get(str(preset), "chapter")
         story.append(
             PageBackground(
@@ -998,6 +1243,10 @@ class PdfRenderer:
             )
             return
 
+        if preset == "contents":
+            self._append_contents_section(story, section, document, styles)
+            return
+
         story.extend(
             [
                 Spacer(1, 24 * mm),
@@ -1008,6 +1257,70 @@ class PdfRenderer:
         if section.get("file"):
             file_name = str(section["file"]).replace("\\", "/").split("/")[-1]
             story.append(Paragraph(escape(file_name), styles["section_note"]))
+
+    @staticmethod
+    def _append_contents_section(
+        story: list[Any],
+        section: dict[str, Any],
+        document: PdfDocumentData,
+        styles: dict[str, ParagraphStyle],
+    ) -> None:
+        show_author = bool(section.get("show_author", True))
+        show_class = bool(section.get("show_class", False))
+        story.extend(
+            [
+                Spacer(1, 10 * mm),
+                Paragraph("目录 / Contents", styles["contents_title"]),
+                Spacer(1, 2.5 * mm),
+                Paragraph(escape(document.book.title), styles["contents_book"]),
+                Spacer(1, 3.5 * mm),
+                HRFlowable(
+                    width="100%",
+                    thickness=0.7,
+                    color=colors.HexColor(document.template.accent_color),
+                    spaceAfter=2.5 * mm,
+                ),
+            ]
+        )
+        if not document.articles:
+            story.append(
+                Paragraph(
+                    "暂无已审核文章 / No approved articles yet",
+                    styles["contents_empty"],
+                )
+            )
+            return
+        for index, article in enumerate(document.articles, start=1):
+            author_name, class_name = document.author_details.get(
+                article.author_id,
+                (document.author_names.get(article.author_id, ""), None),
+            )
+            detail = " · ".join(
+                value
+                for value in (
+                    author_name if show_author else "",
+                    class_name if show_class else "",
+                )
+                if value
+            )
+            story.append(
+                Paragraph(
+                    f'<font color="{document.template.accent_color}">'
+                    f"{index:02d}</font> "
+                    f"{escape(article.title)}"
+                    f'<font color="#667085">{f" · {escape(detail)}" if detail else ""}</font>',
+                    styles["contents_item"],
+                )
+            )
+            story.append(
+                HRFlowable(
+                    width="100%",
+                    thickness=0.28,
+                    color=colors.Color(0.3, 0.35, 0.4, alpha=0.18),
+                    spaceBefore=0.7 * mm,
+                    spaceAfter=1.2 * mm,
+                )
+            )
 
     def _append_articles(
         self,
@@ -1227,6 +1540,42 @@ def _styles(
             textColor=accent_color,
             wordWrap="CJK",
         ),
+        "contents_title": ParagraphStyle(
+            "ContentsTitle",
+            fontName=title_bold_font,
+            fontSize=max(title_size * 0.85, 18),
+            leading=max(title_size * 1.05, 23),
+            alignment=TA_CENTER,
+            textColor=theme_color,
+            wordWrap="CJK",
+        ),
+        "contents_book": ParagraphStyle(
+            "ContentsBook",
+            fontName=body_bold_font,
+            fontSize=max(body_size * 0.85, 9),
+            leading=max(body_size * 1.2, 12),
+            alignment=TA_CENTER,
+            textColor=accent_color,
+            wordWrap="CJK",
+        ),
+        "contents_item": ParagraphStyle(
+            "ContentsItem",
+            fontName=body_bold_font,
+            fontSize=max(body_size * 0.86, 9),
+            leading=max(body_size * 1.15, 12),
+            alignment=TA_LEFT,
+            textColor=theme_color,
+            wordWrap="CJK",
+        ),
+        "contents_empty": ParagraphStyle(
+            "ContentsEmpty",
+            fontName=body_font,
+            fontSize=max(body_size, 10),
+            leading=max(body_size * 1.5, 15),
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#667085"),
+            wordWrap="CJK",
+        ),
         "number": ParagraphStyle(
             "ArticleNumber",
             fontName=body_bold_font,
@@ -1416,22 +1765,21 @@ def _register_cover_font(template_id: str, fallback: str) -> str:
     }
     if template_id == "spring-blossom":
         font_name = "OCB-Cover-NotoSerifSC"
-        font_path = _first_cjk_font(
-            [
-                Path("C:/Windows/Fonts/NotoSerifSC-VF.ttf"),
-                Path("C:/Windows/Fonts/FZSTK.TTF"),
-            ]
+        candidates = (
+            Path("C:/Windows/Fonts/NotoSerifSC-VF.ttf"),
+            Path("C:/Windows/Fonts/FZSTK.TTF"),
         )
     elif template_id in calligraphy_templates:
         font_name = "OCB-Cover-ShuTi"
-        font_path = _first_cjk_font([Path("C:/Windows/Fonts/FZSTK.TTF")])
+        candidates = (Path("C:/Windows/Fonts/FZSTK.TTF"),)
     elif template_id in lively_templates:
         font_name = "OCB-Cover-YouYuan"
-        font_path = _first_cjk_font([Path("C:/Windows/Fonts/FZYTK.TTF")])
+        candidates = (Path("C:/Windows/Fonts/FZYTK.TTF"),)
     else:
         return fallback
     if font_name in pdfmetrics.getRegisteredFontNames():
         return font_name
+    font_path = _first_cjk_font(list(candidates))
     if font_path is None:
         return fallback
     pdfmetrics.registerFont(TTFont(font_name, font_path))
@@ -1482,7 +1830,7 @@ def _article_image(
 def _section_label(section: dict[str, Any]) -> str:
     labels = {
         "preface": "前言 / Preface",
-        "chapter": "章节页 / Chapter",
+        "contents": "目录 / Contents",
         "principal_message": "校长寄语 / Principal's Message",
         "teacher_message": "教师寄语 / Teacher's Message",
         "afterword": "后记 / Afterword",

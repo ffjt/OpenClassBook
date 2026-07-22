@@ -9,8 +9,26 @@ from pypdf import PdfReader
 from pypdf.generic import ContentStream
 
 from app.schemas.export import ExportTemplateInfo
-from app.services import page_asset_renderer
+from app.services import page_asset_renderer, pdf_renderer
 from app.services.pdf_renderer import PdfDocumentData, PdfRenderer, _draw_chrome_chip
+
+
+def test_registered_cover_font_skips_repeated_font_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    font_name = "OCB-Cover-NotoSerifSC"
+    monkeypatch.setattr(
+        pdf_renderer.pdfmetrics,
+        "getRegisteredFontNames",
+        lambda: [font_name],
+    )
+    monkeypatch.setattr(
+        pdf_renderer,
+        "_first_cjk_font",
+        lambda _: pytest.fail("registered cover fonts must not be probed again"),
+    )
+
+    assert pdf_renderer._register_cover_font("spring-blossom", "fallback") == font_name
 
 
 def _publication_template() -> ExportTemplateInfo:
@@ -551,6 +569,65 @@ def test_magazine_chapter_page_uses_the_full_page_width(tmp_path: Path) -> None:
     reader = PdfReader(destination)
     assert page_count == len(reader.pages) == 1
     assert "Acknowledgements" in (reader.pages[0].extract_text() or "")
+
+
+def test_contents_page_lists_titles_and_respects_optional_author_class(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "contents.pdf"
+    document = PdfDocumentData(
+        book=SimpleNamespace(
+            title="Class anthology",
+            description="",
+            owner_name="Editor",
+        ),
+        articles=[
+            SimpleNamespace(
+                number="001",
+                title="First story",
+                subtitle="",
+                author_id=1,
+                content="Body",
+                image=None,
+            ),
+            SimpleNamespace(
+                number="002",
+                title="Second story",
+                subtitle="",
+                author_id=2,
+                content="Body",
+                image=None,
+            ),
+        ],
+        author_names={1: "Mia", 2: "Noah"},
+        author_details={1: ("Mia", "Class Blue"), 2: ("Noah", "Class Red")},
+        sections=[
+            {
+                "kind": "page",
+                "preset": "contents",
+                "show_author": True,
+                "show_class": False,
+            }
+        ],
+        template=_publication_template().model_copy(
+            update={"template_id": "spring-blossom"}
+        ),
+    )
+
+    page_count = PdfRenderer().render(document, destination)
+
+    reader = PdfReader(destination)
+    text = reader.pages[0].extract_text() or ""
+    assert page_count == len(reader.pages) == 1
+    assert "Contents" in text
+    assert "Class anthology" in text
+    assert "First story" in text
+    assert "Second story" in text
+    assert "Mia" in text and "Noah" in text
+    assert "Class Blue" not in text and "Class Red" not in text
+    positions, _ = _page_layout(reader.pages[0], ("First story", "Mia"))
+    assert positions.keys() >= {"First story", "Mia"}
+    assert abs(positions["First story"][1] - positions["Mia"][1]) <= 1
 
 
 def test_bilingual_image_story_keeps_a_compact_opener_in_one_column(

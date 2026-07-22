@@ -1,10 +1,10 @@
 {
   "id": "starry-dream",
   "name": "Starry Dream",
-  "primaryColor": "#3C3B6E",
-  "secondaryColor": "#EEF0FF",
-  "accentColor": "#D9A441",
-  "textColor": "#242447",
+  "primaryColor": "#455EC1",
+  "secondaryColor": "#E9E5F1",
+  "accentColor": "#1B3894",
+  "textColor": "#010D31",
   "fontFamily": "Source Han Serif SC",
   "cornerStyle": "soft",
   "safeArea": {

@@ -91,6 +91,9 @@ export interface BookAppearance {
   };
   spine: {
     canvasObjects: CanvasObject[];
+    /** Persisted exterior colors keep the preview and exported spine identical. */
+    backgroundColor: string;
+    textColor: string;
     direction: SpineDirection;
     alignment: AppearanceAlignment;
     showAuthor: boolean;

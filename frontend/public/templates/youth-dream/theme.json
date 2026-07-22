@@ -1,10 +1,10 @@
 {
   "id": "youth-dream",
   "name": "Youth Dream",
-  "primaryColor": "#0F766E",
-  "secondaryColor": "#E4F6F3",
-  "accentColor": "#F97316",
-  "textColor": "#173B3A",
+  "primaryColor": "#488BDB",
+  "secondaryColor": "#FDFAF7",
+  "accentColor": "#1754A6",
+  "textColor": "#173B5C",
   "fontFamily": "Source Han Sans SC",
   "cornerStyle": "soft",
   "safeArea": {

@@ -1,10 +1,10 @@
 {
   "id": "misty-mountain",
   "name": "Misty Mountain",
-  "primaryColor": "#52656F",
-  "secondaryColor": "#E8EEEC",
-  "accentColor": "#8A9A5B",
-  "textColor": "#293438",
+  "primaryColor": "#7D7D70",
+  "secondaryColor": "#F8F7F5",
+  "accentColor": "#4F534B",
+  "textColor": "#363A34",
   "fontFamily": "Source Han Serif SC",
   "cornerStyle": "square",
   "safeArea": {

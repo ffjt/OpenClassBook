@@ -1,10 +1,10 @@
 {
   "id": "autumn-ginkgo",
   "name": "Autumn Ginkgo",
-  "primaryColor": "#9A6A2F",
-  "secondaryColor": "#F7E8C5",
-  "accentColor": "#C05621",
-  "textColor": "#3B2F22",
+  "primaryColor": "#CD9C4B",
+  "secondaryColor": "#FBF6EF",
+  "accentColor": "#744814",
+  "textColor": "#49341C",
   "fontFamily": "Source Han Serif SC",
   "cornerStyle": "soft",
   "safeArea": {

@@ -22,7 +22,7 @@ import { useSystemFonts } from "@/hooks/use-system-fonts";
 import type { Language } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { defaultTemplate } from "@/mock/template";
-import { getTemplateAssetUrl, templateCatalog } from "@/mock/template-catalog";
+import { applyTemplateAppearanceColorDefaults, getTemplateAssetUrl, templateCatalog } from "@/mock/template-catalog";
 import type { TemplateCatalogEntry } from "@/mock/template-catalog";
 import { articleRepository } from "@/repositories/articleRepository";
 import {
@@ -268,9 +268,11 @@ export function FormatSettingsContent({
       bodyFont: { ...current.bodyFont, family: catalog.fontFamily, fullName: catalog.fontFamily },
       titleFont: catalog.titleFont ?? { ...current.titleFont, family: catalog.fontFamily, fullName: catalog.fontFamily },
       titleSize: catalog.titleSize ?? current.titleSize,
-      appearance: catalog.coverTextColor
-        ? { ...current.appearance, frontCover: { ...current.appearance.frontCover, palette: { ...current.appearance.frontCover.palette, text: catalog.coverTextColor } } }
-        : current.appearance,
+      appearance: applyTemplateAppearanceColorDefaults(
+        current.appearance,
+        catalog,
+        catalog.titleFont ?? { ...current.titleFont, family: catalog.fontFamily, fullName: catalog.fontFamily },
+      ),
       titleSpacing: 12,
       imageRadius: catalog.cornerStyle === "soft" ? 12 : 0,
       imageBorder: catalog.cornerStyle === "square",

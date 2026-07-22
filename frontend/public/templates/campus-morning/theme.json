@@ -1,10 +1,10 @@
 {
   "id": "campus-morning",
   "name": "Campus Morning",
-  "primaryColor": "#2563A6",
-  "secondaryColor": "#E7F1FB",
-  "accentColor": "#F59E0B",
-  "textColor": "#1F2937",
+  "primaryColor": "#6F7657",
+  "secondaryColor": "#FDFBF7",
+  "accentColor": "#485140",
+  "textColor": "#343B2F",
   "fontFamily": "Source Han Sans SC",
   "cornerStyle": "soft",
   "safeArea": {

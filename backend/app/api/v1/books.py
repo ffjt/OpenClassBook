@@ -110,7 +110,10 @@ def delete_book_file(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "protected_upload",
-                "message": "Cover and back-cover files cannot be deleted. Replace them instead.",
+                "message": (
+                    "Cover and back-cover files cannot be deleted. "
+                    "Replace them instead."
+                ),
                 "message_zh": "封面和封底文件不可删除，请使用替换功能。",
             },
         ) from error

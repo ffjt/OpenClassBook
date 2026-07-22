@@ -1,10 +1,10 @@
 {
   "id": "spring-blossom",
   "name": "Spring Blossom",
-  "primaryColor": "#72A8D8",
-  "secondaryColor": "#F5D7D7",
-  "accentColor": "#6B2E3B",
-  "textColor": "#333333",
+  "primaryColor": "#E3BD95",
+  "secondaryColor": "#FDF7EC",
+  "accentColor": "#625033",
+  "textColor": "#4E3D27",
   "fontFamily": "Source Han Serif SC",
   "cornerStyle": "soft",
   "safeArea": {

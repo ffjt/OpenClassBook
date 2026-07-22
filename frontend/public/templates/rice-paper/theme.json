@@ -1,10 +1,10 @@
 {
   "id": "rice-paper",
   "name": "Rice Paper",
-  "primaryColor": "#4B5563",
-  "secondaryColor": "#F4F1EA",
-  "accentColor": "#4A3420",
-  "textColor": "#2F3437",
+  "primaryColor": "#97836A",
+  "secondaryColor": "#FBF3E4",
+  "accentColor": "#4A3F30",
+  "textColor": "#241B0F",
   "fontFamily": "Source Han Serif SC",
   "cornerStyle": "square",
   "safeArea": {

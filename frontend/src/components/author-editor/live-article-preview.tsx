@@ -76,6 +76,14 @@ export function getPreviewColumnCount(template: Template): 1 | 2 {
   return template.columns;
 }
 
+// Measurement and rendering must use the same column geometry.
+export function getPreviewColumnGap(
+  template: Template,
+  bodyFontSize: number,
+) {
+  return template.columns === 2 ? bodyFontSize * 2.25 : 0;
+}
+
 function splitParagraph(paragraph: string, limit: number) {
   if (paragraph.length <= limit) return [paragraph, ""] as const;
 
@@ -794,7 +802,7 @@ export function PublicationArticlePreview({
       );
   const bodyFontSize = Math.max(7.5, template.bodySize * previewScale);
   const activeColumns = getPreviewColumnCount(template);
-  const columnGap = activeColumns === 2 ? bodyFontSize * 1.5 : 0;
+  const columnGap = getPreviewColumnGap(template, bodyFontSize);
   const flowImageLayout = getFlowImageLayout(
     previewImagePosition,
     article.imageWrap,
@@ -916,7 +924,7 @@ export function PublicationArticlePreview({
         if (activeColumns === 2) {
           container.style.columnCount = "2";
           container.style.columnFill = "auto";
-          container.style.columnGap = "1.5em";
+          container.style.columnGap = `${columnGap}px`;
         }
         document.body.append(container);
 
@@ -1196,20 +1204,43 @@ export function PublicationArticlePreview({
   };
 
   const renderWrapSpacer = () => (
-    <span
+    <div
       aria-hidden="true"
+      data-preview-image-spacer="true"
       style={{
         ...getFlowImageStyle(
           previewImagePosition,
           article.imageWrap,
           previewImageSize,
           imageBounds,
-          template.columns,
+          activeColumns,
           columnGap,
         ),
-        visibility: "hidden",
+        alignItems: "center",
+        display: article.imageWrap === "topBottom" ? "flex" : undefined,
+        justifyContent: "center",
       }}
-    />
+    >
+      {article.imageWrap === "topBottom" ? (
+        <figure
+          className="overflow-hidden bg-slate-50 shadow-md"
+          style={{
+            border: template.imageBorder ? "1px solid #e2e8f0" : "none",
+            borderRadius: `${template.imageRadius * previewScale}px`,
+            height: `${imagePixelHeight}px`,
+            maxWidth: "100%",
+            width: `${flowImageLayout.width}px`,
+          }}
+        >
+          <img
+            alt=""
+            className="size-full object-cover"
+            draggable={false}
+            src={article.imageUrl}
+          />
+        </figure>
+      ) : null}
+    </div>
   );
 
   const renderImage = (pageIndex: number) => (
@@ -1527,7 +1558,7 @@ export function PublicationArticlePreview({
                       style={{
                         columnCount: pageColumns === 2 ? 2 : undefined,
                         columnFill: pageColumns === 2 ? "auto" : undefined,
-                        columnGap: pageColumns === 2 ? "1.5em" : undefined,
+                        columnGap: pageColumns === 2 ? `${columnGap}px` : undefined,
                         height: pageColumns === 2 ? "100%" : undefined,
                       }}
                     >
@@ -1557,7 +1588,7 @@ export function PublicationArticlePreview({
                       style={{
                         columnCount: pageColumns === 2 ? 2 : undefined,
                         columnFill: pageColumns === 2 ? "auto" : undefined,
-                        columnGap: pageColumns === 2 ? "1.5em" : undefined,
+                        columnGap: pageColumns === 2 ? `${columnGap}px` : undefined,
                         columnRule:
                           pageColumns === 2
                             ? `1px solid ${template.accentColor}33`
@@ -1633,6 +1664,48 @@ export function PublicationArticlePreview({
                             text || "\u00a0"
                           );
 
+                        if (
+                          insertsImage &&
+                          article.imageWrap === "topBottom"
+                        ) {
+                          return (
+                            <>
+                              {displayCharacter > 0 ? (
+                                <p
+                                  data-preview-line={lineIndex + 1}
+                                  style={{
+                                    minHeight: `${template.lineHeight}em`,
+                                    textIndent: !isQuoteLine
+                                      ? `${template.firstLineIndent}em`
+                                      : 0,
+                                  }}
+                                >
+                                  {renderLineText(
+                                    displayLine.slice(0, displayCharacter),
+                                  )}
+                                </p>
+                              ) : null}
+                              {renderWrapSpacer()}
+                              {displayCharacter < displayLine.length ||
+                              displayLine.length === 0 ? (
+                                <p
+                                  data-preview-line={lineIndex + 1}
+                                  style={{
+                                    minHeight: `${template.lineHeight}em`,
+                                    textIndent: !isQuoteLine
+                                      ? `${template.firstLineIndent}em`
+                                      : 0,
+                                  }}
+                                >
+                                  {renderLineText(
+                                    displayLine.slice(displayCharacter),
+                                  )}
+                                </p>
+                              ) : null}
+                            </>
+                          );
+                        }
+
                         return (
                           <p
                             data-preview-line={lineIndex + 1}
@@ -1668,7 +1741,7 @@ export function PublicationArticlePreview({
                     </div>
                   </div>
 
-                  {page.showImage && renderImage(pageIndex)}
+                  {page.showImage && article.imageWrap !== "topBottom" && renderImage(pageIndex)}
                 </div>
 
                 <PublicationPageFooter

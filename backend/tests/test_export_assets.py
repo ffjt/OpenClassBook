@@ -1,5 +1,9 @@
 import io
+from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from pathlib import Path
+from time import sleep
+from unittest.mock import Mock
 
 import pytest
 from docx import Document
@@ -13,12 +17,18 @@ from PIL import Image
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
+from app.models.article import Article
+from app.models.author import Author
+from app.models.book import Book
 from app.schemas.export import ExportTemplateInfo
 from app.services.docx_formatting import convert_docx_to_html
 from app.services.docx_word_converter import WordConversionResult
-from app.services.page_asset_renderer import PageAssetRenderer
+from app.services.export import ExportService, _renderer_environment_payload
+from app.services.page_asset_renderer import PageAssetRenderer, RenderedAsset
+from app.services.pdf_renderer import PdfRenderer
 
 
 @pytest.fixture(autouse=True)
@@ -340,6 +350,7 @@ def test_installed_word_is_preferred_over_compatible_renderer(
     assert rendered.page_count == 1
     assert rendered.image_count == 1
     assert rendered.warnings == ()
+    assert rendered.cacheable is True
     assert "Native Microsoft Word output" in (
         PdfReader(destination).pages[0].extract_text() or ""
     )
@@ -365,8 +376,118 @@ def test_failed_word_conversion_falls_back_with_bilingual_warning(
     assert rendered.warnings == (
         "Microsoft Word conversion failed; the compatible DOCX renderer was used.",
     )
+    assert rendered.cacheable is False
     assert rendered.warnings_zh == (
         "Microsoft Word 转换失败，已改用兼容 DOCX 渲染器。",
+    )
+
+
+def test_transient_word_failure_is_retried_without_poisoning_export_cache(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings, "storage_dir", tmp_path / "storage")
+    export_dir = tmp_path / "exports"
+    monkeypatch.setattr(settings, "export_dir", export_dir)
+    book_id = int(_create_book(client, "Retry native Word")["id"])
+    _upload(
+        client,
+        book_id,
+        "preface",
+        "preface.docx",
+        _docx_bytes(),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+    native_calls = 0
+
+    def flaky_word(source: Path, destination: Path) -> WordConversionResult:
+        nonlocal native_calls
+        native_calls += 1
+        if native_calls <= 2:
+            return WordConversionResult(converted=False, attempted=True)
+        destination.write_bytes(_pdf_bytes("Native Word retry succeeded"))
+        return WordConversionResult(converted=True, attempted=True)
+
+    monkeypatch.setattr(
+        "app.services.page_asset_renderer.convert_docx_with_word",
+        flaky_word,
+    )
+
+    first = client.post(f"/api/v1/books/{book_id}/export")
+    second = client.post(f"/api/v1/books/{book_id}/export")
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["task_id"] != second.json()["task_id"]
+    assert client.get(first.json()["download_url"]).status_code == 200
+    assert client.get(second.json()["download_url"]).status_code == 200
+    assert native_calls == 2
+    assert list((export_dir / "asset-cache").glob("*.pdf")) == []
+
+    successful = client.post(f"/api/v1/books/{book_id}/export")
+    cached = client.post(f"/api/v1/books/{book_id}/export")
+
+    assert successful.status_code == cached.status_code == 200
+    assert successful.json()["task_id"] == cached.json()["task_id"]
+    assert native_calls == 3
+    assert len(list((export_dir / "asset-cache").glob("*.pdf"))) == 1
+
+
+def test_asset_fragment_cache_is_locked_and_repairs_invalid_pdf(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.pdf"
+    source.write_bytes(_pdf_bytes("Source"))
+    export_dir = tmp_path / "exports"
+
+    class CountingRenderer:
+        calls = 0
+
+        def render(
+            self,
+            source_path: Path,
+            template: ExportTemplateInfo,
+            destination: Path,
+        ) -> RenderedAsset:
+            assert source_path == source
+            assert template == _export_template()
+            self.calls += 1
+            sleep(0.05)
+            destination.write_bytes(_pdf_bytes("Rendered cache fragment"))
+            return RenderedAsset(destination, 1)
+
+    renderer = CountingRenderer()
+    service = ExportService(Mock(), Mock(), renderer, Mock(), export_dir)
+
+    def render_to(index: int) -> bool:
+        return service._render_uploaded_asset(
+            source,
+            _export_template(),
+            tmp_path / f"fragment-{index}.pdf",
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert list(pool.map(render_to, range(2))) == [True, True]
+    assert renderer.calls == 1
+
+    cached_fragment = next((export_dir / "asset-cache").glob("*.pdf"))
+    cached_fragment.write_bytes(b"broken PDF")
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert list(pool.map(render_to, range(2, 4))) == [True, True]
+    assert renderer.calls == 2
+    assert len(PdfReader(cached_fragment).pages) == 1
+
+
+def test_renderer_environment_fingerprints_sanitizer_runtime_fonts_and_word() -> None:
+    environment = _renderer_environment_payload()
+
+    assert environment["dependencies"]["nh3"]
+    assert environment["runtime"]["python"]
+    assert environment["runtime"]["platform"]
+    assert environment["native_word"]["platform"]
+    assert all(
+        signature is None or len(signature) == 3
+        for signature in environment["fonts"].values()
     )
 
 
@@ -384,8 +505,14 @@ def test_rich_docx_upload_and_export_preserve_formatting_end_to_end(
         f"/api/v1/books/{book_id}",
         json={
             "layout_sections": [
+                {"id": "cover", "kind": "page", "preset": "cover"},
                 {"id": "preface", "kind": "page", "preset": "preface"},
                 {"id": "articles", "kind": "articles", "preset": "articles"},
+                {
+                    "id": "back_cover",
+                    "kind": "page",
+                    "preset": "back_cover",
+                },
             ]
         },
     )
@@ -403,21 +530,23 @@ def test_rich_docx_upload_and_export_preserve_formatting_end_to_end(
     assert preview.status_code == 200, preview.text
     preview_payload = preview.json()
     assert preview_payload["can_export"] is True
-    assert preview_payload["stats"]["estimated_page_count"] == 2
+    assert preview_payload["stats"]["estimated_page_count"] == 4
     assert [page["label_en"] for page in preview_payload["preview_pages"]] == [
+        "Cover",
         "Preface · 1/2",
         "Preface · 2/2",
+        "Back cover",
     ]
 
     generated = client.post(f"/api/v1/books/{book_id}/export")
     assert generated.status_code == 200, generated.text
     result = generated.json()
-    assert result["page_count"] == 2
+    assert result["page_count"] == 4
     artifact = export_dir / f"book-{book_id}-{result['task_id']}.pdf"
     reader = PdfReader(artifact)
-    assert "Colored DOCX marker" in (reader.pages[0].extract_text() or "")
-    assert "彩色文字" in (reader.pages[0].extract_text() or "")
-    assert "Second DOCX page" in (reader.pages[1].extract_text() or "")
+    assert "Colored DOCX marker" in (reader.pages[1].extract_text() or "")
+    assert "彩色文字" in (reader.pages[1].extract_text() or "")
+    assert "Second DOCX page" in (reader.pages[2].extract_text() or "")
     content = b"\n".join(page.get_contents().get_data() for page in reader.pages)
     assert b"1 0 0 rg" in content
     assert b"0 1 0 rg" in content
@@ -489,6 +618,97 @@ def test_lightweight_export_preview_does_not_render_uploaded_assets(
         page for page in payload["preview_pages"] if page["label_en"] == "Preface"
     )
     assert preface["is_placeholder"] is False
+
+
+def test_unchanged_export_reuses_content_addressed_pdf(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    test_session_factory: sessionmaker[Session],
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(settings, "storage_dir", tmp_path / "storage")
+    export_dir = tmp_path / "exports"
+    monkeypatch.setattr(settings, "export_dir", export_dir)
+    book_id = int(_create_book(client, "Cached export")["id"])
+    author_response = client.post(
+        f"/api/v1/books/{book_id}/authors",
+        json={"name": "Student"},
+    )
+    assert author_response.status_code == 201, author_response.text
+    author = author_response.json()
+    article = client.post(
+        f"/api/v1/books/{book_id}/articles",
+        json={
+            "author_id": author["id"],
+            "title": "Cache marker",
+            "content": "First export content",
+            "status": "approved",
+        },
+    )
+    assert article.status_code == 201, article.text
+
+    render_calls = 0
+    original_render = PdfRenderer.render
+
+    def counted_render(self: PdfRenderer, *args: object, **kwargs: object) -> int:
+        nonlocal render_calls
+        render_calls += 1
+        return original_render(self, *args, **kwargs)
+
+    monkeypatch.setattr(PdfRenderer, "render", counted_render)
+    first = client.post(f"/api/v1/books/{book_id}/export")
+    assert first.status_code == 200, first.text
+    first_result = first.json()
+    first_render_calls = render_calls
+    assert first_render_calls > 0
+
+    with test_session_factory() as session:
+        persisted_book = session.get(Book, book_id)
+        persisted_author = session.get(Author, int(author["id"]))
+        persisted_article = session.get(Article, int(article.json()["id"]))
+        assert persisted_book and persisted_author and persisted_article
+        persisted_book.updated_at += timedelta(days=1)
+        persisted_author.updated_at += timedelta(days=1)
+        persisted_article.updated_at += timedelta(days=1)
+        session.commit()
+
+    second = client.post(f"/api/v1/books/{book_id}/export")
+    assert second.status_code == 200, second.text
+    assert second.json()["task_id"] == first_result["task_id"]
+    assert second.json()["page_count"] == first_result["page_count"]
+    assert render_calls == first_render_calls
+
+    artifact = export_dir / f"book-{book_id}-{first_result['task_id']}.pdf"
+    artifact.write_bytes(b"broken cache")
+    repaired = client.post(f"/api/v1/books/{book_id}/export")
+    assert repaired.status_code == 200, repaired.text
+    assert repaired.json()["task_id"] == first_result["task_id"]
+    assert artifact.read_bytes().startswith(b"%PDF")
+    assert render_calls > first_render_calls
+    repaired_render_calls = render_calls
+
+    with test_session_factory() as session:
+        persisted_book = session.get(Book, book_id)
+        assert persisted_book
+        persisted_book.created_at = persisted_book.created_at.replace(
+            year=persisted_book.created_at.year + 1
+        )
+        session.commit()
+    changed_year = client.post(f"/api/v1/books/{book_id}/export")
+    assert changed_year.status_code == 200, changed_year.text
+    assert changed_year.json()["task_id"] != first_result["task_id"]
+    assert render_calls > repaired_render_calls
+    year_render_calls = render_calls
+
+    updated = client.patch(
+        f"/api/v1/books/{book_id}/template",
+        json={"body_format": {"size": 15}},
+    )
+    assert updated.status_code == 200, updated.text
+    third = client.post(f"/api/v1/books/{book_id}/export")
+    assert third.status_code == 200, third.text
+    assert third.json()["task_id"] != changed_year.json()["task_id"]
+    assert render_calls > year_render_calls
 
 
 def test_uploaded_asset_without_approved_articles_can_export(

@@ -4,6 +4,7 @@ import { defaultTemplate } from "@/mock/template";
 
 import {
   buildFlowPreviewBody,
+  getPreviewColumnGap,
   getPreviewColumnCount,
   paginateArticle,
 } from "./live-article-preview";
@@ -44,5 +45,12 @@ describe("paginateArticle", () => {
 
     expect(getPreviewColumnCount(template)).toBe(2);
     expect(getPreviewColumnCount({ ...template, columns: 1 })).toBe(1);
+  });
+
+  it("keeps a readable gutter around the two-column rule", () => {
+    expect(getPreviewColumnGap({ ...defaultTemplate, columns: 2 }, 14)).toBe(
+      31.5,
+    );
+    expect(getPreviewColumnGap({ ...defaultTemplate, columns: 1 }, 14)).toBe(0);
   });
 });

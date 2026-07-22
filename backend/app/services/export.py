@@ -1,10 +1,21 @@
+import hashlib
+import json
 import math
+import os
 import re
+import shutil
+import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import cache, lru_cache
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Lock
 from uuid import uuid4
+
+from pypdf import PdfReader
+from pypdf.errors import PdfReadError
 
 from app.models.article import Article
 from app.repositories.export import ExportBundle, ExportRepository
@@ -17,12 +28,13 @@ from app.schemas.export import (
     ExportStats,
     ExportTemplateInfo,
 )
+from app.services.docx_word_converter import word_conversion_available
 from app.services.page_asset_renderer import (
     PageAssetError,
     PageAssetRenderer,
     assemble_fragments,
 )
-from app.services.pdf_renderer import PdfDocumentData, PdfRenderer
+from app.services.pdf_renderer import TEMPLATE_ASSET_ROOT, PdfDocumentData, PdfRenderer
 from app.storage.local import LocalBookStorage
 
 DEFAULT_SECTIONS = [
@@ -59,9 +71,27 @@ DEFAULT_SECTIONS = [
     },
 ]
 
+RENDERER_SOURCE_NAMES = (
+    "export.py",
+    "pdf_renderer.py",
+    "page_asset_renderer.py",
+    "docx_formatting.py",
+    "docx_word_converter.py",
+)
+PDF_DEPENDENCIES = (
+    "docx2pdf",
+    "mammoth",
+    "nh3",
+    "Pillow",
+    "pypdf",
+    "reportlab",
+    "xhtml2pdf",
+)
+SYSTEM_FONT_SUFFIXES = {".otc", ".otf", ".ttc", ".ttf"}
+
 SECTION_LABELS = {
     "cover": ("Cover", "封面"),
-    "chapter": ("Chapter", "章节页"),
+    "contents": ("Contents", "目录"),
     "preface": ("Preface", "前言"),
     "articles": ("Main content", "正文"),
     "principal_message": ("Principal's message", "校长寄语"),
@@ -181,30 +211,40 @@ class ExportService:
             raise NoPublishableContentError
 
         template = _resolve_template(bundle)
-        task_id = uuid4().hex
-        destination = self.export_dir / f"book-{book_id}-{task_id}.pdf"
+        stable_task_id = _export_cache_key(
+            bundle,
+            sections,
+            template,
+            self.storage,
+        )[:32]
+        task_id = stable_task_id
+        destination = self.export_dir / f"book-{book_id}-{stable_task_id}.pdf"
         self.export_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            with TemporaryDirectory(
-                prefix=f"book-{book_id}-",
-                dir=self.export_dir,
-            ) as temporary:
-                fragments = self._render_fragments(
-                    bundle,
-                    sections,
-                    template,
-                    Path(temporary),
-                )
-                page_count = assemble_fragments(
-                    fragments,
-                    destination,
-                    template,
-                    title=bundle.book.title,
-                    author=bundle.book.owner_name,
-                )
-        except Exception:
-            destination.unlink(missing_ok=True)
-            raise
+        with _export_lock(stable_task_id):
+            page_count = _cached_pdf_page_count(destination)
+            if page_count is None:
+                with TemporaryDirectory(
+                    prefix=f"book-{book_id}-",
+                    dir=self.export_dir,
+                ) as temporary:
+                    fragments, cacheable = self._render_fragments(
+                        bundle,
+                        sections,
+                        template,
+                        Path(temporary),
+                    )
+                    rendered = Path(temporary) / "assembled.pdf"
+                    page_count = assemble_fragments(
+                        fragments,
+                        rendered,
+                        template,
+                        title=bundle.book.title,
+                        author=bundle.book.owner_name,
+                    )
+                    if not cacheable:
+                        task_id = uuid4().hex
+                        destination = self.export_dir / f"book-{book_id}-{task_id}.pdf"
+                    os.replace(rendered, destination)
         return ExportResponse(
             task_id=task_id,
             download_url=f"{download_prefix}/{task_id}/download",
@@ -241,6 +281,13 @@ class ExportService:
             return None
         path = self.export_dir / f"book-{book_id}-{task_id}.pdf"
         return path if path.is_file() else None
+
+    def get_artifact_title(self, artifact: Path) -> str | None:
+        try:
+            stat = artifact.stat()
+        except OSError:
+            return None
+        return _cached_pdf_title(str(artifact), stat.st_size, stat.st_mtime_ns)
 
     def get_appearance_artifact(self, book_id: int, task_id: str) -> Path | None:
         if not re.fullmatch(r"[a-f0-9]{32}", task_id):
@@ -342,52 +389,374 @@ class ExportService:
         sections: list[dict[str, object]],
         template: ExportTemplateInfo,
         directory: Path,
-    ) -> list[Path]:
+    ) -> tuple[list[Path], bool]:
         fragments: list[Path] = []
-        for index, section in enumerate(sections):
+        cacheable = True
+        pending: list[dict[str, object]] = []
+        author_names = {
+            author.id: (
+                f"{author.name} · {author.class_name}"
+                if author.class_name
+                else author.name
+            )
+            for author in bundle.authors
+        }
+        author_details = {
+            author.id: (author.name, author.class_name)
+            for author in bundle.authors
+        }
+
+        def render_pending() -> None:
+            if not pending:
+                return
+            destination = directory / f"section-{len(fragments)}.pdf"
+            self.renderer.render(
+                PdfDocumentData(
+                    book=bundle.book,
+                    articles=bundle.articles,
+                    author_names=author_names,
+                    sections=list(pending),
+                    template=template,
+                    author_details=author_details,
+                ),
+                destination,
+                include_page_numbers=False,
+                include_page_chrome=False,
+            )
+            fragments.append(destination)
+            pending.clear()
+
+        for section in sections:
             if section["kind"] == "articles" and not bundle.articles:
                 continue
-            destination = directory / f"section-{index}.pdf"
             relative_path = section.get("file")
-            if (
+            is_studio_cover = (
+                section.get("preset") in {"cover", "back_cover"}
+                and isinstance(bundle.book.appearance_metadata, dict)
+                and bundle.book.appearance_metadata.get("cover_mode") == "studio"
+                and _is_theme_cover_reference(relative_path)
+            )
+            is_uploaded_asset = (
                 section["kind"] != "articles"
                 and relative_path
                 and not _is_theme_cover_reference(relative_path)
-            ):
+            )
+            if is_studio_cover:
+                render_pending()
+                destination = directory / f"section-{len(fragments)}.pdf"
+                self.renderer.render_appearance_page(
+                    bundle.book,
+                    template,
+                    destination,
+                    surface="front" if section.get("preset") == "cover" else "back",
+                )
+                fragments.append(destination)
+                continue
+            if is_uploaded_asset:
+                render_pending()
+                destination = directory / f"section-{len(fragments)}.pdf"
                 label_en, label_zh = _section_labels(section)
                 source = self.storage.resolve(str(relative_path))
                 if source is None:
                     raise SourceFileError(label_en, label_zh)
                 try:
-                    self.asset_renderer.render(source, template, destination)
+                    cacheable = (
+                        self._render_uploaded_asset(source, template, destination)
+                        and cacheable
+                    )
                 except PageAssetError as error:
                     raise SourceFileError(label_en, label_zh) from error
+                fragments.append(destination)
+                continue
+
+            if template.columns == 2 and section["kind"] == "articles":
+                render_pending()
+                pending.append(section)
+                render_pending()
             else:
-                self.renderer.render(
-                    PdfDocumentData(
-                        book=bundle.book,
-                        articles=bundle.articles,
-                        author_names={
-                            author.id: (
-                                f"{author.name} · {author.class_name}"
-                                if author.class_name
-                                else author.name
-                            )
-                            for author in bundle.authors
-                        },
-                        sections=[section],
-                        template=template,
-                    ),
-                    destination,
-                    include_page_numbers=False,
-                    include_page_chrome=False,
-                )
-            fragments.append(destination)
-        return fragments
+                pending.append(section)
+        render_pending()
+        return fragments, cacheable
+
+    def _render_uploaded_asset(
+        self,
+        source: Path,
+        template: ExportTemplateInfo,
+        destination: Path,
+    ) -> bool:
+        """Reuse a validated fragment when neither its asset nor layout changed."""
+        cache_dir = self.export_dir / "asset-cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_key = _asset_cache_key(source, template)
+        cached = cache_dir / f"{cache_key}.pdf"
+        with _asset_lock(cache_key):
+            if _cached_pdf_page_count(cached) is not None:
+                shutil.copyfile(cached, destination)
+                return True
+
+            temporary = cache_dir / f"{cache_key}.{uuid4().hex}.tmp.pdf"
+            try:
+                rendered = self.asset_renderer.render(source, template, temporary)
+                if _cached_pdf_page_count(temporary) is None:
+                    raise PageAssetError
+                if rendered.cacheable:
+                    os.replace(temporary, cached)
+                    shutil.copyfile(cached, destination)
+                    return True
+                shutil.copyfile(temporary, destination)
+                return False
+            finally:
+                temporary.unlink(missing_ok=True)
 
 
 def _is_theme_cover_reference(value: object) -> bool:
     return isinstance(value, str) and value.startswith("theme:")
+
+
+def _asset_cache_key(source: Path, template: ExportTemplateInfo) -> str:
+    digest = hashlib.sha256()
+    digest.update(b"openclassbook-asset-render-v3\0")
+    with source.open("rb") as asset:
+        for chunk in iter(lambda: asset.read(1024 * 1024), b""):
+            digest.update(chunk)
+    digest.update(
+        json.dumps(
+            template.model_dump(mode="json"),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+    _update_json_digest(digest, _renderer_environment_payload())
+    _update_renderer_source_digest(digest)
+    return digest.hexdigest()
+
+
+def _export_cache_key(
+    bundle: ExportBundle,
+    sections: list[dict[str, object]],
+    template: ExportTemplateInfo,
+    storage: LocalBookStorage,
+) -> str:
+    """Fingerprint every persisted or file-backed input that can change the PDF."""
+    digest = hashlib.sha256()
+    digest.update(b"openclassbook-book-export-v1\0")
+    _update_json_digest(
+        digest,
+        {
+            "book": _book_render_payload(bundle),
+            "resolved_template": template.model_dump(mode="json"),
+            "articles": _article_render_payloads(bundle),
+            "sections": sections,
+            "renderer_environment": _renderer_environment_payload(),
+        },
+    )
+
+    for index, section in enumerate(sections):
+        relative_path = section.get("file")
+        if not relative_path or _is_theme_cover_reference(relative_path):
+            continue
+        _update_file_digest(
+            digest,
+            f"upload:{index}:{relative_path}",
+            storage.resolve(str(relative_path)),
+        )
+
+    safe_template_id = (
+        template.template_id
+        if re.fullmatch(r"[a-z0-9-]+", template.template_id)
+        else "spring-blossom"
+    )
+    template_dir = TEMPLATE_ASSET_ROOT / safe_template_id
+    template_files = (
+        sorted(path for path in template_dir.iterdir() if path.is_file())
+        if template_dir.is_dir()
+        else []
+    )
+    _update_json_digest(digest, [path.name for path in template_files])
+    for path in template_files:
+        _update_file_digest(digest, f"template:{path.name}", path)
+
+    _update_renderer_source_digest(digest)
+    return digest.hexdigest()
+
+
+def _book_render_payload(bundle: ExportBundle) -> dict[str, object]:
+    book = bundle.book
+    return {
+        "appearance_metadata": book.appearance_metadata,
+        "created_year": book.created_at.year,
+        "description": book.description,
+        "owner_name": book.owner_name,
+        "publisher": book.publisher,
+        "school": book.school,
+        "subtitle": book.subtitle,
+        "title": book.title,
+    }
+
+
+def _article_render_payloads(bundle: ExportBundle) -> list[dict[str, object]]:
+    authors = {author.id: author for author in bundle.authors}
+    payloads: list[dict[str, object]] = []
+    for article in bundle.articles:
+        author = authors.get(article.author_id)
+        payloads.append(
+            {
+                "author_class": author.class_name if author else None,
+                "author_name": author.name if author else None,
+                "content": article.content,
+                "image": article.image,
+                "number": article.number,
+                "subtitle": article.subtitle,
+                "title": article.title,
+            }
+        )
+    return payloads
+
+
+def _update_json_digest(digest: object, value: object) -> None:
+    digest.update(
+        json.dumps(
+            value,
+            default=str,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+    digest.update(b"\0")
+
+
+def _update_file_digest(
+    digest: object,
+    label: str,
+    path: Path | None,
+) -> None:
+    digest.update(label.encode("utf-8"))
+    digest.update(b"\0")
+    if path is None or not path.is_file():
+        digest.update(b"missing\0")
+        return
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    digest.update(b"\0")
+
+
+def _update_renderer_source_digest(digest: object) -> None:
+    service_dir = Path(__file__).resolve().parent
+    for name in RENDERER_SOURCE_NAMES:
+        _update_file_digest(digest, f"renderer:{name}", service_dir / name)
+
+
+@lru_cache(maxsize=1)
+def _dependency_versions() -> dict[str, str]:
+    result: dict[str, str] = {}
+    for package in PDF_DEPENDENCIES:
+        try:
+            result[package] = version(package)
+        except PackageNotFoundError:
+            result[package] = "missing"
+    return result
+
+
+@lru_cache(maxsize=1)
+def _renderer_environment_payload() -> dict[str, object]:
+    font_root = Path("C:/Windows/Fonts")
+    fonts: dict[str, tuple[int, int, int] | None] = {}
+    if font_root.is_dir():
+        for path in sorted(font_root.iterdir(), key=lambda item: item.name.lower()):
+            if not path.is_file() or path.suffix.lower() not in SYSTEM_FONT_SUFFIXES:
+                continue
+            stat = path.stat()
+            fonts[path.name] = (stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+    return {
+        "dependencies": _dependency_versions(),
+        "fonts": fonts,
+        "native_word": _native_word_environment(),
+        "runtime": {
+            "implementation": sys.implementation.name,
+            "platform": sys.platform,
+            "python": tuple(sys.version_info[:3]),
+        },
+    }
+
+
+def _native_word_environment() -> dict[str, object]:
+    payload: dict[str, object] = {
+        "available": word_conversion_available(),
+        "platform": sys.platform,
+    }
+    executable: Path | None = None
+    if sys.platform == "darwin":
+        executable = Path("/Applications/Microsoft Word.app")
+    elif sys.platform == "win32":
+        try:
+            import winreg
+
+            with winreg.OpenKey(
+                winreg.HKEY_CLASSES_ROOT,
+                r"Word.Application\CLSID",
+            ) as key:
+                clsid = str(winreg.QueryValue(key, None))
+            with winreg.OpenKey(
+                winreg.HKEY_CLASSES_ROOT,
+                rf"CLSID\{clsid}\LocalServer32",
+            ) as key:
+                command = str(winreg.QueryValue(key, None))
+            executable_end = command.upper().find(".EXE")
+            if executable_end >= 0:
+                executable = Path(command[: executable_end + 4].strip().strip('"'))
+        except OSError:
+            pass
+    if executable is not None:
+        payload["executable"] = str(executable)
+        try:
+            stat = executable.stat()
+            payload["signature"] = (
+                stat.st_size,
+                stat.st_mtime_ns,
+                stat.st_ctime_ns,
+            )
+        except OSError:
+            payload["signature"] = None
+    return payload
+
+
+def _cached_pdf_page_count(path: Path) -> int | None:
+    if not path.is_file():
+        return None
+    try:
+        with path.open("rb") as source:
+            reader = PdfReader(source, strict=False)
+            if reader.is_encrypted:
+                return None
+            page_count = len(reader.pages)
+    except (OSError, PdfReadError, ValueError):
+        return None
+    return page_count or None
+
+
+@lru_cache(maxsize=256)
+def _cached_pdf_title(path: str, size: int, modified_ns: int) -> str | None:
+    del size, modified_ns
+    try:
+        with Path(path).open("rb") as source:
+            metadata = PdfReader(source, strict=False).metadata
+    except (OSError, PdfReadError, ValueError):
+        return None
+    title = metadata.title if metadata else None
+    return title.strip() if isinstance(title, str) and title.strip() else None
+
+
+@lru_cache(maxsize=128)
+def _export_lock(task_id: str) -> Lock:
+    return Lock()
+
+
+@cache
+def _asset_lock(cache_key: str) -> Lock:
+    return Lock()
 
 
 def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
@@ -494,7 +863,11 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
 
 def _resolve_sections(bundle: ExportBundle) -> list[dict[str, object]]:
     if bundle.book.layout_sections:
-        return [dict(section) for section in bundle.book.layout_sections]
+        return [
+            dict(section)
+            for section in bundle.book.layout_sections
+            if not bool(section.get("hidden", False))
+        ]
     sections = [dict(section) for section in DEFAULT_SECTIONS]
     files = {
         "cover": bundle.book.cover_file,
@@ -514,7 +887,9 @@ def _export_section(section: dict[str, object], has_articles: bool) -> ExportSec
     label_en, label_zh = _section_labels(section)
     preset = section.get("preset")
     has_source = (
-        has_articles if section["kind"] == "articles" else bool(section.get("file"))
+        has_articles
+        if section["kind"] == "articles" or preset == "contents"
+        else bool(section.get("file"))
     )
     if preset in {"cover", "back_cover"}:
         has_source = True

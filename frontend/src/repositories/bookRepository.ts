@@ -9,7 +9,7 @@ export type ArticlePageMode = "single" | "flow";
 export type LayoutSectionKind = "page" | "articles";
 export type LayoutSectionPreset =
   | "cover"
-  | "chapter"
+  | "contents"
   | "preface"
   | "articles"
   | "principal_message"
@@ -26,6 +26,9 @@ export interface BookLayoutSection {
   preset: LayoutSectionPreset | null;
   name: string | null;
   file: string | null;
+  hidden: boolean;
+  show_author: boolean;
+  show_class: boolean;
 }
 
 export interface Book {

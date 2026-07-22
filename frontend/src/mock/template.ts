@@ -61,13 +61,13 @@ export const defaultTemplate: Template = {
     frontCover: {
       illustration: { assetKind: "cover" },
       canvasObjects: [
-        { id: "cover-title", type: "text", source: "title", x: 37, y: 42, width: 48, height: 10, rotation: 0, locked: false, hidden: false, fontSize: 14, fontWeight: 700, lineHeight: 1.25, letterSpacing: 0, align: "center", color: "#5A392E", opacity: 100 },
-        { id: "cover-subtitle", type: "text", source: "subtitle", x: 39, y: 55.5, width: 44, height: 5, rotation: 0, locked: false, hidden: false, fontSize: 6.4, fontWeight: 400, lineHeight: 1.25, letterSpacing: 0, align: "center", color: "#5A392E", opacity: 100 },
-        { id: "cover-author", type: "text", source: "author", x: 40, y: 65, width: 42, height: 4, rotation: 0, locked: false, hidden: false, fontSize: 4.3, fontWeight: 600, lineHeight: 1.25, letterSpacing: 0, align: "center", color: "#5A392E", opacity: 100 },
-        { id: "cover-school", type: "text", source: "school", x: 40, y: 70, width: 42, height: 3.5, rotation: 0, locked: false, hidden: false, fontSize: 3.4, fontWeight: 400, lineHeight: 1.25, letterSpacing: 0, align: "center", color: "#5A392E", opacity: 100 },
-        { id: "cover-publisher", type: "text", source: "publisher", x: 40, y: 76, width: 42, height: 3, rotation: 0, locked: false, hidden: false, fontSize: 3, fontWeight: 400, lineHeight: 1.25, letterSpacing: 0, align: "center", color: "#5A392E", opacity: 100 },
-        { id: "cover-year", type: "text", source: "year", x: 40, y: 80, width: 42, height: 3, rotation: 0, locked: false, hidden: false, fontSize: 2.8, fontWeight: 400, lineHeight: 1.25, letterSpacing: 1.2, align: "center", color: "#5A392E", opacity: 100 },
-        { id: "cover-logo", type: "logo", source: "logo", x: 43, y: 88, width: 36, height: 3, rotation: 0, locked: false, hidden: false, fontSize: 2.5, fontWeight: 600, lineHeight: 1.2, letterSpacing: 0.6, align: "center", color: "#5A392E", opacity: 100 },
+        { id: "cover-title", type: "text", source: "title", x: 37, y: 42, width: 48, height: 10, rotation: 0, locked: false, hidden: false, fontSize: 14, fontWeight: 700, lineHeight: 1.25, letterSpacing: 0, align: "center", color: "#4E3D27", opacity: 100 },
+        { id: "cover-subtitle", type: "text", source: "subtitle", x: 39, y: 55.5, width: 44, height: 5, rotation: 0, locked: false, hidden: false, fontSize: 6.4, fontWeight: 400, lineHeight: 1.25, letterSpacing: 0, align: "center", color: "#4E3D27", opacity: 100 },
+        { id: "cover-author", type: "text", source: "author", x: 40, y: 65, width: 42, height: 4, rotation: 0, locked: false, hidden: false, fontSize: 4.3, fontWeight: 600, lineHeight: 1.25, letterSpacing: 0, align: "center", color: "#4E3D27", opacity: 100 },
+        { id: "cover-school", type: "text", source: "school", x: 40, y: 70, width: 42, height: 3.5, rotation: 0, locked: false, hidden: false, fontSize: 3.4, fontWeight: 400, lineHeight: 1.25, letterSpacing: 0, align: "center", color: "#4E3D27", opacity: 100 },
+        { id: "cover-publisher", type: "text", source: "publisher", x: 40, y: 76, width: 42, height: 3, rotation: 0, locked: false, hidden: false, fontSize: 3, fontWeight: 400, lineHeight: 1.25, letterSpacing: 0, align: "center", color: "#4E3D27", opacity: 100 },
+        { id: "cover-year", type: "text", source: "year", x: 40, y: 80, width: 42, height: 3, rotation: 0, locked: false, hidden: false, fontSize: 2.8, fontWeight: 400, lineHeight: 1.25, letterSpacing: 1.2, align: "center", color: "#4E3D27", opacity: 100 },
+        { id: "cover-logo", type: "logo", source: "logo", x: 43, y: 88, width: 36, height: 3, rotation: 0, locked: false, hidden: false, fontSize: 2.5, fontWeight: 600, lineHeight: 1.2, letterSpacing: 0.6, align: "center", color: "#4E3D27", opacity: 100 },
       ],
       typography: {
         // Spring Blossom reserves the upper canopy for illustration and starts type 11% lower.
@@ -86,14 +86,15 @@ export const defaultTemplate: Template = {
           year: { x: 40, y: 80, width: 42, height: 3, align: "center", scale: 0.22 },
         },
       },
-      palette: { text: "#5A392E", accent: "#9A6B50" },
+      palette: { text: "#4E3D27", accent: "#9A6B50" },
     },
     spine: {
       canvasObjects: [{ id: "spine-title", type: "text", source: "title", x: 35, y: 8, width: 30, height: 76, rotation: 90, locked: false, hidden: false, fontSize: 3.2, fontWeight: 600, lineHeight: 1.2, letterSpacing: 0.3, align: "center", color: "#ffffff", opacity: 100 }],
+      backgroundColor: "#9A6B50", textColor: "#ffffff",
       direction: "vertical", alignment: "center", showAuthor: true, showSchool: false, showLogo: true, fontScale: 1, baseWidthMm: 2, mmPerPage: 0.0085,
     },
     backCover: {
-      canvasObjects: [{ id: "back-summary", type: "text", source: "summary", x: 13, y: 25, width: 74, height: 42, rotation: 0, locked: false, hidden: false, fontSize: 3.3, fontWeight: 400, lineHeight: 1.55, letterSpacing: 0, align: "left", color: "#1f2937", opacity: 100 }, { id: "back-accent-line", type: "line", x: 13, y: 72, width: 74, height: 0.45, rotation: 0, locked: false, hidden: false, color: "#9A6B50", opacity: 100 }, { id: "back-copyright", type: "text", source: "copyright", x: 13, y: 82, width: 74, height: 8, rotation: 0, locked: false, hidden: false, fontSize: 2.4, fontWeight: 400, lineHeight: 1.3, letterSpacing: 0, align: "left", color: "#1f2937", opacity: 100 }],
+      canvasObjects: [{ id: "back-summary", type: "text", source: "summary", x: 13, y: 25, width: 74, height: 42, rotation: 0, locked: false, hidden: false, fontSize: 3.3, fontWeight: 400, lineHeight: 1.55, letterSpacing: 0, align: "left", color: "#4E3D27", opacity: 100 }, { id: "back-accent-line", type: "line", x: 13, y: 72, width: 74, height: 0.45, rotation: 0, locked: false, hidden: false, opacity: 100 }, { id: "back-copyright", type: "text", source: "copyright", x: 13, y: 82, width: 74, height: 8, rotation: 0, locked: false, hidden: false, fontSize: 2.4, fontWeight: 400, lineHeight: 1.3, letterSpacing: 0, align: "left", color: "#4E3D27", opacity: 100 }],
       background: { assetKind: "cover_back" },
       summaryArea: { x: 13, y: 25, width: 74, height: 42 },
       footerArea: { x: 13, y: 82, width: 74, height: 10 },

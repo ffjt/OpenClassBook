@@ -1,10 +1,10 @@
 {
   "id": "graduation",
   "name": "Graduation",
-  "primaryColor": "#4C5A8A",
-  "secondaryColor": "#EEF0FA",
-  "accentColor": "#D97706",
-  "textColor": "#252A43",
+  "primaryColor": "#B6897C",
+  "secondaryColor": "#F8F7F2",
+  "accentColor": "#483521",
+  "textColor": "#302627",
   "fontFamily": "Source Han Serif SC",
   "cornerStyle": "soft",
   "safeArea": {

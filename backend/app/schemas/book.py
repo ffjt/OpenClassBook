@@ -43,7 +43,7 @@ LAYOUT_SECTION_LIMIT = 50
 LayoutSectionKind = Literal["page", "articles"]
 LayoutSectionPreset = Literal[
     "cover",
-    "chapter",
+    "contents",
     "preface",
     "articles",
     "principal_message",
@@ -135,6 +135,9 @@ class BookLayoutSection(BaseModel):
     preset: LayoutSectionPreset | None = None
     name: LayoutSectionName | None = None
     file: str | None = Field(default=None, max_length=PAGE_FILE_MAX_LENGTH)
+    hidden: bool = False
+    show_author: bool = True
+    show_class: bool = False
 
     @model_validator(mode="after")
     def validate_section_identity(self) -> "BookLayoutSection":

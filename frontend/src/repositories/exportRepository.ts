@@ -1,4 +1,4 @@
-import { apiDownload, apiRequest } from "@/repositories/apiClient";
+import { ApiError, apiBaseUrl, apiRequest } from "@/repositories/apiClient";
 
 export interface ExportTemplateInfo {
   font: string;
@@ -39,6 +39,15 @@ export interface ExportTemplateInfo {
   title_surface_opacity: number;
 }
 
+export interface ExportBookInfo {
+  id: number;
+  title: string;
+  description: string | null;
+  owner_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ExportStats {
   article_count: number;
   estimated_page_count: number;
@@ -65,6 +74,7 @@ export interface ExportPreviewPage {
 }
 
 export interface ExportPreview {
+  book: ExportBookInfo;
   template: ExportTemplateInfo;
   stats: ExportStats;
   sections: ExportSection[];
@@ -100,7 +110,31 @@ export const exportRepository = {
     });
   },
 
-  download(downloadUrl: string) {
-    return apiDownload(downloadUrl);
+  fileUrl(downloadUrl: string, options: { inline?: boolean } = {}) {
+    const url = /^https?:\/\//.test(downloadUrl)
+      ? downloadUrl
+      : `${apiBaseUrl}${downloadUrl}`;
+    if (!options.inline) return url;
+    return `${url}${url.includes("?") ? "&" : "?"}inline=true`;
+  },
+
+  async ensureFileAvailable(
+    downloadUrl: string,
+    options: { inline?: boolean; signal?: AbortSignal } = {},
+  ) {
+    const url = this.fileUrl(downloadUrl, { inline: options.inline });
+    const response = await fetch(url, {
+      cache: "no-store",
+      method: "HEAD",
+      signal: options.signal,
+    });
+    if (!response.ok) {
+      throw new ApiError(`PDF is unavailable (${response.status})`, response.status);
+    }
+    const contentType = response.headers.get("content-type");
+    if (contentType && !contentType.toLowerCase().includes("application/pdf")) {
+      throw new ApiError("Export response is not a PDF", 502);
+    }
+    return url;
   },
 };

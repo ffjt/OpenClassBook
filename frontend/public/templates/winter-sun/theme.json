@@ -1,10 +1,10 @@
 {
   "id": "winter-sun",
   "name": "Winter Sun",
-  "primaryColor": "#4A647A",
-  "secondaryColor": "#EAF2F7",
-  "accentColor": "#D69E2E",
-  "textColor": "#26323B",
+  "primaryColor": "#87663F",
+  "secondaryColor": "#FDFCFA",
+  "accentColor": "#4A331C",
+  "textColor": "#382719",
   "fontFamily": "Source Han Sans SC",
   "cornerStyle": "soft",
   "safeArea": {

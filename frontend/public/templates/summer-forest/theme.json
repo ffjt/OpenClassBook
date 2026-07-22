@@ -1,10 +1,10 @@
 {
   "id": "summer-forest",
   "name": "Summer Forest",
-  "primaryColor": "#3E7C59",
-  "secondaryColor": "#E5F0E8",
-  "accentColor": "#1E5636",
-  "textColor": "#26352B",
+  "primaryColor": "#727F5A",
+  "secondaryColor": "#FCF8EB",
+  "accentColor": "#3E4A2E",
+  "textColor": "#26341E",
   "fontFamily": "Source Han Serif SC",
   "cornerStyle": "soft",
   "safeArea": {

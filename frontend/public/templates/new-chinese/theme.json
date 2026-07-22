@@ -1,10 +1,10 @@
 {
   "id": "new-chinese",
   "name": "New Chinese Blank",
-  "primaryColor": "#7C3F3F",
-  "secondaryColor": "#F7F1EA",
-  "accentColor": "#B7791F",
-  "textColor": "#352D2D",
+  "primaryColor": "#A28C72",
+  "secondaryColor": "#F9F2E6",
+  "accentColor": "#604631",
+  "textColor": "#44352A",
   "fontFamily": "Source Han Serif SC",
   "cornerStyle": "square",
   "safeArea": {

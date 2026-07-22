@@ -1,10 +1,10 @@
 {
   "id": "nordic-forest",
   "name": "Nordic Forest",
-  "primaryColor": "#52796F",
-  "secondaryColor": "#EEF3EE",
-  "accentColor": "#D4A373",
-  "textColor": "#2F3E46",
+  "primaryColor": "#ACAD96",
+  "secondaryColor": "#FDF8EB",
+  "accentColor": "#4F544A",
+  "textColor": "#373C34",
   "fontFamily": "Source Han Serif SC",
   "cornerStyle": "soft",
   "safeArea": {

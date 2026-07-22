@@ -24,6 +24,8 @@ import {
   ArrowUpDown,
   BookOpenText,
   Check,
+  Eye,
+  EyeOff,
   FileImage,
   FileText,
   Files,
@@ -93,7 +95,6 @@ type ArticleSortKey = "number" | "title" | "author";
 type SortDirection = "asc" | "desc";
 
 const commonSectionPresets: LayoutSectionPreset[] = [
-  "chapter",
   "preface",
   "principal_message",
   "teacher_message",
@@ -115,7 +116,7 @@ const copy = {
     resources: "Page resources",
     sections: {
       cover: "Cover",
-      chapter: "Chapter",
+      contents: "Contents",
       preface: "Preface",
       articles: "Main content",
       principal_message: "Principal's message",
@@ -127,11 +128,28 @@ const copy = {
       back_cover: "Back cover",
     },
     addPage: "Add page",
+    contentsMenu: "Table of contents",
+    contentsDescription:
+      "Generate a compact, live contents page from approved articles in publication order, with one article per line.",
+    generateContents: "Generate contents page",
+    contentsGenerated: "Contents page is ready and placed after the cover.",
+    contentsAlreadyGenerated: "Contents page is already in this book.",
+    contentsOptions: "Contents entries",
+    contentsOptionsHint:
+      "Article titles are always shown. Choose whether to include author and class details.",
+    compactContents: "Compact · one article per line",
+    hideContents: "Hide contents page",
+    showContents: "Show contents page",
+    showContentsAuthor: "Show author",
+    showContentsClass: "Show class",
+    contentsEmpty: "Approved article titles will appear here after review.",
     customName: "Custom page name",
     customNamePlaceholder: "e.g. Class memories",
     commonPages: "Quick add",
     add: "Add",
-    deleteSection: "Delete section",
+    hideSection: "Hide section",
+    showSection: "Show section",
+    sectionHidden: "Hidden",
     renameSection: "Rename section",
     sectionName: "Section name",
     saveName: "Save name",
@@ -166,8 +184,6 @@ const copy = {
     appearanceSaveError: "Could not save book appearance.",
     openAppearanceStudio: "Open Book Appearance Studio",
     saveAndOpenLayout: "Save and open layout settings",
-    layoutMenu: "Book Layout",
-    contentLayout: "Content and structure",
     fileName: "File",
     fileSize: "Size",
     uploadedAt: "Uploaded",
@@ -237,7 +253,7 @@ const copy = {
     resources: "页面资源管理",
     sections: {
       cover: "封面",
-      chapter: "章节页",
+      contents: "目录",
       preface: "前言",
       articles: "正文",
       principal_message: "校长寄语",
@@ -249,11 +265,26 @@ const copy = {
       back_cover: "封底",
     },
     addPage: "添加板块",
+    contentsMenu: "目录",
+    contentsDescription: "按已审核通过文章及当前出版顺序，一键生成紧凑的实时目录页，每篇文章一行。",
+    generateContents: "一键生成目录页",
+    contentsGenerated: "目录页已生成，并排在封面之后。",
+    contentsAlreadyGenerated: "本书已包含目录页。",
+    contentsOptions: "目录条目",
+    contentsOptionsHint: "文章标题始终显示；可选择是否显示作者与班级。",
+    compactContents: "紧凑型 · 一篇文章一行",
+    hideContents: "隐藏目录页",
+    showContents: "显示目录页",
+    showContentsAuthor: "显示作者",
+    showContentsClass: "显示班级",
+    contentsEmpty: "审核通过后，文章标题将显示在这里。",
     customName: "自定义板块名称",
     customNamePlaceholder: "例如：班级记忆",
     commonPages: "快捷添加",
     add: "添加",
-    deleteSection: "删除板块",
+    hideSection: "隐藏板块",
+    showSection: "显示板块",
+    sectionHidden: "已隐藏",
     renameSection: "重命名板块",
     sectionName: "板块名称",
     saveName: "保存名称",
@@ -288,8 +319,6 @@ const copy = {
     appearanceSaveError: "书籍外观保存失败。",
     openAppearanceStudio: "进入书籍外观工作台",
     saveAndOpenLayout: "保存并进入排版设置",
-    layoutMenu: "书籍排版",
-    contentLayout: "内容与结构",
     fileName: "文件",
     fileSize: "大小",
     uploadedAt: "上传时间",
@@ -431,6 +460,7 @@ export function BookLayoutPage({
     sections.find((section) => section.id === selectedSectionId) ?? sections[0];
   const previewSection =
     sections.find((section) => section.id === previewSectionId) ?? null;
+  const contentsSection = sections.find((section) => section.preset === "contents");
   const shellProps = {
     activeSection: "Layout" as const,
     basePath,
@@ -609,6 +639,9 @@ export function BookLayoutPage({
       preset,
       name,
       file: null,
+      hidden: false,
+      show_author: true,
+      show_class: false,
     };
     const selectedIndex = sections.findIndex(
       (section) => section.id === selectedSectionId,
@@ -620,15 +653,58 @@ export function BookLayoutPage({
       setPreviewSectionId(null);
     }
   };
-  const deleteSection = async (section: BookLayoutSection) => {
-    if (isFixedLayoutSection(section)) return;
-    const index = sections.findIndex((item) => item.id === section.id);
-    const nextSections = sections.filter((item) => item.id !== section.id);
-    const fallback = nextSections[Math.min(index, nextSections.length - 1)];
-    if (await persistSections(nextSections)) {
-      if (selectedSectionId === section.id) setSelectedSectionId(fallback.id);
-      if (previewSectionId === section.id) setPreviewSectionId(null);
+  const setSectionHidden = async (section: BookLayoutSection) => {
+    if (!isHideableLayoutSection(section)) return false;
+    return persistSections(
+      sections.map((item) =>
+        item.id === section.id ? { ...item, hidden: !item.hidden } : item,
+      ),
+    );
+  };
+  const generateContentsPage = async () => {
+    if (contentsSection) {
+      const restored = await persistSections(
+        sections.map((section) =>
+          section.id === contentsSection.id
+            ? { ...section, hidden: false }
+            : section,
+        ),
+      );
+      if (restored) {
+        setSelectedSectionId(contentsSection.id);
+        setPreviewSectionId(contentsSection.id);
+        toast.success(pageCopy.contentsAlreadyGenerated);
+      }
+      return;
     }
+    const nextContents: BookLayoutSection = {
+      id: `contents-${crypto.randomUUID()}`,
+      kind: "page",
+      preset: "contents",
+      name: null,
+      file: null,
+      hidden: false,
+      show_author: true,
+      show_class: false,
+    };
+    const coverIndex = sections.findIndex((section) => section.preset === "cover");
+    const nextSections = [...sections];
+    nextSections.splice(Math.max(coverIndex + 1, 0), 0, nextContents);
+    if (await persistSections(nextSections)) {
+      setSelectedSectionId(nextContents.id);
+      setPreviewSectionId(nextContents.id);
+      toast.success(pageCopy.contentsGenerated);
+    }
+  };
+  const updateContentsOptions = async (
+    options: Pick<BookLayoutSection, "show_author" | "show_class">,
+  ) => {
+    if (!contentsSection) return false;
+    return persistSections(
+      sections.map((section) =>
+        section.id === contentsSection.id ? { ...section, ...options } : section,
+      ),
+    );
   };
   const renameSection = async (section: BookLayoutSection, name: string) => {
     if (isFixedLayoutSection(section)) return false;
@@ -690,68 +766,19 @@ export function BookLayoutPage({
           template={template}
         />
       ) : (
-      <section className="mt-6 grid items-start gap-5 xl:grid-cols-[180px_minmax(0,1fr)]">
-        <nav
-          aria-label={pageCopy.layoutMenu}
-          className="rounded-xl border border-border bg-card p-3"
-        >
-          <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            {pageCopy.layoutMenu}
-          </p>
-          <div className="rounded-lg bg-blue-500/10 px-3 py-2 text-sm font-medium text-blue-300">
-            {pageCopy.contentLayout}
-          </div>
-        </nav>
-      <div className="grid items-start gap-5 xl:grid-cols-[230px_minmax(410px,1fr)_minmax(300px,0.72fr)]">
-        <StructurePanel
+      <section className="mt-6">
+        <ContentsWorkspace
+          articles={approvedArticles}
+          authors={authors}
+          book={book}
           copy={pageCopy}
-          onAdd={addSection}
-          onDelete={deleteSection}
-          onReorder={persistSections}
-          selected={selectedSection}
-          onSelect={selectSection}
-          sections={sections}
+          contentsSection={contentsSection}
+          onGenerate={generateContentsPage}
+          onOptionsChange={updateContentsOptions}
+          onToggleHidden={setSectionHidden}
           status={structureStatus}
-        />
-        <ResourceManager
-          articles={approvedArticles}
-          authorNames={authorNames}
-          book={book}
-          copy={pageCopy}
-          focusedArticleId={focusedArticleId}
-          articlePageMode={book.layout_article_page_mode}
-          language={language}
-          articlePageModeStatus={articlePageModeStatus}
-          onAssetChanged={refreshBook}
-          onArticlePreview={openArticlePreview}
-          onArticlePageModeChange={persistArticlePageMode}
-          onArticleReorder={persistArticleOrder}
-          onAssignNumbers={assignNumbersInCurrentOrder}
-          onRename={renameSection}
-          onOpenAppearanceStudio={() => void setAppearanceStudioActive(true)}
-          numberAssignmentStatus={numberAssignmentStatus}
-          orderStatus={articleOrderStatus}
-          section={selectedSection}
-        />
-        <PublicationStructurePreview
-          articles={approvedArticles}
-          authorNames={authorNames}
-          book={book}
-          copy={pageCopy}
-          focusedArticleId={focusedArticleId}
-          articlePageMode={book.layout_article_page_mode}
-          language={language}
-          onBack={() => {
-            setPreviewSectionId(null);
-            setFocusedArticleId(null);
-          }}
-          onPreview={openSectionPreview}
-          previewSection={previewSection}
-          selected={selectedSection}
-          sections={sections}
           template={template}
         />
-      </div>
       </section>
       )}
     </DashboardLayout>
@@ -899,10 +926,142 @@ function AppearanceStudio({
   );
 }
 
+function ContentsWorkspace({
+  articles,
+  authors,
+  book,
+  copy: pageCopy,
+  contentsSection,
+  onGenerate,
+  onOptionsChange,
+  onToggleHidden,
+  status,
+  template,
+}: {
+  articles: Article[];
+  authors: Author[];
+  book: Book;
+  copy: (typeof copy)[Language];
+  contentsSection: BookLayoutSection | undefined;
+  onGenerate: () => Promise<void>;
+  onOptionsChange: (
+    options: Pick<BookLayoutSection, "show_author" | "show_class">,
+  ) => Promise<boolean>;
+  onToggleHidden: (section: BookLayoutSection) => Promise<boolean>;
+  status: StructureSaveStatus;
+  template: Template;
+}) {
+  const showAuthor = contentsSection?.show_author ?? true;
+  const showClass = contentsSection?.show_class ?? false;
+  const isSaving = status === "saving";
+
+  return (
+    <div className="grid items-start gap-5 xl:grid-cols-[minmax(340px,0.85fr)_minmax(300px,0.7fr)]">
+      <section className="rounded-xl border border-border bg-card p-5 shadow-xl sm:p-6">
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+            <ListOrdered className="size-5" />
+          </span>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              {pageCopy.contentsMenu}
+            </p>
+            <h2 className="mt-1 text-lg font-semibold text-foreground">
+              {pageCopy.generateContents}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              {pageCopy.contentsDescription}
+            </p>
+            <p className="mt-2 text-xs font-medium text-blue-400">
+              {pageCopy.compactContents}
+            </p>
+          </div>
+        </div>
+        <Button
+          className="mt-6 w-full"
+          disabled={isSaving}
+          onClick={() => void onGenerate()}
+          type="button"
+        >
+          {isSaving ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : <ListOrdered className="mr-2 size-4" />}
+          {pageCopy.generateContents}
+        </Button>
+
+        {contentsSection ? (
+          <div className="mt-5 rounded-xl border border-border bg-muted/20 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {pageCopy.contentsOptions}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {pageCopy.contentsOptionsHint}
+            </p>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <label className="flex cursor-pointer items-center justify-between rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground">
+                <span>{pageCopy.showContentsAuthor}</span>
+                <input
+                  checked={showAuthor}
+                  disabled={isSaving}
+                  onChange={(event) =>
+                    void onOptionsChange({
+                      show_author: event.target.checked,
+                      show_class: showClass,
+                    })
+                  }
+                  type="checkbox"
+                />
+              </label>
+              <label className="flex cursor-pointer items-center justify-between rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground">
+                <span>{pageCopy.showContentsClass}</span>
+                <input
+                  checked={showClass}
+                  disabled={isSaving}
+                  onChange={(event) =>
+                    void onOptionsChange({
+                      show_author: showAuthor,
+                      show_class: event.target.checked,
+                    })
+                  }
+                  type="checkbox"
+                />
+              </label>
+            </div>
+            <Button
+              className="mt-3 w-full"
+              disabled={isSaving}
+              onClick={() => void onToggleHidden(contentsSection)}
+              type="button"
+              variant="outline"
+            >
+              {contentsSection.hidden ? pageCopy.showContents : pageCopy.hideContents}
+            </Button>
+          </div>
+        ) : null}
+      </section>
+      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-xl">
+        <header className="border-b border-border px-4 py-4">
+          <h2 className="text-xs font-semibold text-foreground">
+            {pageCopy.publicationPreview}
+          </h2>
+        </header>
+        <div className="max-h-[calc(100vh-14rem)] overflow-y-auto bg-muted/30 p-4">
+          <ContentsPagePreview
+            articles={articles}
+            authors={authors}
+            book={book}
+            copy={pageCopy}
+            section={contentsSection}
+            template={template}
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function StructurePanel({
   copy: pageCopy,
   onAdd,
-  onDelete,
+  onSetHidden,
   onReorder,
   onSelect,
   selected,
@@ -911,7 +1070,7 @@ function StructurePanel({
 }: {
   copy: (typeof copy)[Language];
   onAdd: (preset: LayoutSectionPreset | null, name: string | null) => Promise<void>;
-  onDelete: (section: BookLayoutSection) => Promise<void>;
+  onSetHidden: (section: BookLayoutSection) => Promise<boolean>;
   onReorder: (sections: BookLayoutSection[]) => Promise<boolean>;
   onSelect: (section: BookLayoutSection) => void;
   selected: BookLayoutSection;
@@ -976,7 +1135,7 @@ function StructurePanel({
                 disabled={status === "saving"}
                 index={index}
                 key={section.id}
-                onDelete={onDelete}
+                onSetHidden={onSetHidden}
                 onSelect={onSelect}
                 section={section}
                 selected={selected.id === section.id}
@@ -993,7 +1152,7 @@ function SortableSectionRow({
   copy: pageCopy,
   disabled,
   index,
-  onDelete,
+  onSetHidden,
   onSelect,
   section,
   selected,
@@ -1001,7 +1160,7 @@ function SortableSectionRow({
   copy: (typeof copy)[Language];
   disabled: boolean;
   index: number;
-  onDelete: (section: BookLayoutSection) => Promise<void>;
+  onSetHidden: (section: BookLayoutSection) => Promise<boolean>;
   onSelect: (section: BookLayoutSection) => void;
   section: BookLayoutSection;
   selected: boolean;
@@ -1016,6 +1175,7 @@ function SortableSectionRow({
     <div
       className={cn(
         "group mb-0.5 flex items-center gap-1 rounded-lg",
+        section.hidden && "opacity-55",
         isDragging && "relative z-10 bg-card opacity-70 shadow-lg",
       )}
       ref={setNodeRef}
@@ -1042,7 +1202,9 @@ function SortableSectionRow({
             {label}
           </span>
           <span className="mt-1 block text-[10px] text-muted-foreground">
-            {section.kind === "articles"
+            {section.hidden
+              ? pageCopy.sectionHidden
+              : section.kind === "articles"
               ? pageCopy.automatic
               : file
                 ? pageCopy.imported
@@ -1053,15 +1215,15 @@ function SortableSectionRow({
           {String(index + 1).padStart(2, "0")}
         </span>
       </button>
-      {!isFixedLayoutSection(section) ? (
+      {isHideableLayoutSection(section) ? (
         <button
-          aria-label={`${pageCopy.deleteSection}: ${label}`}
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all hover:bg-rose-500/10 hover:text-rose-300 focus:opacity-100 group-hover:opacity-100"
+          aria-label={`${section.hidden ? pageCopy.showSection : pageCopy.hideSection}: ${label}`}
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all hover:bg-muted hover:text-foreground focus:opacity-100 group-hover:opacity-100"
           disabled={disabled}
-          onClick={() => void onDelete(section)}
+          onClick={() => void onSetHidden(section)}
           type="button"
         >
-          <Trash2 className="size-3.5" />
+          {section.hidden ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
         </button>
       ) : null}
     </div>
@@ -1953,6 +2115,7 @@ function SortableArticleRow({
 
 function PublicationStructurePreview({
   articles,
+  authors,
   authorNames,
   book,
   copy: pageCopy,
@@ -1967,6 +2130,7 @@ function PublicationStructurePreview({
   template,
 }: {
   articles: Article[];
+  authors: Author[];
   authorNames: Map<number, string>;
   book: Book;
   articlePageMode: Book["layout_article_page_mode"];
@@ -1980,6 +2144,7 @@ function PublicationStructurePreview({
   sections: BookLayoutSection[];
   template: Template;
 }) {
+  const visibleSections = sections.filter((section) => !section.hidden);
   return (
     <aside className="overflow-hidden rounded-xl border border-border bg-card xl:sticky xl:top-24 xl:max-h-[calc(100vh-7.5rem)]">
       <header className="flex items-center justify-between border-b border-border px-4 py-4">
@@ -2012,6 +2177,7 @@ function PublicationStructurePreview({
       {previewSection ? (
         <SectionFullPreview
           articles={articles}
+          authors={authors}
           authorNames={authorNames}
           book={book}
           copy={pageCopy}
@@ -2026,7 +2192,7 @@ function PublicationStructurePreview({
           <p className="mb-4 text-center text-[11px] leading-5 text-muted-foreground">
             {pageCopy.previewHint}
           </p>
-          {sections.map((section, index) => {
+          {visibleSections.map((section, index) => {
             const SectionIcon = getSectionIcon(section);
             const label = getSectionLabel(section, pageCopy);
             return (
@@ -2057,7 +2223,7 @@ function PublicationStructurePreview({
                     </span>
                   </span>
                 </button>
-                {index < sections.length - 1 ? (
+                {index < visibleSections.length - 1 ? (
                   <ArrowDown className="mx-auto my-1.5 size-3.5 text-muted-foreground/60" />
                 ) : null}
               </div>
@@ -2071,6 +2237,7 @@ function PublicationStructurePreview({
 
 function SectionFullPreview({
   articles,
+  authors,
   authorNames,
   book,
   copy: pageCopy,
@@ -2081,6 +2248,7 @@ function SectionFullPreview({
   template,
 }: {
   articles: Article[];
+  authors: Author[];
   authorNames: Map<number, string>;
   book: Book;
   articlePageMode: Book["layout_article_page_mode"];
@@ -2109,6 +2277,8 @@ function SectionFullPreview({
         />
       ) : (
         <PageSectionPreview
+          articles={articles}
+          authors={authors}
           book={book}
           copy={pageCopy}
           section={section}
@@ -2120,16 +2290,32 @@ function SectionFullPreview({
 }
 
 function PageSectionPreview({
+  articles,
+  authors,
   book,
   copy: pageCopy,
   section,
   template,
 }: {
+  articles: Article[];
+  authors: Author[];
   book: Book;
   copy: (typeof copy)[Language];
   section: BookLayoutSection;
   template: Template;
 }) {
+  if (section.preset === "contents") {
+    return (
+      <ContentsPagePreview
+        articles={articles}
+        authors={authors}
+        book={book}
+        copy={pageCopy}
+        section={section}
+        template={template}
+      />
+    );
+  }
   const file = section.file;
   const isCover = section.preset === "cover" || section.preset === "back_cover";
   const isThemeCover = Boolean(
@@ -2182,7 +2368,7 @@ function PageSectionPreview({
                   {section.preset === "ending" ? pageCopy.sections.ending : label}
                 </h3>
                 <p className="mt-3 max-w-[160px] text-[10px] leading-5 text-slate-600">
-                  {section.preset === "ending" ? "感谢阅读 · Thank you for reading" : "Chapter 01"}
+                  {section.preset === "ending" ? "感谢阅读 · Thank you for reading" : book.title}
                 </p>
               </>
             )}
@@ -2205,6 +2391,100 @@ function PageSectionPreview({
         )}
       </div>
     </article>
+  );
+}
+
+function ContentsPagePreview({
+  articles,
+  authors,
+  book,
+  copy: pageCopy,
+  section,
+  template,
+}: {
+  articles: Article[];
+  authors: Author[];
+  book: Book;
+  copy: (typeof copy)[Language];
+  section: BookLayoutSection | undefined;
+  template: Template;
+}) {
+  const authorById = new Map(authors.map((author) => [author.id, author]));
+  const entries = articles.map((article, index) => ({
+    article,
+    author: authorById.get(article.author_id),
+    index,
+  }));
+  const pages = Array.from(
+    { length: Math.max(1, Math.ceil(entries.length / 18)) },
+    (_, pageIndex) => entries.slice(pageIndex * 18, pageIndex * 18 + 18),
+  );
+  const showAuthor = section?.show_author ?? true;
+  const showClass = section?.show_class ?? false;
+
+  return (
+    <div className="space-y-4">
+      {pages.map((pageEntries, pageIndex) => (
+        <article
+          className="mx-auto flex w-full max-w-[250px] flex-col overflow-hidden text-slate-800 shadow-[0_18px_50px_rgba(0,0,0,0.4)] ring-1 ring-black/10"
+          key={pageIndex}
+          style={{
+            aspectRatio: getPreviewAspectRatio(template),
+            backgroundColor: template.backgroundColor,
+            backgroundImage: `url(${getTemplateAssetUrl(template.templateId, "article_background")})`,
+            backgroundPosition: "center",
+            backgroundSize: "cover",
+            padding: previewPageMargins[template.pageMargin],
+          }}
+        >
+          <header className="border-b pb-1.5 text-center" style={{ borderColor: `${template.accentColor}66` }}>
+            <p className="text-[7px] font-semibold uppercase tracking-[0.22em]" style={{ color: template.accentColor }}>
+              Contents · 目录
+            </p>
+            <h3
+              className="mt-1 line-clamp-2 text-[13px] leading-4"
+              style={{
+                color: template.themeColor,
+                fontFamily: getFontFamilyStyle(template.titleFont),
+                fontWeight: template.titleBold ? 700 : 400,
+              }}
+            >
+              {book.title}
+            </h3>
+          </header>
+          {pageEntries.length ? (
+            <ol className="mt-2 min-h-0 flex-1 space-y-0.5">
+              {pageEntries.map(({ article, author, index }) => {
+                const detail = [
+                  showAuthor ? author?.name : "",
+                  showClass ? author?.class_name ?? "" : "",
+                ].filter(Boolean).join(" · ");
+                return (
+                  <li className="grid grid-cols-[18px_minmax(0,1fr)] items-baseline gap-1.5 border-b border-slate-500/15 py-1" key={article.id}>
+                    <span className="text-[7px] font-semibold" style={{ color: template.accentColor }}>
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <span className="min-w-0 truncate text-[8px] leading-3" style={{ color: template.themeColor }}>
+                      <span className="font-medium">
+                        {article.title}
+                      </span>
+                      {detail ? <span className="text-slate-500"> · {detail}</span> : null}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-center text-[9px] leading-4 text-slate-500">
+              {pageCopy.contentsEmpty}
+            </div>
+          )}
+          <footer className="mt-2 text-center text-[7px] tracking-[0.16em]" style={{ color: template.accentColor }}>
+            {pageIndex + 1}
+          </footer>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -2548,31 +2828,42 @@ function FormatRow({ label, value }: { label: string; value: string }) {
 
 function getBookSections(book: Book): BookLayoutSection[] {
   if (book.layout_sections?.length) {
-    const sections = book.layout_sections.map((section) => ({ ...section }));
+    const sections = book.layout_sections.map((section) => ({
+      ...section,
+      hidden: section.hidden ?? false,
+      show_author: section.show_author ?? true,
+      show_class: section.show_class ?? false,
+    }));
     if (!sections.some((section) => section.preset === "cover")) {
-      sections.unshift({ id: "cover", kind: "page", preset: "cover", name: null, file: book.cover_file });
+      sections.unshift({ id: "cover", kind: "page", preset: "cover", name: null, file: book.cover_file, hidden: false, show_author: true, show_class: false });
     }
     if (!sections.some((section) => section.preset === "back_cover")) {
-      sections.push({ id: "back_cover", kind: "page", preset: "back_cover", name: null, file: book.back_cover_file });
+      sections.push({ id: "back_cover", kind: "page", preset: "back_cover", name: null, file: book.back_cover_file, hidden: false, show_author: true, show_class: false });
     }
     return sections;
   }
   return [
-    { id: "cover", kind: "page", preset: "cover", name: null, file: book.cover_file },
+    { id: "cover", kind: "page", preset: "cover", name: null, file: book.cover_file, hidden: false, show_author: true, show_class: false },
     {
       id: "preface",
       kind: "page",
       preset: "preface",
       name: null,
       file: book.preface_file,
+      hidden: false,
+      show_author: true,
+      show_class: false,
     },
-    { id: "articles", kind: "articles", preset: "articles", name: null, file: null },
+    { id: "articles", kind: "articles", preset: "articles", name: null, file: null, hidden: false, show_author: true, show_class: false },
     {
       id: "afterword",
       kind: "page",
       preset: "afterword",
       name: null,
       file: book.afterword_file,
+      hidden: false,
+      show_author: true,
+      show_class: false,
     },
     {
       id: "acknowledgement",
@@ -2580,6 +2871,9 @@ function getBookSections(book: Book): BookLayoutSection[] {
       preset: "acknowledgement",
       name: null,
       file: book.acknowledgement_file,
+      hidden: false,
+      show_author: true,
+      show_class: false,
     },
     {
       id: "ending",
@@ -2587,6 +2881,9 @@ function getBookSections(book: Book): BookLayoutSection[] {
       preset: "ending",
       name: null,
       file: null,
+      hidden: false,
+      show_author: true,
+      show_class: false,
     },
     {
       id: "back_cover",
@@ -2594,12 +2891,19 @@ function getBookSections(book: Book): BookLayoutSection[] {
       preset: "back_cover",
       name: null,
       file: book.back_cover_file,
+      hidden: false,
+      show_author: true,
+      show_class: false,
     },
   ];
 }
 
 function isFixedLayoutSection(section: BookLayoutSection) {
-  return section.kind === "articles" || section.preset === "cover" || section.preset === "back_cover";
+  return section.kind === "articles" || section.preset === "cover" || section.preset === "back_cover" || section.preset === "contents";
+}
+
+function isHideableLayoutSection(section: BookLayoutSection) {
+  return section.kind === "page" && section.preset !== "cover" && section.preset !== "back_cover";
 }
 
 function isAppearanceStudioActive(book: Book) {

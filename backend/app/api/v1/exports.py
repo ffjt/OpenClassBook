@@ -3,11 +3,12 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 
-from app.api.dependencies import ExportServiceDep
+from app.api.dependencies import BookServiceDep, ExportServiceDep
 from app.schemas.export import ExportPreviewResponse, ExportResponse
 from app.services.export import NoPublishableContentError, SourceFileError
 
 router = APIRouter(tags=["Export / 导出"])
+PDF_STREAM_CHUNK_SIZE = 1024 * 1024
 
 
 def book_not_found() -> HTTPException:
@@ -99,13 +100,20 @@ def download_appearance_export(
                 "message_zh": "未找到封面展开图 PDF",
             },
         )
-    return FileResponse(
+    response = FileResponse(
         path=Path(artifact),
         media_type="application/pdf",
         filename=f"openclassbook-{book_id}-cover-spread.pdf",
     )
+    response.chunk_size = PDF_STREAM_CHUNK_SIZE
+    return response
 
 
+@router.head(
+    "/books/{book_id}/export/{task_id}/download",
+    response_class=FileResponse,
+    include_in_schema=False,
+)
 @router.get(
     "/books/{book_id}/export/{task_id}/download",
     response_class=FileResponse,
@@ -115,6 +123,8 @@ def download_export(
     book_id: int,
     task_id: str,
     service: ExportServiceDep,
+    book_service: BookServiceDep,
+    inline: bool = False,
 ) -> FileResponse:
     artifact = service.get_artifact(book_id, task_id)
     if artifact is None:
@@ -125,8 +135,23 @@ def download_export(
                 "message_zh": "未找到已生成的 PDF",
             },
         )
-    return FileResponse(
+    book = book_service.get(book_id)
+    if book is None:
+        raise book_not_found()
+    generated_title = service.get_artifact_title(artifact)
+    response = FileResponse(
         path=Path(artifact),
         media_type="application/pdf",
-        filename=f"openclassbook-{book_id}.pdf",
+        filename=_book_pdf_filename(generated_title or book.title, book_id),
+        content_disposition_type="inline" if inline else "attachment",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )
+    response.chunk_size = PDF_STREAM_CHUNK_SIZE
+    return response
+
+
+def _book_pdf_filename(title: str, book_id: int) -> str:
+    invalid = '<>:"/\\|?*\r\n'
+    safe_title = "".join("-" if char in invalid else char for char in title)
+    safe_title = safe_title.strip(" .")
+    return f"{safe_title or f'openclassbook-{book_id}'}.pdf"

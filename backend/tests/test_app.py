@@ -1,6 +1,7 @@
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import quote
 from uuid import uuid4
 
 import pytest
@@ -1457,6 +1458,71 @@ def test_export_is_blocked_without_approved_articles(client: TestClient) -> None
     }
 
 
+def test_contents_section_persists_visibility_and_entry_options(
+    client: TestClient,
+) -> None:
+    created = client.post(
+        "/api/v1/books",
+        json={
+            "title": "Contents settings",
+            "description": None,
+            "owner_name": "Editor",
+            "number_mode": "none",
+        },
+    )
+    assert created.status_code == 201, created.text
+    book_id = created.json()["id"]
+
+    updated = client.patch(
+        f"/api/v1/books/{book_id}",
+        json={
+            "layout_sections": [
+                {
+                    "id": "cover",
+                    "kind": "page",
+                    "preset": "cover",
+                    "name": None,
+                    "file": None,
+                },
+                {
+                    "id": "contents",
+                    "kind": "page",
+                    "preset": "contents",
+                    "name": None,
+                    "file": None,
+                    "hidden": True,
+                    "show_author": True,
+                    "show_class": True,
+                },
+                {
+                    "id": "articles",
+                    "kind": "articles",
+                    "preset": "articles",
+                    "name": None,
+                    "file": None,
+                },
+                {
+                    "id": "back_cover",
+                    "kind": "page",
+                    "preset": "back_cover",
+                    "name": None,
+                    "file": None,
+                },
+            ]
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    contents = updated.json()["layout_sections"][1]
+    assert contents["preset"] == "contents"
+    assert contents["hidden"] is True
+    assert contents["show_author"] is True
+    assert contents["show_class"] is True
+
+    refreshed = client.get(f"/api/v1/books/{book_id}")
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["layout_sections"][1] == contents
+
+
 def test_pdf_font_selection_rejects_ext_b_only_font() -> None:
     font_root = Path("C:/Windows/Fonts")
     ext_b = font_root / "simsunb.ttf"
@@ -1610,8 +1676,41 @@ def test_export_generates_and_downloads_printable_pdf(
     download = client.get(result["download_url"])
     assert download.status_code == 200
     assert download.headers["content-type"] == "application/pdf"
+    assert download.headers["content-disposition"].startswith("attachment;")
+    assert quote("我们的班级故事.pdf") in download.headers["content-disposition"]
+    assert download.headers["cache-control"] == "public, max-age=31536000, immutable"
     assert download.content.startswith(b"%PDF")
+    head = client.head(result["download_url"])
+    assert head.status_code == 200
+    assert head.content == b""
+    assert head.headers["content-type"] == "application/pdf"
+    assert head.headers["content-length"] == download.headers["content-length"]
+    assert (
+        head.headers["content-disposition"]
+        == download.headers["content-disposition"]
+    )
+    renamed = client.patch(
+        f"/api/v1/books/{book_id}",
+        json={"title": "Renamed after export"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    immutable_name = client.head(result["download_url"])
+    assert immutable_name.status_code == 200
+    assert quote("我们的班级故事.pdf") in immutable_name.headers[
+        "content-disposition"
+    ]
+    inline_preview = client.get(f"{result['download_url']}?inline=true")
+    assert inline_preview.status_code == 200
+    assert inline_preview.headers["content-disposition"].startswith("inline;")
+    assert inline_preview.content.startswith(b"%PDF")
+    inline_head = client.head(f"{result['download_url']}?inline=true")
+    assert inline_head.status_code == 200
+    assert inline_head.content == b""
+    assert inline_head.headers["content-disposition"].startswith("inline;")
     assert (
         client.get(f"/api/v1/books/{book_id}/export/not-a-task/download").status_code
         == 404
     )
+    assert client.head(
+        f"/api/v1/books/{book_id}/export/not-a-task/download"
+    ).status_code == 404

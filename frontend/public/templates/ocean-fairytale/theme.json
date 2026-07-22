@@ -1,10 +1,10 @@
 {
   "id": "ocean-fairytale",
   "name": "Ocean Fairytale",
-  "primaryColor": "#176B87",
-  "secondaryColor": "#E4F4F8",
-  "accentColor": "#E9B44C",
-  "textColor": "#17324D",
+  "primaryColor": "#90BDD0",
+  "secondaryColor": "#F7F7F8",
+  "accentColor": "#25566A",
+  "textColor": "#1F4558",
   "fontFamily": "Source Han Sans SC",
   "cornerStyle": "soft",
   "safeArea": {

@@ -1,4 +1,5 @@
 import { ApiError, apiRequest } from "@/repositories/apiClient";
+import { getTemplateCatalogEntry, isLegacyDefaultSpineTextColor } from "@/mock/template-catalog";
 import { defaultTemplate } from "@/mock/template";
 import {
   isTitleSurfaceEnabledByDefault,
@@ -60,8 +61,37 @@ function readBoolean(value: unknown, fallback: boolean) {
   return typeof value === "boolean" ? value : fallback;
 }
 
-function readAppearance(value: unknown): BookAppearance {
-  const fallback = defaultTemplate.appearance;
+function serializeCanvasObject(object: CanvasObject) {
+  return {
+    ...object,
+    font_family: object.fontFamily,
+    font_size: object.fontSize,
+    font_weight: object.fontWeight,
+    line_height: object.lineHeight,
+    letter_spacing: object.letterSpacing,
+    fontFamily: undefined,
+    fontSize: undefined,
+    fontWeight: undefined,
+    lineHeight: undefined,
+    letterSpacing: undefined,
+  };
+}
+
+function readAppearance(value: unknown, templateId: string, defaultFont: FontSelection): BookAppearance {
+  const catalog = getTemplateCatalogEntry(templateId);
+  const recolorSpineObject = (object: CanvasObject) =>
+    object.type === "text" || object.type === "logo"
+      ? { ...object, color: catalog.coverTextColor, fontFamily: { ...defaultFont } }
+      : object;
+  const fallback: BookAppearance = {
+    ...defaultTemplate.appearance,
+    spine: {
+      ...defaultTemplate.appearance.spine,
+      backgroundColor: catalog.spineColor,
+      textColor: catalog.coverTextColor,
+      canvasObjects: defaultTemplate.appearance.spine.canvasObjects.map(recolorSpineObject),
+    },
+  };
   if (!isRecord(value)) return fallback;
   const front = isRecord(value.front_cover) ? value.front_cover : {};
   const typography = isRecord(front.typography) ? front.typography : {};
@@ -118,7 +148,7 @@ function readAppearance(value: unknown): BookAppearance {
       },
       palette: { text: typeof (front.palette as Record<string, unknown>)?.text === "string" ? String((front.palette as Record<string, unknown>).text) : fallback.frontCover.palette.text, accent: typeof (front.palette as Record<string, unknown>)?.accent === "string" ? String((front.palette as Record<string, unknown>).accent) : fallback.frontCover.palette.accent },
     },
-    spine: { ...fallback.spine, ...spine, canvasObjects: Array.isArray(spine.canvas_objects) ? spine.canvas_objects as CanvasObject[] : fallback.spine.canvasObjects, direction: spine.direction === "horizontal" ? "horizontal" : "vertical", alignment: readOption(spine.alignment, ["left", "center", "right"], fallback.spine.alignment), showAuthor: readBoolean(spine.show_author, fallback.spine.showAuthor), showSchool: readBoolean(spine.show_school, fallback.spine.showSchool), showLogo: readBoolean(spine.show_logo, fallback.spine.showLogo) },
+    spine: { ...fallback.spine, ...spine, backgroundColor: typeof spine.background_color === "string" ? spine.background_color : fallback.spine.backgroundColor, textColor: typeof spine.text_color === "string" && !isLegacyDefaultSpineTextColor(templateId, spine.text_color) ? spine.text_color : fallback.spine.textColor, canvasObjects: Array.isArray(spine.canvas_objects) ? (typeof spine.text_color === "string" && !isLegacyDefaultSpineTextColor(templateId, spine.text_color) ? spine.canvas_objects : (spine.canvas_objects as CanvasObject[]).map(recolorSpineObject)) as CanvasObject[] : fallback.spine.canvasObjects, direction: spine.direction === "horizontal" ? "horizontal" : "vertical", alignment: readOption(spine.alignment, ["left", "center", "right"], fallback.spine.alignment), showAuthor: readBoolean(spine.show_author, fallback.spine.showAuthor), showSchool: readBoolean(spine.show_school, fallback.spine.showSchool), showLogo: readBoolean(spine.show_logo, fallback.spine.showLogo) },
     backCover: { background: { assetKind: "cover_back" }, canvasObjects: normalizedBackCanvasObjects, summaryArea: area(back.summary_area, fallback.backCover.summaryArea), footerArea: area(back.footer_area, fallback.backCover.footerArea), summaryMaxLength: Math.min(600, Math.max(300, readNumber(back.summary_max_length, fallback.backCover.summaryMaxLength))), footer: typeof back.footer === "string" ? back.footer : fallback.backCover.footer },
   };
 }
@@ -296,7 +326,7 @@ export function deserializeTemplate(stored: BookTemplate): Template {
       page.custom_height,
       defaultTemplate.customPageHeight,
     ),
-    appearance: readAppearance(presentation.appearance),
+    appearance: readAppearance(presentation.appearance, templateId, titleFont),
   };
 }
 
@@ -374,19 +404,7 @@ export const templateRepository = {
             appearance: {
               front_cover: {
                 illustration: template.appearance.frontCover.illustration,
-                canvas_objects: template.appearance.frontCover.canvasObjects.map((object) => ({
-                  ...object,
-                  font_family: object.fontFamily,
-                  font_size: object.fontSize,
-                  font_weight: object.fontWeight,
-                  line_height: object.lineHeight,
-                  letter_spacing: object.letterSpacing,
-                  fontFamily: undefined,
-                  fontSize: undefined,
-                  fontWeight: undefined,
-                  lineHeight: undefined,
-                  letterSpacing: undefined,
-                })),
+                canvas_objects: template.appearance.frontCover.canvasObjects.map(serializeCanvasObject),
                 typography: {
                   safe_area: template.appearance.frontCover.typography.safeArea,
                   hero_area: template.appearance.frontCover.typography.heroArea,
@@ -397,8 +415,8 @@ export const templateRepository = {
                 },
                 palette: template.appearance.frontCover.palette,
               },
-              spine: { direction: template.appearance.spine.direction, alignment: template.appearance.spine.alignment, canvas_objects: template.appearance.spine.canvasObjects, show_author: template.appearance.spine.showAuthor, show_school: template.appearance.spine.showSchool, show_logo: template.appearance.spine.showLogo, fontScale: template.appearance.spine.fontScale, baseWidthMm: template.appearance.spine.baseWidthMm, mmPerPage: template.appearance.spine.mmPerPage },
-              back_cover: { background: template.appearance.backCover.background, canvas_objects: template.appearance.backCover.canvasObjects, summary_area: template.appearance.backCover.summaryArea, footer_area: template.appearance.backCover.footerArea, summary_max_length: template.appearance.backCover.summaryMaxLength, footer: template.appearance.backCover.footer },
+              spine: { direction: template.appearance.spine.direction, alignment: template.appearance.spine.alignment, background_color: template.appearance.spine.backgroundColor, text_color: template.appearance.spine.textColor, canvas_objects: template.appearance.spine.canvasObjects.map(serializeCanvasObject), show_author: template.appearance.spine.showAuthor, show_school: template.appearance.spine.showSchool, show_logo: template.appearance.spine.showLogo, fontScale: template.appearance.spine.fontScale, baseWidthMm: template.appearance.spine.baseWidthMm, mmPerPage: template.appearance.spine.mmPerPage },
+              back_cover: { background: template.appearance.backCover.background, canvas_objects: template.appearance.backCover.canvasObjects.map(serializeCanvasObject), summary_area: template.appearance.backCover.summaryArea, footer_area: template.appearance.backCover.footerArea, summary_max_length: template.appearance.backCover.summaryMaxLength, footer: template.appearance.backCover.footer },
             },
           },
         },

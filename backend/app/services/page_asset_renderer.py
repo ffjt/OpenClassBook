@@ -68,6 +68,7 @@ class RenderedAsset:
     image_count: int = 0
     warnings: tuple[str, ...] = ()
     warnings_zh: tuple[str, ...] = ()
+    cacheable: bool = True
 
 
 class PageAssetRenderer:
@@ -230,6 +231,7 @@ class PageAssetRenderer:
                 image_count=result.value.count("<img"),
                 warnings=warnings,
                 warnings_zh=warnings_zh,
+                cacheable=not (native and native.attempted),
             )
         return RenderedAsset(
             destination,
