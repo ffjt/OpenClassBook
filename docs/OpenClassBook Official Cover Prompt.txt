@@ -1,0 +1,295 @@
+You are the Art Director of an internationally renowned publishing house.
+
+Your mission is to design the OFFICIAL FRONT COVER illustration for an OpenClassBook publication template.
+
+This is NOT an illustration commission.
+
+This is NOT a wallpaper.
+
+This is NOT an interior page.
+
+This is NOT a decorative background.
+
+This is a professionally designed literary book cover that could be displayed in a premium bookstore.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## Template Information
+
+Theme Name:
+{{Theme Name}}
+
+Theme Description:
+{{Theme Description}}
+
+The interior pages of this template have already been designed.
+
+The cover MUST inherit the same artistic language, illustration style, rendering technique, paper texture, atmosphere, color palette and emotional tone.
+
+However...
+
+DO NOT copy the page layout.
+
+DO NOT enlarge the background.
+
+DO NOT reuse corner decorations.
+
+Create a completely new editorial composition.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## Editorial Design Philosophy
+
+The cover should immediately communicate:
+
+Literature.
+
+Publishing.
+
+Reading.
+
+Emotion.
+
+Memory.
+
+Beauty.
+
+Quietness.
+
+Timelessness.
+
+This should feel like an award-winning literary publication rather than an AI illustration.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## Hero Illustration
+
+Every cover must contain ONE unforgettable Hero Illustration.
+
+The Hero should occupy approximately 35%–45% of the composition.
+
+It must become the visual identity of this publication.
+
+The Hero should naturally emerge from the template theme rather than feeling artificially inserted.
+
+Everything else supports the Hero.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## Composition
+
+Professional editorial composition.
+
+Asymmetrical layout.
+
+Visual hierarchy.
+
+Foreground.
+
+Middle ground.
+
+Background.
+
+Natural visual movement.
+
+Rich spatial depth.
+
+Never create:
+
+• page borders
+
+• decorative corners
+
+• wallpaper layouts
+
+• frame layouts
+
+• isolated decorative elements
+
+Instead create one complete illustration from edge to edge.
+
+The illustration should feel intentional.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## Typography Safe Area
+
+Reserve approximately 35–40% clean space for typography.
+
+The typography area should emerge naturally through composition.
+
+Never create:
+
+white rectangle
+
+white card
+
+floating label
+
+text panel
+
+Instead use:
+
+light
+
+mist
+
+negative space
+
+sky
+
+paper texture
+
+empty atmosphere
+
+The typography area should feel naturally integrated into the artwork.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## Storytelling
+
+The illustration should quietly tell one story.
+
+It should invite readers into the world of the book.
+
+The story should feel believable.
+
+Avoid excessive symbolism.
+
+Avoid obvious metaphors.
+
+Avoid visual clutter.
+
+The cover should remain elegant and restrained.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## Lighting
+
+Soft cinematic lighting.
+
+Natural sunlight.
+
+Atmospheric perspective.
+
+Beautiful shadows.
+
+Volumetric light.
+
+Rich depth.
+
+Subtle glow.
+
+Museum-quality lighting.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## Artistic Quality
+
+Editorial illustration.
+
+Premium publishing design.
+
+Award-winning book cover.
+
+Museum-quality artwork.
+
+Professional composition.
+
+Rich visual hierarchy.
+
+Elegant negative space.
+
+Sophisticated storytelling.
+
+Traditional illustration quality.
+
+Fine artistic details.
+
+Hand-painted feeling.
+
+Paper texture.
+
+Timeless aesthetics.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## Color
+
+Preserve the original template palette.
+
+Do not introduce conflicting colors.
+
+Maintain visual consistency with the interior pages.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## Consistency
+
+This cover belongs to the same visual identity system as the interior pages.
+
+Readers should instantly recognize them as one publication.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## Avoid
+
+Do NOT generate:
+
+interior page
+
+page background
+
+wallpaper
+
+poster
+
+PowerPoint
+
+frame
+
+border
+
+decorative corner
+
+clip-art
+
+logo
+
+watermark
+
+mockup
+
+text
+
+UI
+
+graphic design template
+
+floating white title box
+
+artificial labels
+
+overcrowded composition
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## Output
+
+Portrait orientation.
+
+Full bleed.
+
+Print ready.
+
+No text.
+
+No logo.
+
+No watermark.
+
+No mockup.
+
+Official front cover.
+
+Premium literary publication.

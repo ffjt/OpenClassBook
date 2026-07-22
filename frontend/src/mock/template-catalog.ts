@@ -8,6 +8,10 @@ export interface TemplateCatalogEntry {
   textColor: string;
   fontFamily: "serif" | "sans-serif";
   cornerStyle: "soft" | "square";
+  /** Official typography defaults applied without renderer conditionals. */
+  titleFont?: { family: string; fullName: string; postscriptName: string; style: string };
+  titleSize?: number;
+  coverTextColor?: string;
 }
 
 /** The first-party catalog is data-driven so community templates can be added without UI changes. */
@@ -25,7 +29,22 @@ export const templateCatalog: TemplateCatalogEntry[] = [
   ["nordic-forest", "Nordic Forest", "北欧森林", "Storybook calm", "北欧绘本的宁静感", "#52796F", "#EEF3EE", "#7A512D", "#2F3E46", "serif", "soft"],
   ["ocean-fairytale", "Ocean Fairytale", "海洋童话", "Open blue horizons", "开阔的海洋童话", "#176B87", "#E4F4F8", "#0E6680", "#17324D", "sans-serif", "soft"],
   ["starry-dream", "Starry Dream", "星空梦想", "A gentle night sky", "温柔的星空梦想", "#3C3B6E", "#EEF0FF", "#6652A3", "#242447", "serif", "soft"],
-].map(([id, en, zh, enDesc, zhDesc, primaryColor, secondaryColor, accentColor, textColor, fontFamily, cornerStyle]) => ({ id, name: { en, zh }, description: { en: enDesc, zh: zhDesc }, primaryColor, secondaryColor, accentColor, textColor, fontFamily, cornerStyle })) as TemplateCatalogEntry[];
+].map(([id, en, zh, enDesc, zhDesc, primaryColor, secondaryColor, accentColor, textColor, fontFamily, cornerStyle]) => ({
+  id,
+  name: { en, zh },
+  description: { en: enDesc, zh: zhDesc },
+  primaryColor,
+  secondaryColor,
+  accentColor,
+  textColor,
+  fontFamily,
+  cornerStyle,
+  ...(id === "spring-blossom" ? {
+    titleFont: { family: "literary-serif", fullName: "LXGW WenKai / Source Han Serif SC", postscriptName: "literary-serif", style: "Regular" },
+    titleSize: 28,
+    coverTextColor: "#5A392E",
+  } : {}),
+})) as TemplateCatalogEntry[];
 
 export function getTemplateCatalogEntry(id: string) {
   return templateCatalog.find((entry) => entry.id === id) ?? templateCatalog[0];

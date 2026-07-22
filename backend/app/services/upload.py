@@ -28,6 +28,10 @@ class UnsupportedFileFormatError(Exception):
     pass
 
 
+class ProtectedUploadError(Exception):
+    pass
+
+
 class UploadService:
     def __init__(
         self,
@@ -90,6 +94,8 @@ class UploadService:
     def delete(self, book_id: int, upload_type: UploadType) -> bool:
         if self.repository.get_book(book_id) is None:
             return False
+        if upload_type in {"cover", "back_cover"}:
+            raise ProtectedUploadError
         relative_path = self.repository.get_path(book_id, upload_type)
         if relative_path:
             self.storage.delete(relative_path)
@@ -131,6 +137,7 @@ def _to_response(stored: StoredFile) -> UploadResponse:
 __all__ = [
     "FileTooLargeError",
     "InvalidFileContentError",
+    "ProtectedUploadError",
     "UnsupportedFileFormatError",
     "UploadService",
 ]

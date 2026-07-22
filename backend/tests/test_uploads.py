@@ -172,6 +172,13 @@ def test_upload_updates_matching_layout_section(
                     "name": None,
                     "file": None,
                 },
+                {
+                    "id": "back_cover",
+                    "kind": "page",
+                    "preset": "back_cover",
+                    "name": None,
+                    "file": None,
+                },
             ]
         },
     )
@@ -187,9 +194,13 @@ def test_upload_updates_matching_layout_section(
         f"books/{book_id}/cover/cover.jpg"
     )
 
-    assert client.delete(f"/api/v1/books/{book_id}/upload/cover").status_code == 204
+    protected = client.delete(f"/api/v1/books/{book_id}/upload/cover")
+    assert protected.status_code == 409
+    assert protected.json()["detail"]["code"] == "protected_upload"
     refreshed = client.get(f"/api/v1/books/{book_id}").json()
-    assert refreshed["layout_sections"][0]["file"] is None
+    assert refreshed["layout_sections"][0]["file"] == (
+        f"books/{book_id}/cover/cover.jpg"
+    )
 
 
 def test_upload_validation_errors_are_bilingual_and_leave_no_file(

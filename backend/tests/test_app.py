@@ -246,6 +246,13 @@ def test_book_crud_persists_to_sqlite(
                     "name": "A Message from Our Class",
                     "file": None,
                 },
+                {
+                    "id": "back_cover",
+                    "kind": "page",
+                    "preset": "back_cover",
+                    "name": None,
+                    "file": "back-cover.webp",
+                },
             ],
         },
     )
@@ -264,6 +271,7 @@ def test_book_crud_persists_to_sqlite(
         "cover",
         "articles",
         "class_message",
+        "back_cover",
     ]
     assert updated["owner_name"] == created["owner_name"]
     assert updated["invite_code"] == created["invite_code"]
@@ -1501,6 +1509,13 @@ def test_export_generates_and_downloads_printable_pdf(
                     "name": None,
                     "file": None,
                 },
+                {
+                    "id": "back_cover",
+                    "kind": "page",
+                    "preset": "back_cover",
+                    "name": None,
+                    "file": None,
+                },
             ]
         },
     )
@@ -1569,6 +1584,7 @@ def test_export_generates_and_downloads_printable_pdf(
         "cover",
         "articles",
         "acknowledgement",
+        "back_cover",
     ]
     article_pages = [
         page["label_zh"]

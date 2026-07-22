@@ -39,6 +39,7 @@ import {
   X,
 } from "lucide-react";
 
+import { AppearanceEditor } from "@/components/book-appearance/appearance-editor";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { PublicationPageFooter } from "@/components/publication-page-footer";
 import { Badge } from "@/components/ui/badge";
@@ -67,8 +68,10 @@ import {
   bookRepository,
   type Book,
   type BookLayoutSection,
+  type BookUpdateInput,
   type LayoutSectionPreset,
 } from "@/repositories/bookRepository";
+import { templateRepository } from "@/repositories/templateRepository";
 import {
   getUploadErrorCode,
   uploadRepository,
@@ -154,6 +157,17 @@ const copy = {
     selectFile: "Choose file",
     uploadCover: "Upload cover",
     uploadBackCover: "Upload back cover",
+    appearanceStudio: "Book Appearance Studio",
+    appearanceStudioHint: "Design the cover, spine, and back cover together.",
+    useAppearanceStudio: "Use Book Appearance Studio",
+    noThemeCover: "I don't use theme covers",
+    uploadCoverHint: "Upload the final cover and back-cover files instead.",
+    appearanceSaved: "Book appearance saved.",
+    appearanceSaveError: "Could not save book appearance.",
+    openAppearanceStudio: "Open Book Appearance Studio",
+    saveAndOpenLayout: "Save and open layout settings",
+    layoutMenu: "Book Layout",
+    contentLayout: "Content and structure",
     fileName: "File",
     fileSize: "Size",
     uploadedAt: "Uploaded",
@@ -265,6 +279,17 @@ const copy = {
     selectFile: "选择文件",
     uploadCover: "上传封面",
     uploadBackCover: "上传封底",
+    appearanceStudio: "书籍外观工作台",
+    appearanceStudioHint: "统一设计封面、书脊和封底。",
+    useAppearanceStudio: "使用书籍外观工作台",
+    noThemeCover: "我不使用主题封面",
+    uploadCoverHint: "改为上传最终的封面和封底文件。",
+    appearanceSaved: "书籍外观已保存。",
+    appearanceSaveError: "书籍外观保存失败。",
+    openAppearanceStudio: "进入书籍外观工作台",
+    saveAndOpenLayout: "保存并进入排版设置",
+    layoutMenu: "书籍排版",
+    contentLayout: "内容与结构",
     fileName: "文件",
     fileSize: "大小",
     uploadedAt: "上传时间",
@@ -339,7 +364,7 @@ export function BookLayoutPage({
   onToggleLanguage,
 }: BookLayoutPageProps) {
   const pageCopy = copy[language];
-  const { template } = useBookTemplate(bookId);
+  const { template, setTemplate } = useBookTemplate(bookId);
   const [book, setBook] = useState<Book | null>(null);
   const [articles, setArticles] = useState<Article[]>([]);
   const [authors, setAuthors] = useState<Author[]>([]);
@@ -358,6 +383,7 @@ export function BookLayoutPage({
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [layoutView, setLayoutView] = useState<"appearance" | "layout">("appearance");
 
   useEffect(() => {
     let active = true;
@@ -376,6 +402,7 @@ export function BookLayoutPage({
         setArticles(loadedArticles);
         setAuthors(loadedAuthors);
         setSections(loadedSections);
+        setLayoutView(isAppearanceStudioActive(loadedBook) ? "appearance" : "layout");
         setSelectedSectionId((current) =>
           loadedSections.some((section) => section.id === current)
             ? current
@@ -509,6 +536,36 @@ export function BookLayoutPage({
       return false;
     }
   };
+  const setAppearanceStudioActive = async (active: boolean) => {
+    if (!book) return false;
+    const frontReference = active ? `theme:${template.templateId}:cover` : null;
+    const backReference = active ? `theme:${template.templateId}:cover_back` : null;
+    const nextSections = sections.map((section) =>
+      section.preset === "cover"
+        ? { ...section, file: frontReference }
+        : section.preset === "back_cover"
+          ? { ...section, file: backReference }
+          : section,
+    );
+    try {
+      const updatedBook = await bookRepository.update(book.id, {
+        appearance_metadata: {
+          ...(book.appearance_metadata ?? {}),
+          cover_mode: active ? "studio" : "upload",
+        },
+        cover_file: frontReference,
+        back_cover_file: backReference,
+        layout_sections: nextSections,
+      });
+      setBook(updatedBook);
+      setSections(getBookSections(updatedBook));
+      setLayoutView(active ? "appearance" : "layout");
+      return true;
+    } catch {
+      toast.error(pageCopy.appearanceSaveError);
+      return false;
+    }
+  };
   const assignNumbersInCurrentOrder = async () => {
     if (!book || book.number_mode !== "automatic" || !approvedArticles.length) {
       return false;
@@ -564,7 +621,7 @@ export function BookLayoutPage({
     }
   };
   const deleteSection = async (section: BookLayoutSection) => {
-    if (section.kind === "articles") return;
+    if (isFixedLayoutSection(section)) return;
     const index = sections.findIndex((item) => item.id === section.id);
     const nextSections = sections.filter((item) => item.id !== section.id);
     const fallback = nextSections[Math.min(index, nextSections.length - 1)];
@@ -574,7 +631,7 @@ export function BookLayoutPage({
     }
   };
   const renameSection = async (section: BookLayoutSection, name: string) => {
-    if (section.kind === "articles") return false;
+    if (isFixedLayoutSection(section)) return false;
     return persistSections(
       sections.map((item) =>
         item.id === section.id ? { ...item, name, preset: null } : item,
@@ -622,7 +679,30 @@ export function BookLayoutPage({
         </p>
       </header>
 
-      <div className="mt-6 grid items-start gap-5 xl:grid-cols-[230px_minmax(410px,1fr)_minmax(300px,0.72fr)]">
+      {layoutView === "appearance" ? (
+        <AppearanceStudio
+          book={book}
+          language={language}
+          onOpenLayout={() => setLayoutView("layout")}
+          onSaved={refreshBook}
+          onTemplateChange={setTemplate}
+          onUseUploads={() => setAppearanceStudioActive(false)}
+          template={template}
+        />
+      ) : (
+      <section className="mt-6 grid items-start gap-5 xl:grid-cols-[180px_minmax(0,1fr)]">
+        <nav
+          aria-label={pageCopy.layoutMenu}
+          className="rounded-xl border border-border bg-card p-3"
+        >
+          <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            {pageCopy.layoutMenu}
+          </p>
+          <div className="rounded-lg bg-blue-500/10 px-3 py-2 text-sm font-medium text-blue-300">
+            {pageCopy.contentLayout}
+          </div>
+        </nav>
+      <div className="grid items-start gap-5 xl:grid-cols-[230px_minmax(410px,1fr)_minmax(300px,0.72fr)]">
         <StructurePanel
           copy={pageCopy}
           onAdd={addSection}
@@ -648,6 +728,7 @@ export function BookLayoutPage({
           onArticleReorder={persistArticleOrder}
           onAssignNumbers={assignNumbersInCurrentOrder}
           onRename={renameSection}
+          onOpenAppearanceStudio={() => void setAppearanceStudioActive(true)}
           numberAssignmentStatus={numberAssignmentStatus}
           orderStatus={articleOrderStatus}
           section={selectedSection}
@@ -671,7 +752,150 @@ export function BookLayoutPage({
           template={template}
         />
       </div>
+      </section>
+      )}
     </DashboardLayout>
+  );
+}
+
+function AppearanceStudio({
+  book,
+  language,
+  onOpenLayout,
+  onSaved,
+  onTemplateChange,
+  onUseUploads,
+  template,
+}: {
+  book: Book;
+  language: Language;
+  onOpenLayout: () => void;
+  onSaved: () => Promise<void>;
+  onTemplateChange: (template: Template | ((current: Template) => Template)) => void;
+  onUseUploads: () => Promise<boolean>;
+  template: Template;
+}) {
+  const pageCopy = copy[language];
+  const [title, setTitle] = useState(book.title);
+  const [subtitle, setSubtitle] = useState(book.subtitle ?? "");
+  const [ownerName, setOwnerName] = useState(book.owner_name);
+  const [school, setSchool] = useState(book.school ?? "");
+  const [publisher, setPublisher] = useState(book.publisher ?? "");
+  const [description, setDescription] = useState(book.description ?? "");
+  const [metadata, setMetadata] = useState<Record<string, string>>(
+    book.appearance_metadata ?? {},
+  );
+  const [status, setStatus] = useState<StructureSaveStatus>("idle");
+
+  useEffect(() => {
+    setTitle(book.title);
+    setSubtitle(book.subtitle ?? "");
+    setOwnerName(book.owner_name);
+    setSchool(book.school ?? "");
+    setPublisher(book.publisher ?? "");
+    setDescription(book.description ?? "");
+    setMetadata(book.appearance_metadata ?? {});
+  }, [book]);
+
+  const updateData = (key: string, value: string) => {
+    setStatus("idle");
+    if (key === "title") setTitle(value);
+    else if (key === "subtitle") setSubtitle(value);
+    else if (key === "author") setOwnerName(value);
+    else if (key === "school") setSchool(value);
+    else if (key === "publisher") setPublisher(value);
+    else if (key === "summary") setDescription(value);
+    else setMetadata((current) => ({ ...current, [key]: value }));
+  };
+  const save = async () => {
+    setStatus("saving");
+    const layoutSections = getBookSections(book).map((section) =>
+      section.preset === "cover"
+        ? { ...section, file: `theme:${template.templateId}:cover` }
+        : section.preset === "back_cover"
+          ? { ...section, file: `theme:${template.templateId}:cover_back` }
+          : section,
+    );
+    const update: BookUpdateInput = {
+      title,
+      subtitle: subtitle || null,
+      owner_name: ownerName,
+      school: school || null,
+      publisher: publisher || null,
+      description: description || null,
+      appearance_metadata: { ...metadata, cover_mode: "studio" },
+      cover_file: `theme:${template.templateId}:cover`,
+      back_cover_file: `theme:${template.templateId}:cover_back`,
+      layout_sections: layoutSections,
+    };
+    try {
+      await Promise.all([
+        templateRepository.save(book.id, template),
+        bookRepository.update(book.id, update),
+      ]);
+      await onSaved();
+      setStatus("saved");
+      toast.success(pageCopy.appearanceSaved);
+      onOpenLayout();
+    } catch {
+      setStatus("error");
+      toast.error(pageCopy.appearanceSaveError);
+    }
+  };
+  const authorClassName =
+    book.class_collection_mode === "fixed"
+      ? book.class_fixed_value
+      : book.class_collection_mode === "template"
+        ? book.class_name_template?.replace(
+            "{value}",
+            book.class_value_style === "chinese" ? "三" : "3",
+          ) ?? null
+        : null;
+
+  return (
+    <section className="mt-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">{pageCopy.appearanceStudioHint}</p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            disabled={status === "saving"}
+            onClick={() => void onUseUploads()}
+            type="button"
+            variant="outline"
+          >
+            {pageCopy.noThemeCover}
+          </Button>
+          <Button disabled={status === "saving"} onClick={() => void save()} type="button">
+            {status === "saving" ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : null}
+            {status === "saving" ? pageCopy.savingStructure : pageCopy.saveAndOpenLayout}
+          </Button>
+        </div>
+      </div>
+      <AppearanceEditor
+        data={{
+          title,
+          subtitle,
+          author: ownerName,
+          school,
+          className: metadata.className ?? authorClassName,
+          teacher: metadata.teacher,
+          editor: metadata.editor,
+          publisher,
+          summary: description,
+          copyright: metadata.copyright,
+          year: metadata.year || new Date().getFullYear().toString(),
+          edition: metadata.edition,
+          estimatedPageCount: Math.max(40, (book.approved_article_count || book.article_count || 1) * 4),
+        }}
+        language={language}
+        onChange={(next) => {
+          setStatus("idle");
+          onTemplateChange(next);
+        }}
+        onDataChange={updateData}
+        template={template}
+      />
+    </section>
   );
 }
 
@@ -829,7 +1053,7 @@ function SortableSectionRow({
           {String(index + 1).padStart(2, "0")}
         </span>
       </button>
-      {section.kind === "page" ? (
+      {!isFixedLayoutSection(section) ? (
         <button
           aria-label={`${pageCopy.deleteSection}: ${label}`}
           className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all hover:bg-rose-500/10 hover:text-rose-300 focus:opacity-100 group-hover:opacity-100"
@@ -927,6 +1151,7 @@ function ResourceManager({
   onArticleReorder,
   onAssignNumbers,
   onRename,
+  onOpenAppearanceStudio,
   numberAssignmentStatus,
   orderStatus,
   section,
@@ -947,6 +1172,7 @@ function ResourceManager({
   onArticleReorder: (articleIds: number[]) => Promise<boolean>;
   onAssignNumbers: () => Promise<boolean>;
   onRename: (section: BookLayoutSection, name: string) => Promise<boolean>;
+  onOpenAppearanceStudio: () => void;
   numberAssignmentStatus: NumberAssignmentStatus;
   orderStatus: ArticleOrderSaveStatus;
   section: BookLayoutSection;
@@ -1002,6 +1228,7 @@ function ResourceManager({
           language={language}
           onAssetChanged={onAssetChanged}
           onRename={onRename}
+          onOpenAppearanceStudio={onOpenAppearanceStudio}
           section={section}
         />
       )}
@@ -1015,6 +1242,7 @@ function PageAssetManager({
   language,
   onAssetChanged,
   onRename,
+  onOpenAppearanceStudio,
   section,
 }: {
   book: Book;
@@ -1022,10 +1250,12 @@ function PageAssetManager({
   language: Language;
   onAssetChanged: () => Promise<void>;
   onRename: (section: BookLayoutSection, name: string) => Promise<boolean>;
+  onOpenAppearanceStudio: () => void;
   section: BookLayoutSection;
 }) {
   const file = section.file;
   const isCover = section.preset === "cover" || section.preset === "back_cover";
+  const hasUploadedFile = Boolean(file);
   const uploadType = getUploadType(section);
   const inputRef = useRef<HTMLInputElement>(null);
   const [metadata, setMetadata] = useState<UploadedFileMetadata | null>(null);
@@ -1126,7 +1356,6 @@ function PageAssetManager({
     }
     window.open(previewUrl, "_blank", "noopener,noreferrer");
   };
-
   return (
     <div className="p-5 sm:p-6">
       <SectionNameEditor
@@ -1134,11 +1363,11 @@ function PageAssetManager({
         onRename={onRename}
         section={section}
       />
-      {file ? (
+      {hasUploadedFile ? (
         <div className="rounded-xl border border-border bg-muted/25 p-4">
           <div className="flex items-start gap-3">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-blue-400">
-              {isImageFile(file) ? (
+              {isImageFile(file ?? "") ? (
                 <FileImage className="size-4" />
               ) : (
                 <FileText className="size-4" />
@@ -1146,16 +1375,16 @@ function PageAssetManager({
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-foreground">
-                {getFileName(file)}
+                {getFileName(file ?? "")}
               </p>
               <p className="mt-1 text-xs uppercase tracking-[0.1em] text-muted-foreground">
-                {getFileExtension(file)}
+                {getFileExtension(file ?? "")}
               </p>
             </div>
           </div>
-          {isImageFile(file) && previewUrl ? (
+          {isImageFile(file ?? "") && previewUrl ? (
             <img
-              alt={getFileName(file)}
+              alt={getFileName(file ?? "")}
               className="mt-4 max-h-64 w-full rounded-lg border border-border bg-background object-contain"
               src={previewUrl}
             />
@@ -1196,20 +1425,22 @@ function PageAssetManager({
               <Replace className="mr-2 size-3.5" />
               {pageCopy.replace}
             </Button>
-            <Button
-              className="h-9 rounded-lg px-3 text-xs"
-              disabled={progress !== null || isDeleting || !uploadType}
-              onClick={() => void deleteFile()}
-              type="button"
-              variant="outline"
-            >
-              {isDeleting ? (
-                <LoaderCircle className="mr-2 size-3.5 animate-spin" />
-              ) : (
-                <Trash2 className="mr-2 size-3.5" />
-              )}
-              {isDeleting ? pageCopy.deleting : pageCopy.delete}
-            </Button>
+            {!isCover ? (
+              <Button
+                className="h-9 rounded-lg px-3 text-xs"
+                disabled={progress !== null || isDeleting || !uploadType}
+                onClick={() => void deleteFile()}
+                type="button"
+                variant="outline"
+              >
+                {isDeleting ? (
+                  <LoaderCircle className="mr-2 size-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-2 size-3.5" />
+                )}
+                {isDeleting ? pageCopy.deleting : pageCopy.delete}
+              </Button>
+            ) : null}
           </div>
         </div>
       ) : (
@@ -1225,6 +1456,24 @@ function PageAssetManager({
           </p>
         </div>
       )}
+
+      {isCover ? (
+        <div className="mt-5 rounded-xl border border-border bg-muted/20 p-4">
+          <Button
+            className="w-full"
+            disabled={progress !== null || isDeleting}
+            onClick={onOpenAppearanceStudio}
+            type="button"
+            variant="outline"
+          >
+            <Image className="mr-2 size-4" />
+            {pageCopy.useAppearanceStudio}
+          </Button>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {pageCopy.uploadCoverHint}
+          </p>
+        </div>
+      ) : null}
 
       <div className="mt-5 rounded-xl border border-border bg-muted/20 p-4">
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -1303,6 +1552,7 @@ function SectionNameEditor({
   section: BookLayoutSection;
 }) {
   const currentLabel = getSectionLabel(section, pageCopy);
+  const canRename = !isFixedLayoutSection(section);
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(currentLabel);
 
@@ -1330,7 +1580,7 @@ function SectionNameEditor({
             </p>
           ) : null}
         </div>
-        {!isEditing ? (
+        {!isEditing && canRename ? (
           <button
             aria-label={pageCopy.renameSection}
             className="flex size-8 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -1882,6 +2132,9 @@ function PageSectionPreview({
 }) {
   const file = section.file;
   const isCover = section.preset === "cover" || section.preset === "back_cover";
+  const isThemeCover = Boolean(
+    file && /^theme:[a-z0-9-]+:(cover|cover_back)$/.test(file),
+  );
   const label = getSectionLabel(section, pageCopy);
   const assetKind =
     section.preset === "cover"
@@ -1905,15 +2158,34 @@ function PageSectionPreview({
       }}
     >
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-center">
-        {!file ? (
+        {!file || isThemeCover ? (
           <>
             {isCover ? null : <p className="text-[9px] font-semibold uppercase tracking-[0.2em]" style={{ color: template.accentColor }}>OpenClassBook</p>}
-            <h3 className="mt-6 text-xl font-semibold tracking-[-0.04em]" style={{ color: template.themeColor }}>
-              {section.preset === "ending" ? pageCopy.sections.ending : isCover ? book.title : label}
-            </h3>
-            <p className="mt-3 max-w-[160px] text-[10px] leading-5 text-slate-600">
-              {section.preset === "ending" ? "感谢阅读 · Thank you for reading" : isCover ? "SCHOOL PUBLICATION" : "Chapter 01"}
-            </p>
+            {isCover ? (
+              <CoverTypography
+                compact
+                credit={getCoverCredit(book)}
+                subtitle={book.subtitle}
+                templateId={template.templateId}
+                title={book.title}
+              />
+            ) : (
+              <>
+                <h3
+                  className="mt-6 text-2xl tracking-[0.08em]"
+                  style={{
+                    color: template.themeColor,
+                    fontFamily: getCoverTitleFont(template.templateId),
+                    fontWeight: 400,
+                  }}
+                >
+                  {section.preset === "ending" ? pageCopy.sections.ending : label}
+                </h3>
+                <p className="mt-3 max-w-[160px] text-[10px] leading-5 text-slate-600">
+                  {section.preset === "ending" ? "感谢阅读 · Thank you for reading" : "Chapter 01"}
+                </p>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -2276,7 +2548,14 @@ function FormatRow({ label, value }: { label: string; value: string }) {
 
 function getBookSections(book: Book): BookLayoutSection[] {
   if (book.layout_sections?.length) {
-    return book.layout_sections.map((section) => ({ ...section }));
+    const sections = book.layout_sections.map((section) => ({ ...section }));
+    if (!sections.some((section) => section.preset === "cover")) {
+      sections.unshift({ id: "cover", kind: "page", preset: "cover", name: null, file: book.cover_file });
+    }
+    if (!sections.some((section) => section.preset === "back_cover")) {
+      sections.push({ id: "back_cover", kind: "page", preset: "back_cover", name: null, file: book.back_cover_file });
+    }
+    return sections;
   }
   return [
     { id: "cover", kind: "page", preset: "cover", name: null, file: book.cover_file },
@@ -2317,6 +2596,23 @@ function getBookSections(book: Book): BookLayoutSection[] {
       file: book.back_cover_file,
     },
   ];
+}
+
+function isFixedLayoutSection(section: BookLayoutSection) {
+  return section.kind === "articles" || section.preset === "cover" || section.preset === "back_cover";
+}
+
+function isAppearanceStudioActive(book: Book) {
+  const mode = book.appearance_metadata?.cover_mode;
+  if (mode === "studio") return true;
+  if (mode === "upload") return false;
+  if (
+    /^theme:[a-z0-9-]+:(cover|cover_back)$/.test(book.cover_file ?? "") ||
+    /^theme:[a-z0-9-]+:(cover|cover_back)$/.test(book.back_cover_file ?? "")
+  ) {
+    return true;
+  }
+  return !book.cover_file && !book.back_cover_file;
 }
 
 function getPresetLabel(
@@ -2479,6 +2775,83 @@ function getPreviewAspectRatio(template: Template) {
 function getPreviewPageWidthMm(template: Template) {
   if (template.pageSize === "custom") return template.customPageWidth;
   return { a4: 210, a5: 148, b5: 176 }[template.pageSize];
+}
+
+function getCoverTitleFont(templateId = "spring-blossom") {
+  if (["spring-blossom", "rice-paper", "new-chinese", "misty-mountain"].includes(templateId)) {
+    return '"方正舒体", "华文行楷", "华文楷体", "楷体", serif';
+  }
+  if (["graduation", "campus-morning", "youth-dream", "ocean-fairytale"].includes(templateId)) {
+    return '"方正姚体", "幼圆", "Microsoft YaHei", sans-serif';
+  }
+  return '"Microsoft YaHei", "PingFang SC", sans-serif';
+}
+
+function CoverTypography({
+  compact = false,
+  credit,
+  subtitle,
+  templateId,
+  title,
+}: {
+  compact?: boolean;
+  credit: string | null;
+  subtitle: string | null;
+  templateId?: string;
+  title: string;
+}) {
+  const artDirection = getCoverArtDirection(templateId);
+  return (
+    <div
+      className={cn(
+        "flex w-full flex-col px-[12%] text-center",
+        artDirection.position === "top" ? "self-start pt-[23%]" : "self-start pt-[29%]",
+      )}
+      style={{ color: artDirection.color }}
+    >
+      <h3
+        className={cn(
+          "mt-3 break-words font-normal leading-[1.16] tracking-[0.08em]",
+          compact ? "text-[clamp(1.3rem,3.2vw,2rem)]" : "text-[clamp(1.65rem,3.8vw,2.65rem)]",
+        )}
+        style={{
+          fontFamily: getCoverTitleFont(templateId),
+          textShadow: artDirection.shadow,
+        }}
+      >
+        {title}
+      </h3>
+      {subtitle ? (
+        <p className={cn("mt-3 leading-relaxed opacity-80", compact ? "text-[8px]" : "text-xs")}>
+          {subtitle}
+        </p>
+      ) : null}
+      {credit ? (
+        <p
+          className={cn(
+            "mt-10 font-medium tracking-[0.2em] opacity-75",
+            compact ? "text-[7px]" : "text-[10px]",
+          )}
+        >
+          {credit}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function getCoverCredit(book: Book) {
+  return book.publisher || book.school || book.owner_name || null;
+}
+
+function getCoverArtDirection(templateId?: string) {
+  const isTopTitle = ["autumn-ginkgo", "campus-morning", "graduation", "winter-sun", "youth-dream"].includes(templateId ?? "");
+  const isInk = ["rice-paper", "new-chinese", "misty-mountain"].includes(templateId ?? "");
+  return {
+    position: isTopTitle ? "top" : "center",
+    color: isInk ? "#3a3029" : "#1f2937",
+    shadow: "0 1px 12px rgba(255, 255, 255, 0.42)",
+  } as const;
 }
 
 function LayoutSkeleton({ label }: { label: string }) {

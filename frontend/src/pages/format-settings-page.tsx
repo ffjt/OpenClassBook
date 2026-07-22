@@ -166,6 +166,13 @@ export function FormatSettingsContent({
   const [articlePageMode, setArticlePageMode] = useState<ArticlePageMode>("single");
   const [authorClassName, setAuthorClassName] = useState<string | null>(null);
   const [bookTitle, setBookTitle] = useState("OpenClassBook");
+  const [bookSubtitle, setBookSubtitle] = useState("");
+  const [bookOwner, setBookOwner] = useState("");
+  const [bookSchool, setBookSchool] = useState("");
+  const [bookPublisher, setBookPublisher] = useState("");
+  const [bookDescription, setBookDescription] = useState("");
+  const [appearanceMetadata, setAppearanceMetadata] = useState<Record<string, string>>({});
+  const [estimatedPageCount, setEstimatedPageCount] = useState(0);
   const [bookLoadError, setBookLoadError] = useState(false);
   const [bookReloadKey, setBookReloadKey] = useState(0);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -181,10 +188,23 @@ export function FormatSettingsContent({
     setArticlePageMode("single");
     setAuthorClassName(null);
     setBookTitle("OpenClassBook");
+    setBookSubtitle("");
+    setBookOwner("");
+    setBookSchool("");
+    setBookPublisher("");
+    setBookDescription("");
+    setAppearanceMetadata({});
     bookRepository.get(bookId).then(
       (book) => {
         if (active) {
           setBookTitle(book.title);
+          setBookSubtitle(book.subtitle ?? "");
+          setBookOwner(book.owner_name);
+          setBookSchool(book.school ?? "");
+          setBookPublisher(book.publisher ?? "");
+          setBookDescription(book.description ?? "");
+          setAppearanceMetadata(book.appearance_metadata ?? {});
+          setEstimatedPageCount(Math.max(40, (book.approved_article_count || book.article_count || 1) * 4));
           setNumberMode(book.number_mode);
           setArticlePageMode(book.layout_article_page_mode ?? "single");
           setAuthorClassName(
@@ -246,7 +266,11 @@ export function FormatSettingsContent({
       themeColor: catalog.textColor,
       accentColor: catalog.accentColor,
       bodyFont: { ...current.bodyFont, family: catalog.fontFamily, fullName: catalog.fontFamily },
-      titleFont: { ...current.titleFont, family: catalog.fontFamily, fullName: catalog.fontFamily },
+      titleFont: catalog.titleFont ?? { ...current.titleFont, family: catalog.fontFamily, fullName: catalog.fontFamily },
+      titleSize: catalog.titleSize ?? current.titleSize,
+      appearance: catalog.coverTextColor
+        ? { ...current.appearance, frontCover: { ...current.appearance.frontCover, palette: { ...current.appearance.frontCover.palette, text: catalog.coverTextColor } } }
+        : current.appearance,
       titleSpacing: 12,
       imageRadius: catalog.cornerStyle === "soft" ? 12 : 0,
       imageBorder: catalog.cornerStyle === "square",

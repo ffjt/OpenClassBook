@@ -212,10 +212,40 @@ class ExportService:
             generated_at=datetime.now(UTC),
         )
 
+    def generate_appearance(
+        self, book_id: int, download_prefix: str
+    ) -> ExportResponse | None:
+        """Create the press-ready exterior spread separately from the reading PDF."""
+        bundle = self.repository.get_bundle(book_id)
+        if bundle is None:
+            return None
+        template = _resolve_template(bundle)
+        task_id = uuid4().hex
+        destination = self.export_dir / f"appearance-{book_id}-{task_id}.pdf"
+        self.export_dir.mkdir(parents=True, exist_ok=True)
+        page_count = self.renderer.render_appearance_spread(
+            bundle.book,
+            template,
+            destination,
+            estimated_page_count=max(40, len(bundle.articles) * 4),
+        )
+        return ExportResponse(
+            task_id=task_id,
+            download_url=f"{download_prefix}/{task_id}/download",
+            page_count=page_count,
+            generated_at=datetime.now(UTC),
+        )
+
     def get_artifact(self, book_id: int, task_id: str) -> Path | None:
         if not re.fullmatch(r"[a-f0-9]{32}", task_id):
             return None
         path = self.export_dir / f"book-{book_id}-{task_id}.pdf"
+        return path if path.is_file() else None
+
+    def get_appearance_artifact(self, book_id: int, task_id: str) -> Path | None:
+        if not re.fullmatch(r"[a-f0-9]{32}", task_id):
+            return None
+        path = self.export_dir / f"appearance-{book_id}-{task_id}.pdf"
         return path if path.is_file() else None
 
     def _preflight_assets(
@@ -235,7 +265,7 @@ class ExportService:
             directory = Path(temporary)
             for index, section in enumerate(sections):
                 relative_path = section.get("file")
-                if not relative_path:
+                if not relative_path or _is_theme_cover_reference(relative_path):
                     continue
                 label_en, label_zh = _section_labels(section)
                 source = self.storage.resolve(str(relative_path))
@@ -285,7 +315,7 @@ class ExportService:
         valid_count = 0
         for section in sections:
             relative_path = section.get("file")
-            if not relative_path:
+            if not relative_path or _is_theme_cover_reference(relative_path):
                 continue
             label_en, label_zh = _section_labels(section)
             source = self.storage.resolve(str(relative_path))
@@ -319,7 +349,11 @@ class ExportService:
                 continue
             destination = directory / f"section-{index}.pdf"
             relative_path = section.get("file")
-            if section["kind"] != "articles" and relative_path:
+            if (
+                section["kind"] != "articles"
+                and relative_path
+                and not _is_theme_cover_reference(relative_path)
+            ):
                 label_en, label_zh = _section_labels(section)
                 source = self.storage.resolve(str(relative_path))
                 if source is None:
@@ -352,6 +386,10 @@ class ExportService:
         return fragments
 
 
+def _is_theme_cover_reference(value: object) -> bool:
+    return isinstance(value, str) and value.startswith("theme:")
+
+
 def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
     stored = bundle.template
     title = stored.title_format or {} if stored else {}
@@ -370,12 +408,13 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
         title_font = (
             title_font.get("fullName") or title_font.get("family") or "sans-serif"
         )
+    template_id = str(presentation.get("template_id", "spring-blossom"))
+    if template_id == "spring-blossom" and title_font in {"serif", "System Serif"}:
+        title_font = "literary-serif"
     footer_font = presentation.get("footer_font", "sans-serif")
     if isinstance(footer_font, dict):
         footer_font = (
-            footer_font.get("fullName")
-            or footer_font.get("family")
-            or "sans-serif"
+            footer_font.get("fullName") or footer_font.get("family") or "sans-serif"
         )
     return ExportTemplateInfo(
         font=str(body_font),
@@ -407,7 +446,7 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
         page_number_position=str(page.get("number_position", "center")),
         custom_page_width=_number(page.get("custom_width"), 210),
         custom_page_height=_number(page.get("custom_height"), 297),
-        template_id=str(presentation.get("template_id", "spring-blossom")),
+        template_id=template_id,
         theme_color=_color(presentation.get("theme_color"), "#202124"),
         accent_color=_color(presentation.get("accent_color"), "#1f2937"),
         background_color=_color(presentation.get("background_color"), "#fffefa"),
@@ -428,7 +467,7 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
         ),
         chrome_surface_opacity=min(
             100,
-            max(0, _number(presentation.get("chrome_surface_opacity"), 70)),
+            max(0, _number(presentation.get("chrome_surface_opacity"), 15)),
         ),
         show_author_meta=bool(presentation.get("show_author_meta", True)),
         image_radius=_number(presentation.get("image_radius"), 0),
@@ -444,6 +483,11 @@ def _resolve_template(bundle: ExportBundle) -> ExportTemplateInfo:
         title_surface_opacity=min(
             100,
             max(0, _number(presentation.get("title_surface_opacity"), 70)),
+        ),
+        appearance=(
+            presentation.get("appearance")
+            if isinstance(presentation.get("appearance"), dict)
+            else {}
         ),
     )
 

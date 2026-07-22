@@ -118,9 +118,10 @@ def resolve_class_name(
         raise ValueError("Class value is required / 请填写班级")
     if value_style == "arabic" and re.fullmatch(r"[0-9]+", value) is None:
         raise ValueError("Use Arabic digits only / 只能填写阿拉伯数字")
-    if value_style == "chinese" and re.fullmatch(
-        r"[零〇一二三四五六七八九十百千万两廿卅]+", value
-    ) is None:
+    if (
+        value_style == "chinese"
+        and re.fullmatch(r"[零〇一二三四五六七八九十百千万两廿卅]+", value) is None
+    ):
         raise ValueError("Use Chinese numerals only / 只能填写中文数字")
     resolved = name_template.replace(CLASS_VALUE_PLACEHOLDER, value)
     if len(resolved) > 120:
@@ -166,6 +167,13 @@ def _validate_layout_sections(
             "Book must contain exactly one main-content section / "
             "书籍必须且只能有一个正文板块"
         )
+    for preset, label in (("cover", "cover"), ("back_cover", "back cover")):
+        matches = [section for section in sections if section.preset == preset]
+        if len(matches) != 1 or matches[0].kind != "page":
+            raise ValueError(
+                f"Book must contain exactly one {label} section / "
+                f"书籍必须且只能包含一个{'封面' if preset == 'cover' else '封底'}板块"
+            )
     return sections
 
 
@@ -185,9 +193,7 @@ def validate_numbering_configuration(
     number_pool: list[str],
 ) -> None:
     if len(number_pool) != len(set(number_pool)):
-        raise ValueError(
-            "Article numbers must be unique / 文章编号不能重复"
-        )
+        raise ValueError("Article numbers must be unique / 文章编号不能重复")
     if number_mode != "existing" and existing_number_mode is not None:
         raise ValueError(
             "Only existing-number books can choose a claim method / "
@@ -208,6 +214,8 @@ def validate_numbering_configuration(
             "Free claiming cannot define an article-number pool / "
             "自由认领模式不能设置编号池"
         )
+
+
 class BookBase(BaseModel):
     title: BookTitle = Field(description="Book title / 书名")
     subtitle: OptionalBookText | None = Field(
@@ -226,6 +234,10 @@ class BookBase(BaseModel):
     publisher: OptionalBookText | None = Field(
         default=None,
         description="Optional publisher / 可选出版社",
+    )
+    appearance_metadata: dict[str, str] | None = Field(
+        default=None,
+        description="Publication appearance metadata / 出版外观元数据",
     )
     submission_enabled: bool = Field(
         default=True,
@@ -345,6 +357,7 @@ class BookBase(BaseModel):
     ) -> list[BookLayoutSection] | None:
         return _validate_layout_sections(sections)
 
+
 class BookCreate(BookBase):
     @model_validator(mode="after")
     def validate_numbering(self) -> "BookCreate":
@@ -375,6 +388,7 @@ class BookUpdate(BaseModel):
     )
     school: OptionalBookText | None = Field(default=None)
     publisher: OptionalBookText | None = Field(default=None)
+    appearance_metadata: dict[str, str] | None = Field(default=None)
     submission_enabled: bool | None = Field(default=None)
     submission_deadline: datetime | None = Field(default=None)
     allow_multiple_articles: bool | None = Field(default=None)
@@ -451,6 +465,7 @@ class BookUpdate(BaseModel):
     ) -> list[BookLayoutSection] | None:
         return _validate_layout_sections(sections)
 
+
 class BookResponse(BookBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -481,9 +496,7 @@ class BookResponse(BookBase):
 
     @field_validator("submission_deadline", mode="before")
     @classmethod
-    def normalize_submission_deadline(
-        cls, value: datetime | None
-    ) -> datetime | None:
+    def normalize_submission_deadline(cls, value: datetime | None) -> datetime | None:
         if value is not None and value.tzinfo is None:
             return value.replace(tzinfo=UTC)
         return value

@@ -18,6 +18,9 @@ class Book(Base):
     owner_name: Mapped[str] = mapped_column(String(120))
     school: Mapped[str | None] = mapped_column(String(255), nullable=True)
     publisher: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    appearance_metadata: Mapped[dict[str, str] | None] = mapped_column(
+        JSON, nullable=True
+    )
     invite_code: Mapped[str] = mapped_column(String(10), unique=True, index=True)
     invite_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     submission_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -36,9 +39,7 @@ class Book(Base):
     class_name_template: Mapped[str | None] = mapped_column(String(120), nullable=True)
     class_value_style: Mapped[str | None] = mapped_column(String(20), nullable=True)
     number_mode: Mapped[str] = mapped_column(String(20))
-    existing_number_mode: Mapped[str | None] = mapped_column(
-        String(20), nullable=True
-    )
+    existing_number_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
     number_pool: Mapped[list[str]] = mapped_column(JSON, default=list)
     number_prefix: Mapped[str] = mapped_column(String(20), default="")
     number_digits: Mapped[int] = mapped_column(Integer, default=3)
@@ -52,9 +53,7 @@ class Book(Base):
     layout_sections: Mapped[list[dict[str, object]] | None] = mapped_column(
         JSON, nullable=True
     )
-    layout_article_order: Mapped[list[int] | None] = mapped_column(
-        JSON, nullable=True
-    )
+    layout_article_order: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
     layout_article_page_mode: Mapped[str] = mapped_column(
         String(20), default="single", server_default="single"
     )

@@ -11,6 +11,7 @@ import {
   ScanText,
   Type,
 } from "lucide-react";
+import { useState } from "react";
 
 import type {
   Alignment,
@@ -43,6 +44,16 @@ const panelCopy = {
       images: "Images",
       page: "Page",
       presentation: "Publication details",
+    },
+    navigation: {
+      article: "Article",
+      images: "Images",
+      page: "Page",
+      advanced: "Advanced",
+      articleHint: "Title, subtitle, body and quotes",
+      imagesHint: "Availability, size and appearance",
+      pageHint: "Paper, margins and page number",
+      advancedHint: "Numbering and publication details",
     },
     fields: {
       fontDenied: "Font access was not granted.",
@@ -111,6 +122,16 @@ const panelCopy = {
       images: "图片",
       page: "页面",
       presentation: "出版细节",
+    },
+    navigation: {
+      article: "文章",
+      images: "图片",
+      page: "页面",
+      advanced: "高级设置",
+      articleHint: "标题、副标题、正文与引用",
+      imagesHint: "可用性、尺寸与外观",
+      pageHint: "纸张、页边距与页码",
+      advancedHint: "编号与出版细节",
     },
     fields: {
       fontDenied: "未获得系统字体访问权限。",
@@ -267,6 +288,9 @@ export function FormatPanel({
   numberingEnabled,
 }: FormatPanelProps) {
   const copy = panelCopy[language];
+  const [activeGroup, setActiveGroup] = useState<
+    "article" | "images" | "page" | "advanced"
+  >("article");
   const selectableFontOptions = Array.from(
     new Map(
       [settings.titleFont, settings.bodyFont, settings.footerFont, ...fontOptions].map((font) => [
@@ -327,6 +351,40 @@ export function FormatPanel({
         </div>
       )}
 
+      <div
+        aria-label={copy.sections.presentation}
+        className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-muted/20 p-2"
+        role="tablist"
+      >
+        {([
+          { id: "article", icon: Type },
+          { id: "images", icon: Image },
+          { id: "page", icon: FileText },
+          { id: "advanced", icon: Columns3 },
+        ] as const).map(({ id, icon: Icon }) => (
+          <button
+            aria-selected={activeGroup === id}
+            className={cn(
+              "flex min-h-14 flex-col items-start justify-center rounded-lg px-3 text-left transition-colors",
+              activeGroup === id
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
+            )}
+            key={id}
+            onClick={() => setActiveGroup(id)}
+            role="tab"
+            type="button"
+          >
+            <span className="flex items-center gap-2 text-xs font-semibold">
+              <Icon className="size-3.5 text-blue-400" />
+              {copy.navigation[id]}
+            </span>
+            <span className="mt-1 text-[10px] leading-4">{copy.navigation[`${id}Hint`]}</span>
+          </button>
+        ))}
+      </div>
+
+      {activeGroup === "article" && <>
       <PanelSection icon={Type} title={copy.sections.title}>
         <ControlRow label={copy.fields.font}>
           <FontPicker
@@ -334,6 +392,7 @@ export function FormatPanel({
             fontOptions={selectableFontOptions}
             language={language}
             onOpen={fontStatus === "idle" ? onLoadSystemFonts : undefined}
+            size="default"
             onValueChange={(value) => onChange("titleFont", value)}
             value={settings.titleFont}
           />
@@ -426,6 +485,54 @@ export function FormatPanel({
         </ControlRow>
       </PanelSection>
 
+      <PanelSection icon={Pilcrow} title={copy.sections.body}>
+        <ControlRow label={copy.fields.font}>
+          <FontPicker
+            ariaLabel={copy.fields.font}
+            fontOptions={selectableFontOptions}
+            language={language}
+            onOpen={fontStatus === "idle" ? onLoadSystemFonts : undefined}
+            size="default"
+            onValueChange={(value) => onChange("bodyFont", value)}
+            value={settings.bodyFont}
+          />
+        </ControlRow>
+        <ControlRow htmlFor="body-size" label={copy.fields.size}>
+          <div className="relative">
+            <Input
+              className="h-9 rounded-lg border-input bg-background px-3 pr-10 text-xs text-foreground focus-visible:ring-2 focus-visible:ring-blue-500/20"
+              id="body-size"
+              inputMode="numeric"
+              max={48}
+              min={6}
+              onChange={(event) => onChange("bodySize", Number(event.target.value))}
+              step={0.5}
+              type="number"
+              value={settings.bodySize}
+            />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">px</span>
+          </div>
+        </ControlRow>
+        <ControlRow htmlFor="line-spacing" label={copy.fields.lineSpacing}>
+          <Select className="h-9 text-xs" id="line-spacing" onChange={(event) => onChange("lineHeight", Number(event.target.value))} value={settings.lineHeight}>
+            {[1, 1.25, 1.35, 1.4, 1.5, 1.75, 2].map((spacing) => <option key={spacing} value={spacing}>{spacing.toFixed(spacing === 1 || spacing === 2 ? 1 : 2)}</option>)}
+          </Select>
+        </ControlRow>
+        <ControlRow htmlFor="first-line-indent" label={copy.fields.firstLineIndent}>
+          <Select className="h-9 text-xs" id="first-line-indent" onChange={(event) => onChange("firstLineIndent", Number(event.target.value))} value={settings.firstLineIndent}>
+            {[0, 1, 2, 4].map((indent) => <option key={indent} value={indent}>{indent} {copy.values.characters}</option>)}
+          </Select>
+        </ControlRow>
+        <ControlRow htmlFor="justify-body" label={copy.fields.justify}>
+          <div className="flex items-center justify-end gap-3"><AlignJustify className="size-3.5 text-muted-foreground" /><Switch aria-label={copy.fields.justify} checked={settings.justify} id="justify-body" onChange={(event) => onChange("justify", event.target.checked)} /></div>
+        </ControlRow>
+        <ControlRow htmlFor="quote-style" label={copy.fields.quoteStyle}>
+          <Switch aria-label={copy.fields.quoteStyle} checked={settings.quoteStyle} className="ml-auto" id="quote-style" onChange={(event) => onChange("quoteStyle", event.target.checked)} />
+        </ControlRow>
+      </PanelSection>
+      </>}
+
+      {activeGroup === "advanced" && <>
       <PanelSection disabled={!numberingEnabled} icon={Hash} title={copy.sections.numbering}>
         <fieldset className="grid gap-4 disabled:cursor-not-allowed" disabled={!numberingEnabled}>
           <ControlRow htmlFor="show-number" label={copy.fields.showNumber}>
@@ -462,90 +569,9 @@ export function FormatPanel({
         ) : null}
       </PanelSection>
 
-      <PanelSection icon={Pilcrow} title={copy.sections.body}>
-        <ControlRow label={copy.fields.font}>
-          <FontPicker
-            ariaLabel={copy.fields.font}
-            fontOptions={selectableFontOptions}
-            language={language}
-            onOpen={fontStatus === "idle" ? onLoadSystemFonts : undefined}
-            onValueChange={(value) => onChange("bodyFont", value)}
-            value={settings.bodyFont}
-          />
-        </ControlRow>
-        <ControlRow htmlFor="body-size" label={copy.fields.size}>
-          <div className="relative">
-            <Input
-              className="h-9 rounded-lg border-input bg-background px-3 pr-10 text-xs text-foreground focus-visible:ring-2 focus-visible:ring-blue-500/20"
-              id="body-size"
-              inputMode="numeric"
-              max={48}
-              min={6}
-              onChange={(event) => onChange("bodySize", Number(event.target.value))}
-              step={0.5}
-              type="number"
-              value={settings.bodySize}
-            />
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
-              px
-            </span>
-          </div>
-        </ControlRow>
-        <ControlRow htmlFor="line-spacing" label={copy.fields.lineSpacing}>
-          <Select
-            className="h-9 text-xs"
-            id="line-spacing"
-            onChange={(event) =>
-              onChange("lineHeight", Number(event.target.value))
-            }
-            value={settings.lineHeight}
-          >
-            {[1, 1.25, 1.35, 1.4, 1.5, 1.75, 2].map((spacing) => (
-              <option key={spacing} value={spacing}>
-                {spacing.toFixed(spacing === 1 || spacing === 2 ? 1 : 2)}
-              </option>
-            ))}
-          </Select>
-        </ControlRow>
-        <ControlRow htmlFor="first-line-indent" label={copy.fields.firstLineIndent}>
-          <Select
-            className="h-9 text-xs"
-            id="first-line-indent"
-            onChange={(event) =>
-              onChange("firstLineIndent", Number(event.target.value))
-            }
-            value={settings.firstLineIndent}
-          >
-            {[0, 1, 2, 4].map((indent) => (
-              <option key={indent} value={indent}>
-                {indent} {copy.values.characters}
-              </option>
-            ))}
-          </Select>
-        </ControlRow>
-        <ControlRow htmlFor="justify-body" label={copy.fields.justify}>
-          <div className="flex items-center justify-end gap-3">
-            <AlignJustify className="size-3.5 text-muted-foreground" />
-            <Switch
-              aria-label={copy.fields.justify}
-              checked={settings.justify}
-              id="justify-body"
-              onChange={(event) => onChange("justify", event.target.checked)}
-            />
-          </div>
-        </ControlRow>
-        <ControlRow htmlFor="quote-style" label={copy.fields.quoteStyle}>
-          <Switch
-            aria-label={copy.fields.quoteStyle}
-            checked={settings.quoteStyle}
-            className="ml-auto"
-            id="quote-style"
-            onChange={(event) => onChange("quoteStyle", event.target.checked)}
-          />
-        </ControlRow>
-      </PanelSection>
+      </>}
 
-      <PanelSection icon={Image} title={copy.sections.images}>
+      {activeGroup === "images" && <PanelSection icon={Image} title={copy.sections.images}>
         <ControlRow htmlFor="allow-images" label={copy.fields.allowImages}>
           <Switch
             aria-label={copy.fields.allowImages}
@@ -556,26 +582,21 @@ export function FormatPanel({
           />
         </ControlRow>
         {settings.allowImages && (
-          <ControlRow htmlFor="image-width" label={copy.fields.imageWidth}>
-            <div className="flex items-center gap-3">
-              <Slider
-                id="image-width"
-                max={100}
-                min={20}
-                onChange={(event) =>
-                  onChange("imageMaxWidth", Number(event.target.value))
-                }
-                value={settings.imageMaxWidth}
-              />
-              <span className="w-9 text-right text-[11px] tabular-nums text-muted-foreground">
-                {settings.imageMaxWidth}%
-              </span>
-            </div>
-          </ControlRow>
+          <>
+            <ControlRow htmlFor="image-width" label={copy.fields.imageWidth}>
+              <div className="flex items-center gap-3"><Slider id="image-width" max={100} min={20} onChange={(event) => onChange("imageMaxWidth", Number(event.target.value))} value={settings.imageMaxWidth} /><span className="w-9 text-right text-[11px] tabular-nums text-muted-foreground">{settings.imageMaxWidth}%</span></div>
+            </ControlRow>
+            <ControlRow htmlFor="image-radius" label={copy.fields.imageRadius}>
+              <div className="flex items-center gap-3"><Slider id="image-radius" max={24} min={0} onChange={(event) => onChange("imageRadius", Number(event.target.value))} value={settings.imageRadius} /><span className="w-9 text-right text-[11px] tabular-nums text-muted-foreground">{settings.imageRadius}px</span></div>
+            </ControlRow>
+            <ControlRow htmlFor="image-border" label={copy.fields.imageBorder}>
+              <Switch aria-label={copy.fields.imageBorder} checked={settings.imageBorder} className="ml-auto" id="image-border" onChange={(event) => onChange("imageBorder", event.target.checked)} />
+            </ControlRow>
+          </>
         )}
-      </PanelSection>
+      </PanelSection>}
 
-      <PanelSection icon={FileText} title={copy.sections.page}>
+      {activeGroup === "page" && <PanelSection icon={FileText} title={copy.sections.page}>
         <ControlRow htmlFor="paper-size" label={copy.fields.paperSize}>
           <Select
             className="h-9 text-xs"
@@ -664,9 +685,9 @@ export function FormatPanel({
             <option value="hidden">{copy.values.hidden}</option>
           </Select>
         </ControlRow>
-      </PanelSection>
+      </PanelSection>}
 
-      <PanelSection icon={Columns3} title={copy.sections.presentation}>
+      {activeGroup === "advanced" && <PanelSection icon={Columns3} title={copy.sections.presentation}>
         <ControlRow htmlFor="theme-color" label={copy.fields.themeColor}>
           <Input
             className="h-9 rounded-lg border-input bg-background px-2 text-xs"
@@ -729,6 +750,7 @@ export function FormatPanel({
                 fontOptions={selectableFontOptions}
                 language={language}
                 onOpen={fontStatus === "idle" ? onLoadSystemFonts : undefined}
+                size="default"
                 onValueChange={(value) => onChange("footerFont", value)}
                 value={settings.footerFont}
               />
@@ -825,30 +847,8 @@ export function FormatPanel({
             </div>
           </ControlRow>
         )}
-        <ControlRow htmlFor="image-radius" label={copy.fields.imageRadius}>
-          <div className="flex items-center gap-3">
-            <Slider
-              id="image-radius"
-              max={24}
-              min={0}
-              onChange={(event) => onChange("imageRadius", Number(event.target.value))}
-              value={settings.imageRadius}
-            />
-            <span className="w-9 text-right text-[11px] tabular-nums text-muted-foreground">
-              {settings.imageRadius}px
-            </span>
-          </div>
-        </ControlRow>
-        <ControlRow htmlFor="image-border" label={copy.fields.imageBorder}>
-          <Switch
-            aria-label={copy.fields.imageBorder}
-            checked={settings.imageBorder}
-            className="ml-auto"
-            id="image-border"
-            onChange={(event) => onChange("imageBorder", event.target.checked)}
-          />
-        </ControlRow>
       </PanelSection>
+      }
     </div>
   );
 }

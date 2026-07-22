@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from collections.abc import Generator
 
@@ -43,6 +44,7 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _upgrade_scaffold_book_table()
+    _repair_legacy_layout_sections()
     _upgrade_author_identity_model()
     _upgrade_author_class_field()
     _upgrade_article_content_fields()
@@ -83,8 +85,7 @@ def _upgrade_scaffold_book_table() -> None:
             )
         if "number_pool" not in columns:
             connection.exec_driver_sql(
-                "ALTER TABLE books ADD COLUMN number_pool JSON "
-                "NOT NULL DEFAULT '[]'"
+                "ALTER TABLE books ADD COLUMN number_pool JSON NOT NULL DEFAULT '[]'"
             )
         if "status" not in columns:
             connection.exec_driver_sql(
@@ -137,6 +138,10 @@ def _upgrade_scaffold_book_table() -> None:
                 connection.exec_driver_sql(
                     f"ALTER TABLE books ADD COLUMN {column} VARCHAR(255)"
                 )
+        if "appearance_metadata" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE books ADD COLUMN appearance_metadata JSON"
+            )
         boolean_columns = (
             "invite_enabled",
             "submission_enabled",
@@ -147,8 +152,7 @@ def _upgrade_scaffold_book_table() -> None:
         for column in boolean_columns:
             if column not in columns:
                 connection.exec_driver_sql(
-                    f"ALTER TABLE books ADD COLUMN {column} BOOLEAN "
-                    "NOT NULL DEFAULT 1"
+                    f"ALTER TABLE books ADD COLUMN {column} BOOLEAN NOT NULL DEFAULT 1"
                 )
         if "number_prefix" not in columns:
             connection.exec_driver_sql(
@@ -157,8 +161,7 @@ def _upgrade_scaffold_book_table() -> None:
             )
         if "number_digits" not in columns:
             connection.exec_driver_sql(
-                "ALTER TABLE books ADD COLUMN number_digits INTEGER "
-                "NOT NULL DEFAULT 3"
+                "ALTER TABLE books ADD COLUMN number_digits INTEGER NOT NULL DEFAULT 3"
             )
         for column in (
             "cover_file",
@@ -183,6 +186,68 @@ def _upgrade_scaffold_book_table() -> None:
             connection.exec_driver_sql(
                 "ALTER TABLE books ADD COLUMN layout_article_page_mode VARCHAR(20) "
                 "NOT NULL DEFAULT 'single'"
+            )
+
+
+def _repair_legacy_layout_sections() -> None:
+    """Make saved layouts created before fixed covers compatible with the contract."""
+    if not settings.database_url.startswith("sqlite"):
+        return
+
+    with engine.begin() as connection:
+        rows = connection.exec_driver_sql(
+            "SELECT id, cover_file, back_cover_file, layout_sections FROM books "
+            "WHERE layout_sections IS NOT NULL"
+        ).fetchall()
+        for book_id, cover_file, back_cover_file, raw_sections in rows:
+            try:
+                sections = json.loads(raw_sections) if isinstance(raw_sections, str) else raw_sections
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(sections, list):
+                continue
+
+            cover_sections = [
+                section
+                for section in sections
+                if isinstance(section, dict) and section.get("preset") == "cover"
+            ]
+            back_cover_sections = [
+                section
+                for section in sections
+                if isinstance(section, dict) and section.get("preset") == "back_cover"
+            ]
+            if len(cover_sections) == 1 and len(back_cover_sections) == 1:
+                continue
+
+            regular_sections = [
+                section
+                for section in sections
+                if not isinstance(section, dict)
+                or section.get("preset") not in {"cover", "back_cover"}
+            ]
+            cover_source = cover_sections[0] if cover_sections else {}
+            back_cover_source = back_cover_sections[0] if back_cover_sections else {}
+            normalized_sections = [
+                {
+                    "id": "cover",
+                    "kind": "page",
+                    "preset": "cover",
+                    "name": None,
+                    "file": cover_source.get("file") or cover_file,
+                },
+                *regular_sections,
+                {
+                    "id": "back_cover",
+                    "kind": "page",
+                    "preset": "back_cover",
+                    "name": None,
+                    "file": back_cover_source.get("file") or back_cover_file,
+                },
+            ]
+            connection.exec_driver_sql(
+                "UPDATE books SET layout_sections = ? WHERE id = ?",
+                (json.dumps(normalized_sections, ensure_ascii=False), book_id),
             )
 
 

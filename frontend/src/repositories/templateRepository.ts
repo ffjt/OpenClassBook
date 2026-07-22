@@ -11,6 +11,8 @@ import {
   type PageSize,
   type SubtitleMode,
   type Template,
+  type BookAppearance,
+  type CanvasObject,
 } from "@/types/template";
 
 export interface BookTemplate {
@@ -58,6 +60,69 @@ function readBoolean(value: unknown, fallback: boolean) {
   return typeof value === "boolean" ? value : fallback;
 }
 
+function readAppearance(value: unknown): BookAppearance {
+  const fallback = defaultTemplate.appearance;
+  if (!isRecord(value)) return fallback;
+  const front = isRecord(value.front_cover) ? value.front_cover : {};
+  const typography = isRecord(front.typography) ? front.typography : {};
+  const back = isRecord(value.back_cover) ? value.back_cover : {};
+  const spine = isRecord(value.spine) ? value.spine : {};
+  const area = (candidate: unknown, fallbackArea: BookAppearance["frontCover"]["typography"]["safeArea"]) => {
+    if (!isRecord(candidate)) return fallbackArea;
+    return { x: readNumber(candidate.x, fallbackArea.x), y: readNumber(candidate.y, fallbackArea.y), width: readNumber(candidate.width, fallbackArea.width), height: readNumber(candidate.height, fallbackArea.height) };
+  };
+  const slot = (candidate: unknown, fallbackSlot: BookAppearance["frontCover"]["typography"]["layout"]["title"]) => ({
+    ...area(candidate, fallbackSlot),
+    align: isRecord(candidate) ? readOption(candidate.align, ["left", "center", "right"], fallbackSlot.align) : fallbackSlot.align,
+    scale: isRecord(candidate) ? readNumber(candidate.scale, fallbackSlot.scale) : fallbackSlot.scale,
+  });
+  const canvasObjects: CanvasObject[] = Array.isArray(front.canvas_objects)
+    ? front.canvas_objects.flatMap((candidate, index) => {
+        if (!isRecord(candidate) || typeof candidate.id !== "string") return [];
+        const fallbackObject = fallback.frontCover.canvasObjects[index] ?? fallback.frontCover.canvasObjects[0];
+        return [{
+          ...fallbackObject,
+          id: candidate.id,
+          type: readOption(candidate.type, ["text", "image", "logo", "sticker", "qrcode", "line"], fallbackObject.type),
+          source: readOption(candidate.source, ["title", "subtitle", "author", "school", "publisher", "year", "logo", "summary", "copyright", "custom"] as const, fallbackObject.source ?? "custom") as CanvasObject["source"],
+          content: typeof candidate.content === "string" ? candidate.content : fallbackObject.content,
+          x: readNumber(candidate.x, fallbackObject.x), y: readNumber(candidate.y, fallbackObject.y), width: readNumber(candidate.width, fallbackObject.width), height: readNumber(candidate.height, fallbackObject.height), rotation: readNumber(candidate.rotation, 0), locked: readBoolean(candidate.locked, false), hidden: readBoolean(candidate.hidden, false),
+          fontFamily: readFont(candidate.font_family, fallbackObject.fontFamily ?? defaultTemplate.titleFont), fontSize: readNumber(candidate.font_size, fallbackObject.fontSize ?? 6), fontWeight: readNumber(candidate.font_weight, fallbackObject.fontWeight ?? 400), lineHeight: readNumber(candidate.line_height, fallbackObject.lineHeight ?? 1.25), letterSpacing: readNumber(candidate.letter_spacing, fallbackObject.letterSpacing ?? 0), align: readOption(candidate.align, ["left", "center", "right"] as const, fallbackObject.align ?? "center") as CanvasObject["align"], color: typeof candidate.color === "string" ? candidate.color : fallbackObject.color, opacity: readNumber(candidate.opacity, fallbackObject.opacity ?? 100), shadow: readBoolean(candidate.shadow, false), stroke: readBoolean(candidate.stroke, false), uppercase: readBoolean(candidate.uppercase, false),
+        }];
+      })
+    : fallback.frontCover.canvasObjects;
+  const backCanvasObjects = Array.isArray(back.canvas_objects)
+    ? back.canvas_objects as CanvasObject[]
+    : fallback.backCover.canvasObjects;
+  const normalizedBackCanvasObjects = backCanvasObjects.some((object) => object.type === "line")
+    ? backCanvasObjects
+    : [...backCanvasObjects, fallback.backCover.canvasObjects.find((object) => object.type === "line")!];
+  return {
+    frontCover: {
+      illustration: { assetKind: "cover" },
+      canvasObjects: canvasObjects.length ? canvasObjects : fallback.frontCover.canvasObjects,
+      typography: {
+        safeArea: area(typography.safe_area, fallback.frontCover.typography.safeArea),
+        heroArea: area(typography.hero_area, fallback.frontCover.typography.heroArea),
+        title: { ...fallback.frontCover.typography.title, ...(isRecord(typography.title) ? typography.title : {}) },
+        subtitle: { ...fallback.frontCover.typography.subtitle, ...(isRecord(typography.subtitle) ? typography.subtitle : {}) },
+        meta: { ...fallback.frontCover.typography.meta, ...(isRecord(typography.meta) ? typography.meta : {}) },
+        layout: {
+          title: slot(isRecord(typography.layout) ? typography.layout.title : undefined, fallback.frontCover.typography.layout.title),
+          subtitle: slot(isRecord(typography.layout) ? typography.layout.subtitle : undefined, fallback.frontCover.typography.layout.subtitle),
+          author: slot(isRecord(typography.layout) ? typography.layout.author : undefined, fallback.frontCover.typography.layout.author),
+          school: slot(isRecord(typography.layout) ? typography.layout.school : undefined, fallback.frontCover.typography.layout.school),
+          publisher: slot(isRecord(typography.layout) ? typography.layout.publisher : undefined, fallback.frontCover.typography.layout.publisher),
+          year: slot(isRecord(typography.layout) ? typography.layout.year : undefined, fallback.frontCover.typography.layout.year),
+        },
+      },
+      palette: { text: typeof (front.palette as Record<string, unknown>)?.text === "string" ? String((front.palette as Record<string, unknown>).text) : fallback.frontCover.palette.text, accent: typeof (front.palette as Record<string, unknown>)?.accent === "string" ? String((front.palette as Record<string, unknown>).accent) : fallback.frontCover.palette.accent },
+    },
+    spine: { ...fallback.spine, ...spine, canvasObjects: Array.isArray(spine.canvas_objects) ? spine.canvas_objects as CanvasObject[] : fallback.spine.canvasObjects, direction: spine.direction === "horizontal" ? "horizontal" : "vertical", alignment: readOption(spine.alignment, ["left", "center", "right"], fallback.spine.alignment), showAuthor: readBoolean(spine.show_author, fallback.spine.showAuthor), showSchool: readBoolean(spine.show_school, fallback.spine.showSchool), showLogo: readBoolean(spine.show_logo, fallback.spine.showLogo) },
+    backCover: { background: { assetKind: "cover_back" }, canvasObjects: normalizedBackCanvasObjects, summaryArea: area(back.summary_area, fallback.backCover.summaryArea), footerArea: area(back.footer_area, fallback.backCover.footerArea), summaryMaxLength: Math.min(600, Math.max(300, readNumber(back.summary_max_length, fallback.backCover.summaryMaxLength))), footer: typeof back.footer === "string" ? back.footer : fallback.backCover.footer },
+  };
+}
+
 function readOption<Value extends string | number>(
   value: unknown,
   options: readonly Value[],
@@ -80,6 +145,18 @@ export function deserializeTemplate(stored: BookTemplate): Template {
     typeof presentation.template_id === "string"
       ? presentation.template_id
       : defaultTemplate.templateId;
+  const storedTitleFont = readFont(title.font, defaultTemplate.titleFont);
+  const usesLegacySpringTitleFont =
+    templateId === "spring-blossom" &&
+    (title.font === undefined || storedTitleFont.family === "serif");
+  const titleFont = usesLegacySpringTitleFont
+    ? { ...defaultTemplate.titleFont }
+    : storedTitleFont;
+  const storedTitleSize = readNumber(title.size, defaultTemplate.titleSize);
+  const titleSize =
+    templateId === "spring-blossom" && storedTitleSize === 24
+      ? defaultTemplate.titleSize
+      : storedTitleSize;
 
   return {
     templateId,
@@ -149,8 +226,8 @@ export function deserializeTemplate(stored: BookTemplate): Template {
         ),
       ),
     ),
-    titleFont: readFont(title.font, defaultTemplate.titleFont),
-    titleSize: readNumber(title.size, defaultTemplate.titleSize),
+    titleFont,
+    titleSize,
     titleBold: readBoolean(title.bold, defaultTemplate.titleBold),
     titleAlign: readOption<Alignment>(
       title.align,
@@ -219,6 +296,7 @@ export function deserializeTemplate(stored: BookTemplate): Template {
       page.custom_height,
       defaultTemplate.customPageHeight,
     ),
+    appearance: readAppearance(presentation.appearance),
   };
 }
 
@@ -293,6 +371,35 @@ export const templateRepository = {
             quote_style: template.quoteStyle,
             title_surface_enabled: template.titleSurfaceEnabled,
             title_surface_opacity: template.titleSurfaceOpacity,
+            appearance: {
+              front_cover: {
+                illustration: template.appearance.frontCover.illustration,
+                canvas_objects: template.appearance.frontCover.canvasObjects.map((object) => ({
+                  ...object,
+                  font_family: object.fontFamily,
+                  font_size: object.fontSize,
+                  font_weight: object.fontWeight,
+                  line_height: object.lineHeight,
+                  letter_spacing: object.letterSpacing,
+                  fontFamily: undefined,
+                  fontSize: undefined,
+                  fontWeight: undefined,
+                  lineHeight: undefined,
+                  letterSpacing: undefined,
+                })),
+                typography: {
+                  safe_area: template.appearance.frontCover.typography.safeArea,
+                  hero_area: template.appearance.frontCover.typography.heroArea,
+                  title: template.appearance.frontCover.typography.title,
+                  subtitle: template.appearance.frontCover.typography.subtitle,
+                  meta: template.appearance.frontCover.typography.meta,
+                  layout: template.appearance.frontCover.typography.layout,
+                },
+                palette: template.appearance.frontCover.palette,
+              },
+              spine: { direction: template.appearance.spine.direction, alignment: template.appearance.spine.alignment, canvas_objects: template.appearance.spine.canvasObjects, show_author: template.appearance.spine.showAuthor, show_school: template.appearance.spine.showSchool, show_logo: template.appearance.spine.showLogo, fontScale: template.appearance.spine.fontScale, baseWidthMm: template.appearance.spine.baseWidthMm, mmPerPage: template.appearance.spine.mmPerPage },
+              back_cover: { background: template.appearance.backCover.background, canvas_objects: template.appearance.backCover.canvasObjects, summary_area: template.appearance.backCover.summaryArea, footer_area: template.appearance.backCover.footerArea, summary_max_length: template.appearance.backCover.summaryMaxLength, footer: template.appearance.backCover.footer },
+            },
           },
         },
       }),

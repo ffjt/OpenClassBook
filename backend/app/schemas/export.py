@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -48,13 +48,14 @@ class ExportTemplateInfo(BaseModel):
     footer_text: str = "OpenClassBook"
     footer_font: str = "sans-serif"
     footer_size: float = Field(default=8, ge=6, le=18)
-    chrome_surface_opacity: float = Field(default=70, ge=0, le=100)
+    chrome_surface_opacity: float = Field(default=15, ge=0, le=100)
     show_author_meta: bool = True
     image_radius: float = Field(default=0, ge=0, le=24)
     image_border: bool = True
     quote_style: bool = True
     title_surface_enabled: bool = False
     title_surface_opacity: float = Field(default=70, ge=0, le=100)
+    appearance: dict[str, Any] = Field(default_factory=dict)
 
 
 class ExportStats(BaseModel):

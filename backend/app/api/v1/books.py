@@ -17,6 +17,7 @@ from app.schemas.upload import UploadResponse, UploadType
 from app.services.upload import (
     FileTooLargeError,
     InvalidFileContentError,
+    ProtectedUploadError,
     UnsupportedFileFormatError,
 )
 
@@ -101,8 +102,18 @@ def delete_book_file(
     upload_type: UploadType,
     service: UploadServiceDep,
 ) -> Response:
-    if not service.delete(book_id, upload_type):
-        raise book_not_found()
+    try:
+        if not service.delete(book_id, upload_type):
+            raise book_not_found()
+    except ProtectedUploadError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "protected_upload",
+                "message": "Cover and back-cover files cannot be deleted. Replace them instead.",
+                "message_zh": "封面和封底文件不可删除，请使用替换功能。",
+            },
+        ) from error
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

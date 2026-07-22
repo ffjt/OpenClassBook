@@ -56,8 +56,7 @@ def generate_export(book_id: int, service: ExportServiceDep) -> ExportResponse:
             detail={
                 "code": "source_file_unreadable",
                 "message": (
-                    f"{error.label_en} file cannot be parsed. "
-                    "Replace it before export."
+                    f"{error.label_en} file cannot be parsed. Replace it before export."
                 ),
                 "message_zh": f"{error.label_zh}文件无法解析，请替换后再导出。",
             },
@@ -65,6 +64,46 @@ def generate_export(book_id: int, service: ExportServiceDep) -> ExportResponse:
     if result is None:
         raise book_not_found()
     return result
+
+
+@router.post(
+    "/books/{book_id}/appearance-export",
+    response_model=ExportResponse,
+    summary="Generate the exterior cover spread PDF / 生成封面展开图 PDF",
+)
+def generate_appearance_export(
+    book_id: int, service: ExportServiceDep
+) -> ExportResponse:
+    result = service.generate_appearance(
+        book_id, f"/api/v1/books/{book_id}/appearance-export"
+    )
+    if result is None:
+        raise book_not_found()
+    return result
+
+
+@router.get(
+    "/books/{book_id}/appearance-export/{task_id}/download",
+    response_class=FileResponse,
+    summary="Download the exterior cover spread PDF / 下载封面展开图 PDF",
+)
+def download_appearance_export(
+    book_id: int, task_id: str, service: ExportServiceDep
+) -> FileResponse:
+    artifact = service.get_appearance_artifact(book_id, task_id)
+    if artifact is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "message": "Appearance PDF not found",
+                "message_zh": "未找到封面展开图 PDF",
+            },
+        )
+    return FileResponse(
+        path=Path(artifact),
+        media_type="application/pdf",
+        filename=f"openclassbook-{book_id}-cover-spread.pdf",
+    )
 
 
 @router.get(

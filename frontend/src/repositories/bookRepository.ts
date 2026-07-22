@@ -36,6 +36,7 @@ export interface Book {
   owner_name: string;
   school: string | null;
   publisher: string | null;
+  appearance_metadata: Record<string, string> | null;
   invite_code: string;
   invite_enabled: boolean;
   submission_enabled: boolean;
@@ -92,6 +93,7 @@ export type BookUpdateInput = Partial<
     | "owner_name"
     | "school"
     | "publisher"
+    | "appearance_metadata"
     | "submission_enabled"
     | "submission_deadline"
     | "allow_multiple_articles"

@@ -14,6 +14,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfgen import canvas
 from reportlab.platypus import (
     BaseDocTemplate,
     Flowable,
@@ -37,6 +38,192 @@ B5 = (176 * mm, 250 * mm)
 TEMPLATE_ASSET_ROOT = (
     Path(__file__).resolve().parents[3] / "frontend" / "public" / "templates"
 )
+
+
+def _number(value: object, fallback: float) -> float:
+    return float(value) if isinstance(value, int | float) else fallback
+
+
+def _color(value: object, fallback: str) -> str:
+    if isinstance(value, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", value):
+        return value
+    return fallback
+
+
+def _appearance_area(
+    value: object, fallback: tuple[float, float, float, float]
+) -> tuple[float, float, float, float]:
+    if not isinstance(value, dict):
+        return fallback
+    return tuple(
+        _number(value.get(key), fallback[index])
+        for index, key in enumerate(("x", "y", "width", "height"))
+    )  # type: ignore[return-value]
+
+
+def _area_points(
+    area: tuple[float, float, float, float],
+    page_width: float,
+    page_height: float,
+    x_offset: float,
+) -> tuple[float, float, float, float]:
+    x, top, width, height = area
+    resolved_width = page_width * width / 100
+    resolved_height = page_height * height / 100
+    return (
+        x_offset + page_width * x / 100,
+        page_height - page_height * top / 100 - resolved_height,
+        resolved_width,
+        resolved_height,
+    )
+
+
+def _typography_safe_area(
+    typography: dict[str, object],
+) -> tuple[float, float, float, float]:
+    safe = _appearance_area(typography.get("safe_area"), (10, 14, 80, 70))
+    hero = _appearance_area(typography.get("hero_area"), (8, 42, 84, 34))
+    if safe[1] < hero[1] < safe[1] + safe[3]:
+        return safe[0], safe[1], safe[2], max(12, hero[1] - safe[1] - 3)
+    return safe
+
+
+def _draw_aligned(
+    target: canvas.Canvas, text: str, x: float, y: float, width: float, alignment: str
+) -> None:
+    if alignment == "left":
+        target.drawString(x, y, text)
+    elif alignment == "right":
+        target.drawRightString(x + width, y, text)
+    else:
+        target.drawCentredString(x + width / 2, y, text)
+
+
+def _draw_canvas_text_objects(
+    target: canvas.Canvas,
+    objects: list[object],
+    book: Book,
+    page_width: float,
+    page_height: float,
+    x_offset: float,
+    cover_font: str,
+    body_font: str,
+    fallback_color: str,
+) -> None:
+    """Render persisted publishing-canvas text layers without reinterpreting slots."""
+    source_text = {
+        "title": book.title,
+        "subtitle": book.subtitle or "",
+        "author": book.owner_name,
+        "school": book.school or "",
+        "publisher": book.publisher or "",
+        "year": str(book.created_at.year),
+        "logo": "OpenClassBook",
+        "summary": book.description or "",
+        "copyright": "",
+    }
+    for item in objects:
+        if not isinstance(item, dict) or item.get("hidden") is True:
+            continue
+        source = str(item.get("source", "custom"))
+        content = str(item.get("content", "")) if source == "custom" else source_text.get(source, "")
+        if not content:
+            continue
+        x, y, width, height = _area_points(
+            _appearance_area(item, (0, 0, 20, 5)), page_width, page_height, x_offset
+        )
+        font_size = max(6, _number(item.get("font_size"), 6) * 3)
+        font_name = cover_font if source in {"title", "subtitle"} else body_font
+        alignment = str(item.get("align", "center"))
+        color = _color(item.get("color"), fallback_color)
+        opacity = min(1, max(0, _number(item.get("opacity"), 100) / 100))
+        leading = font_size * max(0.8, _number(item.get("line_height"), 1.25))
+        target.saveState()
+        _set_fill_color_alpha(target, colors.HexColor(color), opacity)
+        target.setFont(font_name, font_size)
+        if item.get("uppercase") is True:
+            content = content.upper()
+        rotation = _number(item.get("rotation"), 0)
+        if rotation:
+            target.translate(x + width / 2, y + height / 2)
+            target.rotate(-rotation)
+            x, y = -width / 2, -height / 2
+        lines: list[str] = []
+        for paragraph in content.split("\n"):
+            line = ""
+            for character in paragraph:
+                candidate = line + character
+                if line and target.stringWidth(candidate, font_name, font_size) > width:
+                    lines.append(line)
+                    line = character
+                else:
+                    line = candidate
+            lines.append(line)
+        for index, line in enumerate(lines):
+            baseline = y + height - font_size - index * leading
+            if baseline < y:
+                break
+            _draw_aligned(target, line, x, baseline, width, alignment)
+        target.restoreState()
+
+
+def _fit_font_size(
+    target: canvas.Canvas,
+    text: str,
+    font_name: str,
+    width: float,
+    maximum: float,
+    minimum: float,
+) -> float:
+    for size in range(int(maximum), int(minimum) - 1, -1):
+        if target.stringWidth(text, font_name, size) <= width:
+            return float(size)
+    return minimum
+
+
+def _draw_wrapped(
+    target: canvas.Canvas,
+    text: str,
+    font_name: str,
+    font_size: float,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    color: str,
+) -> None:
+    target.setFillColor(colors.HexColor(color))
+    target.setFont(font_name, font_size)
+    words = list(text)
+    lines: list[str] = []
+    line = ""
+    for word in words:
+        candidate = line + word
+        if line and target.stringWidth(candidate, font_name, font_size) > width:
+            lines.append(line)
+            line = word
+        else:
+            line = candidate
+    if line:
+        lines.append(line)
+    leading = font_size * 1.55
+    max_lines = max(1, int(height // leading))
+    for index, line_value in enumerate(lines[:max_lines]):
+        target.drawString(x, y + height - font_size - index * leading, line_value)
+
+
+def _appearance_slot(
+    layout: dict[str, object],
+    name: str,
+    fallback: tuple[float, float, float, float, str, float],
+) -> tuple[tuple[float, float, float, float], str, float]:
+    value = layout.get(name)
+    if not isinstance(value, dict):
+        return fallback[:4], fallback[4], fallback[5]
+    area = _appearance_area(value, fallback[:4])
+    alignment = str(value.get("align", fallback[4]))
+    scale = _number(value.get("scale"), fallback[5])
+    return area, alignment, scale
 
 
 def _set_fill_color_alpha(
@@ -346,6 +533,7 @@ class PdfRenderer:
         destination.parent.mkdir(parents=True, exist_ok=True)
         body_font, body_bold_font = _register_fonts(document.template.font)
         title_font, title_bold_font = _register_fonts(document.template.title_font)
+        cover_font = _register_cover_font(document.template.template_id, title_font)
         footer_font, _ = _register_fonts(document.template.footer_font)
         _, chrome_bold_font = _register_fonts("sans-serif")
         page_size = _page_size(document.template)
@@ -452,6 +640,7 @@ class PdfRenderer:
             body_bold_font,
             title_font,
             title_bold_font,
+            cover_font,
             size_scale,
         )
         story: list[Any] = []
@@ -565,6 +754,190 @@ class PdfRenderer:
             )
         return page_count
 
+    def render_appearance_spread(
+        self,
+        book: Book,
+        template: ExportTemplateInfo,
+        destination: Path,
+        *,
+        estimated_page_count: int,
+    ) -> int:
+        """Render a single press-ready back/spine/front PDF using persisted metadata."""
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        page_width, page_height = _page_size(template)
+        appearance = template.appearance
+        spine = appearance.get("spine", {}) if isinstance(appearance, dict) else {}
+        base_width = _number(spine.get("baseWidthMm"), 2)
+        mm_per_page = _number(spine.get("mmPerPage"), 0.0085)
+        spine_mm = max(
+            base_width, base_width + max(0, estimated_page_count - 40) * mm_per_page
+        )
+        spine_width = spine_mm * mm
+        spread_width = page_width * 2 + spine_width
+        pdf = canvas.Canvas(str(destination), pagesize=(spread_width, page_height))
+        front_path = _template_asset_path(template.template_id, "cover")
+        back_path = _template_asset_path(template.template_id, "cover_back")
+        for path, x in ((back_path, 0), (front_path, page_width + spine_width)):
+            if path.is_file():
+                pdf.drawImage(
+                    str(path),
+                    x,
+                    0,
+                    width=page_width,
+                    height=page_height,
+                    preserveAspectRatio=False,
+                    mask="auto",
+                )
+            else:
+                pdf.setFillColor(colors.HexColor(template.background_color))
+                pdf.rect(x, 0, page_width, page_height, stroke=0, fill=1)
+        pdf.setFillColor(colors.HexColor(template.accent_color))
+        pdf.rect(page_width, 0, spine_width, page_height, stroke=0, fill=1)
+        title_font, _ = _register_fonts(template.title_font)
+        cover_font = _register_cover_font(template.template_id, title_font)
+        body_font, _ = _register_fonts(template.font)
+        front = (
+            appearance.get("front_cover", {}) if isinstance(appearance, dict) else {}
+        )
+        typography = front.get("typography", {}) if isinstance(front, dict) else {}
+        layout = typography.get("layout", {}) if isinstance(typography, dict) else {}
+        if not isinstance(layout, dict):
+            layout = {}
+        palette = front.get("palette", {}) if isinstance(front, dict) else {}
+        text_color = _color(
+            palette.get("text") if isinstance(palette, dict) else None,
+            template.theme_color,
+        )
+        pdf.setFillColor(colors.HexColor(text_color))
+        fixed_slots = {
+            "title": (book.title, cover_font, 42, (37, 42, 48, 10, "center", 1.0)),
+            "subtitle": (
+                book.subtitle or "",
+                cover_font,
+                19,
+                (39, 55.5, 44, 5, "center", 0.58),
+            ),
+            "author": (book.owner_name, body_font, 12, (40, 65, 42, 4, "center", 0.36)),
+            "school": (
+                book.school or "",
+                body_font,
+                12,
+                (40, 70, 42, 3.5, "center", 0.28),
+            ),
+            "publisher": (
+                book.publisher or "",
+                body_font,
+                12,
+                (40, 76, 42, 3, "center", 0.24),
+            ),
+            "year": (
+                str(book.created_at.year),
+                body_font,
+                12,
+                (40, 80, 42, 3, "center", 0.22),
+            ),
+        }
+        canvas_objects = front.get("canvas_objects", []) if isinstance(front, dict) else []
+        if isinstance(canvas_objects, list) and canvas_objects:
+            _draw_canvas_text_objects(
+                pdf,
+                canvas_objects,
+                book,
+                page_width,
+                page_height,
+                page_width + spine_width,
+                cover_font,
+                body_font,
+                text_color,
+            )
+        else:
+            for slot_name, (content, font_name, base_size, fallback) in fixed_slots.items():
+                if not content:
+                    continue
+                area, alignment, scale = _appearance_slot(layout, slot_name, fallback)
+                x, y, width, height = _area_points(
+                    area, page_width, page_height, page_width + spine_width
+                )
+                pdf.setFont(font_name, base_size * scale)
+                _draw_aligned(
+                    pdf, content, x, y + height - base_size * scale, width, alignment
+                )
+        back = appearance.get("back_cover", {}) if isinstance(appearance, dict) else {}
+        summary_area = (
+            _appearance_area(back.get("summary_area"), (13, 25, 74, 42))
+            if isinstance(back, dict)
+            else (13, 25, 74, 42)
+        )
+        bx, by, bwidth, bheight = _area_points(summary_area, page_width, page_height, 0)
+        summary = (book.description or "")[
+            : int(
+                _number(
+                    back.get("summary_max_length") if isinstance(back, dict) else None,
+                    600,
+                )
+            )
+        ]
+        back_objects = back.get("canvas_objects", []) if isinstance(back, dict) else []
+        if isinstance(back_objects, list) and back_objects:
+            _draw_canvas_text_objects(
+                pdf, back_objects, book, page_width, page_height, 0,
+                cover_font, body_font, template.theme_color,
+            )
+        else:
+            _draw_wrapped(
+                pdf, summary, body_font, 10, bx, by, bwidth, bheight, template.theme_color
+            )
+        footer_area = (
+            _appearance_area(back.get("footer_area"), (13, 82, 74, 10))
+            if isinstance(back, dict)
+            else (13, 82, 74, 10)
+        )
+        fx, fy, fwidth, fheight = _area_points(footer_area, page_width, page_height, 0)
+        pdf.setFillColor(colors.HexColor(template.theme_color))
+        pdf.setFont(body_font, 8)
+        pdf.drawString(
+            fx,
+            fy + min(fheight, 8),
+            str(
+                back.get("footer", "OpenClassBook")
+                if isinstance(back, dict)
+                else "OpenClassBook"
+            ),
+        )
+        spine_objects = spine.get("canvas_objects", []) if isinstance(spine, dict) else []
+        if isinstance(spine_objects, list) and spine_objects:
+            _draw_canvas_text_objects(
+                pdf, spine_objects, book, spine_width, page_height, page_width,
+                title_font, body_font, "#ffffff",
+            )
+        else:
+            spine_text = " · ".join(
+            value
+            for value in (
+                book.title,
+                book.owner_name if bool(spine.get("show_author", True)) else "",
+                book.school if bool(spine.get("show_school", False)) else "",
+                "OpenClassBook" if bool(spine.get("show_logo", True)) else "",
+            )
+            if value
+        )
+            pdf.setFillColor(colors.white)
+            spine_size = max(
+                5, min(10, spine_width * 0.6 * _number(spine.get("fontScale"), 1))
+            )
+            pdf.setFont(title_font, spine_size)
+            if spine.get("direction", "vertical") == "horizontal":
+                _draw_aligned(pdf, spine_text, page_width, page_height / 2, spine_width, str(spine.get("alignment", "center")))
+            else:
+                pdf.saveState()
+                pdf.translate(page_width + spine_width / 2, page_height * 0.08)
+                pdf.rotate(90)
+                _draw_aligned(pdf, spine_text, 0, 0, page_height * 0.84, str(spine.get("alignment", "center")))
+                pdf.restoreState()
+        pdf.showPage()
+        pdf.save()
+        return 1
+
     def _append_page_section(
         self,
         story: list[Any],
@@ -586,22 +959,33 @@ class PdfRenderer:
             )
         )
         if preset == "cover":
+            cover_credit = (
+                document.book.publisher
+                or document.book.school
+                or document.book.owner_name
+            )
             story.extend(
                 [
-                    Spacer(1, 58 * mm),
+                    Spacer(1, _cover_title_offset(document.template.template_id) * mm),
                     Paragraph(escape(document.book.title), styles["cover_title"]),
-                    Spacer(1, 12 * mm),
-                    Paragraph(
-                        escape(document.book.description or "OpenClassBook"),
-                        styles["cover_description"],
-                    ),
-                    Spacer(1, 45 * mm),
-                    Paragraph(
-                        escape(document.book.owner_name),
-                        styles["cover_owner"],
-                    ),
                 ]
             )
+            if document.book.subtitle:
+                story.extend(
+                    [
+                        Spacer(1, 7 * mm),
+                        Paragraph(
+                            escape(document.book.subtitle), styles["cover_subtitle"]
+                        ),
+                    ]
+                )
+            if cover_credit:
+                story.extend(
+                    [
+                        Spacer(1, 42 * mm),
+                        Paragraph(escape(cover_credit), styles["cover_owner"]),
+                    ]
+                )
             return
         if preset == "back_cover":
             story.extend(
@@ -735,10 +1119,7 @@ class PdfRenderer:
                 opening.append(
                     Paragraph(escape(article.title), styles["article_title"])
                 )
-            if (
-                subtitle
-                and not document.template.title_surface_enabled
-            ):
+            if subtitle and not document.template.title_surface_enabled:
                 opening.extend(
                     [
                         Spacer(1, 4 * size_scale),
@@ -783,6 +1164,7 @@ def _styles(
     body_bold_font: str,
     title_font: str,
     title_bold_font: str,
+    cover_font: str,
     size_scale: float,
 ) -> dict[str, ParagraphStyle]:
     body_size = template.font_size * size_scale
@@ -794,7 +1176,7 @@ def _styles(
     return {
         "cover_title": ParagraphStyle(
             "CoverTitle",
-            fontName=title_bold_font if template.title_bold else title_font,
+            fontName=cover_font,
             fontSize=max(template.title_size * 1.35, 28),
             leading=max(template.title_size * 1.7, 36),
             alignment=TA_CENTER,
@@ -803,6 +1185,15 @@ def _styles(
         ),
         "cover_description": ParagraphStyle(
             "CoverDescription",
+            fontName=body_font,
+            fontSize=max(template.font_size, 11),
+            leading=max(template.font_size * template.line_height, 17),
+            alignment=TA_CENTER,
+            textColor=theme_color,
+            wordWrap="CJK",
+        ),
+        "cover_subtitle": ParagraphStyle(
+            "CoverSubtitle",
             fontName=body_font,
             fontSize=max(template.font_size, 11),
             leading=max(template.font_size * template.line_height, 17),
@@ -910,14 +1301,32 @@ def _template_asset_path(template_id: str, asset_kind: str) -> Path:
     safe_template_id = (
         template_id if re.fullmatch(r"[a-z0-9-]+", template_id) else "spring-blossom"
     )
-    safe_asset_kind = asset_kind if asset_kind in {
-        "cover",
-        "cover_back",
-        "chapter",
-        "article_background",
-        "ending",
-    } else "article_background"
+    safe_asset_kind = (
+        asset_kind
+        if asset_kind
+        in {
+            "cover",
+            "cover_back",
+            "chapter",
+            "article_background",
+            "ending",
+        }
+        else "article_background"
+    )
     return TEMPLATE_ASSET_ROOT / safe_template_id / f"{safe_asset_kind}.png"
+
+
+def _cover_title_offset(template_id: str) -> float:
+    """Keep PDF cover typography in the same naturally lit safe zone as Layout."""
+    if template_id in {
+        "autumn-ginkgo",
+        "campus-morning",
+        "graduation",
+        "winter-sun",
+        "youth-dream",
+    }:
+        return 42
+    return 58
 
 
 def _page_size(template: ExportTemplateInfo) -> tuple[float, float]:
@@ -945,14 +1354,34 @@ def _preview_size_scale(template: ExportTemplateInfo, page_width: float) -> floa
 
 
 def _register_fonts(requested_font: str) -> tuple[str, str]:
-    key = "sans" if "sans" in requested_font.lower() else "serif"
+    literary = requested_font.lower() == "literary-serif"
+    key = (
+        "literary"
+        if literary
+        else "sans"
+        if "sans" in requested_font.lower()
+        else "serif"
+    )
     normal_name = f"OCB-{key}-Regular"
     bold_name = f"OCB-{key}-Bold"
     if normal_name in pdfmetrics.getRegisteredFontNames():
         return normal_name, bold_name
 
     font_root = Path("C:/Windows/Fonts")
-    if key == "sans":
+    if key == "literary":
+        normal_candidates = [
+            font_root / "LXGWWenKaiLite-Regular.ttf",
+            font_root / "LXGWWenKai-Regular.ttf",
+            font_root / "NotoSerifSC-VF.ttf",
+            font_root / "simsun.ttc",
+        ]
+        bold_candidates = [
+            font_root / "LXGWWenKaiLite-Bold.ttf",
+            font_root / "LXGWWenKai-Bold.ttf",
+            font_root / "NotoSerifSC-VF.ttf",
+            font_root / "simsunb.ttf",
+        ]
+    elif key == "sans":
         normal_candidates = [font_root / "msyh.ttc", font_root / "simhei.ttf"]
         bold_candidates = [font_root / "msyhbd.ttc", font_root / "simhei.ttf"]
     else:
@@ -970,6 +1399,43 @@ def _register_fonts(requested_font: str) -> tuple[str, str]:
     if "STSong-Light" not in pdfmetrics.getRegisteredFontNames():
         pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
     return "STSong-Light", "STSong-Light"
+
+
+def _register_cover_font(template_id: str, fallback: str) -> str:
+    calligraphy_templates = {
+        "spring-blossom",
+        "rice-paper",
+        "new-chinese",
+        "misty-mountain",
+    }
+    lively_templates = {
+        "graduation",
+        "campus-morning",
+        "youth-dream",
+        "ocean-fairytale",
+    }
+    if template_id == "spring-blossom":
+        font_name = "OCB-Cover-NotoSerifSC"
+        font_path = _first_cjk_font(
+            [
+                Path("C:/Windows/Fonts/NotoSerifSC-VF.ttf"),
+                Path("C:/Windows/Fonts/FZSTK.TTF"),
+            ]
+        )
+    elif template_id in calligraphy_templates:
+        font_name = "OCB-Cover-ShuTi"
+        font_path = _first_cjk_font([Path("C:/Windows/Fonts/FZSTK.TTF")])
+    elif template_id in lively_templates:
+        font_name = "OCB-Cover-YouYuan"
+        font_path = _first_cjk_font([Path("C:/Windows/Fonts/FZYTK.TTF")])
+    else:
+        return fallback
+    if font_name in pdfmetrics.getRegisteredFontNames():
+        return font_name
+    if font_path is None:
+        return fallback
+    pdfmetrics.registerFont(TTFont(font_name, font_path))
+    return font_name
 
 
 def _first_cjk_font(candidates: list[Path]) -> Path | None:

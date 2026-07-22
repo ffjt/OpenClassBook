@@ -45,7 +45,7 @@ describe("template title surface", () => {
 
 describe("template page chrome surface", () => {
   it("uses the compatible default and preserves a saved opacity", () => {
-    expect(deserializeTemplate(storedTemplate({})).chromeSurfaceOpacity).toBe(70);
+    expect(deserializeTemplate(storedTemplate({})).chromeSurfaceOpacity).toBe(15);
     expect(
       deserializeTemplate(
         storedTemplate({ chrome_surface_opacity: 45 }),
