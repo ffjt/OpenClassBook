@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
+import { AccountMenu } from "@/components/account-menu";
 import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
@@ -184,6 +185,7 @@ export function MyBooksPage({
           <div className="flex items-center gap-2">
             <LanguageToggle language={language} onToggle={onToggleLanguage} />
             <ThemeToggle language={language} />
+            <AccountMenu language={language} onNavigate={onNavigate} />
           </div>
         </div>
       </header>

@@ -35,6 +35,7 @@ def test_owner_registration_login_refresh_and_logout(
     verification_provider: CapturingEmailProvider,
 ) -> None:
     email = "owner@example.com"
+    username = "QA 中文用户名"
     code_response = client.post("/api/auth/verification-code", json={"email": email})
     assert code_response.status_code == 202
     assert verification_provider.codes[email].isdigit()
@@ -45,12 +46,13 @@ def test_owner_registration_login_refresh_and_logout(
             "email": email,
             "code": verification_provider.codes[email],
             "password": "secure-owner-password",
-            "username": "Avery",
+            "username": username,
         },
     )
     assert registration.status_code == 201
     payload = registration.json()
     assert payload["user"]["email"] == email
+    assert payload["user"]["username"] == username
     assert payload["access_token"]
     assert payload["refresh_token"]
 
@@ -62,7 +64,7 @@ def test_owner_registration_login_refresh_and_logout(
             select(Workspace).where(Workspace.owner_id == user.id)
         )
         assert workspace is not None
-        assert workspace.name == "Avery's Workspace"
+        assert workspace.name == f"{username}'s Workspace"
         code_record = session.scalar(
             select(EmailVerificationCode).where(EmailVerificationCode.email == email)
         )
@@ -75,7 +77,7 @@ def test_owner_registration_login_refresh_and_logout(
         headers={"Authorization": f"Bearer {payload['access_token']}"},
     )
     assert current_user.status_code == 200
-    assert current_user.json()["username"] == "Avery"
+    assert current_user.json()["username"] == username
 
     login = client.post(
         "/api/auth/login",

@@ -1,5 +1,4 @@
-import { UserRound } from "lucide-react";
-
+import { AccountMenu } from "@/components/account-menu";
 import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { DashboardSection } from "@/components/dashboard/dashboard-sidebar";
@@ -8,6 +7,7 @@ import type { Language } from "@/lib/i18n";
 interface DashboardHeaderProps {
   activeSection: DashboardSection;
   language: Language;
+  onNavigate: (path: string) => void;
   onToggleLanguage: () => void;
   ownerName?: string;
 }
@@ -25,17 +25,10 @@ const sectionTitles: Record<DashboardSection, Record<Language, string>> = {
 export function DashboardHeader({
   activeSection,
   language,
+  onNavigate,
   onToggleLanguage,
   ownerName,
 }: DashboardHeaderProps) {
-  const ownerInitials = ownerName
-    ?.trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/90 px-5 backdrop-blur-xl sm:px-7 lg:px-10">
       <div className="flex items-center gap-2.5">
@@ -54,13 +47,7 @@ export function DashboardHeader({
       <div className="flex items-center gap-2">
         <LanguageToggle language={language} onToggle={onToggleLanguage} />
         <ThemeToggle language={language} />
-        <div
-          aria-label={ownerName ? `${language === "zh" ? "负责人" : "Owner"}: ${ownerName}` : undefined}
-          className="flex size-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-xs font-semibold text-white shadow-sm ring-2 ring-white/10"
-          role="img"
-        >
-          {ownerInitials || <UserRound className="size-4" />}
-        </div>
+        <AccountMenu fallbackName={ownerName} language={language} onNavigate={onNavigate} />
       </div>
     </header>
   );

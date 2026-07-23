@@ -41,6 +41,7 @@ export function DashboardLayout({
         <DashboardHeader
           activeSection={activeSection}
           language={language}
+          onNavigate={onNavigate}
           onToggleLanguage={onToggleLanguage}
           ownerName={ownerName}
         />
