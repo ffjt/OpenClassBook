@@ -34,7 +34,6 @@ NumberPrefix = Annotated[
 InviteCode = Annotated[str, StringConstraints(pattern=r"^OCB-[A-Z0-9]{6}$")]
 NumberMode = Literal["none", "automatic", "existing"]
 ArticlePageMode = Literal["single", "flow"]
-ExistingNumberMode = Literal["claim", "import"]
 ClassCollectionMode = Literal["none", "fixed", "template"]
 ClassValueStyle = Literal["arabic", "chinese"]
 BookStatus = Literal["collecting", "reviewing", "published"]
@@ -62,11 +61,6 @@ LayoutSectionName = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=80),
 ]
-ArticleNumber = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, min_length=1, max_length=50),
-]
-NUMBER_POOL_LIMIT = 2_000
 CLASS_VALUE_PLACEHOLDER = "{value}"
 
 
@@ -192,30 +186,12 @@ def _validate_article_order(article_ids: list[int] | None) -> list[int] | None:
 
 def validate_numbering_configuration(
     number_mode: NumberMode,
-    existing_number_mode: ExistingNumberMode | None,
-    number_pool: list[str],
+    claim_number_start: int,
+    claim_number_end: int,
 ) -> None:
-    if len(number_pool) != len(set(number_pool)):
-        raise ValueError("Article numbers must be unique / 文章编号不能重复")
-    if number_mode != "existing" and existing_number_mode is not None:
+    if claim_number_start > claim_number_end:
         raise ValueError(
-            "Only existing-number books can choose a claim method / "
-            "只有已有编号模式可以选择认领方式"
-        )
-    if number_mode == "existing" and existing_number_mode is None:
-        raise ValueError(
-            "Existing-number books require a claim method / "
-            "已有编号模式必须选择认领方式"
-        )
-    if number_mode != "existing" and number_pool:
-        raise ValueError(
-            "Only existing-number books can define an article-number pool / "
-            "只有已有编号模式可以设置编号池"
-        )
-    if existing_number_mode == "claim" and number_pool:
-        raise ValueError(
-            "Free claiming cannot define an article-number pool / "
-            "自由认领模式不能设置编号池"
+            "Claim-number start must not exceed the end / 认领编号起始值不能大于结束值"
         )
 
 
@@ -296,14 +272,17 @@ class BookBase(BaseModel):
         default="none",
         description="Article numbering mode / 文章编号模式",
     )
-    existing_number_mode: ExistingNumberMode | None = Field(
-        default=None,
-        description="Existing-number claim method / 已有编号认领方式",
+    claim_number_start: int = Field(
+        default=1,
+        ge=1,
+        le=999_999,
+        description="First claimable article number / 可认领文章编号起始值",
     )
-    number_pool: list[ArticleNumber] = Field(
-        default_factory=list,
-        max_length=NUMBER_POOL_LIMIT,
-        description="Claimable article numbers / 可认领的文章编号",
+    claim_number_end: int = Field(
+        default=100,
+        ge=1,
+        le=999_999,
+        description="Last claimable article number / 可认领文章编号结束值",
     )
     number_prefix: NumberPrefix = Field(
         default="",
@@ -366,8 +345,8 @@ class BookCreate(BookBase):
     def validate_numbering(self) -> "BookCreate":
         validate_numbering_configuration(
             self.number_mode,
-            self.existing_number_mode,
-            self.number_pool,
+            self.claim_number_start,
+            self.claim_number_end,
         )
         validate_class_collection_configuration(
             self.class_collection_mode,
@@ -408,15 +387,8 @@ class BookUpdate(BaseModel):
         default=None,
         description="Article numbering mode / 文章编号模式",
     )
-    existing_number_mode: ExistingNumberMode | None = Field(
-        default=None,
-        description="Existing-number claim method / 已有编号认领方式",
-    )
-    number_pool: list[ArticleNumber] | None = Field(
-        default=None,
-        max_length=NUMBER_POOL_LIMIT,
-        description="Claimable article numbers / 可认领的文章编号",
-    )
+    claim_number_start: int | None = Field(default=None, ge=1, le=999_999)
+    claim_number_end: int | None = Field(default=None, ge=1, le=999_999)
     number_prefix: NumberPrefix | None = Field(default=None)
     number_digits: int | None = Field(default=None, ge=1, le=8)
     status: BookStatus | None = Field(
@@ -449,7 +421,8 @@ class BookUpdate(BaseModel):
         "class_collection_mode",
         "invite_enabled",
         "number_mode",
-        "number_pool",
+        "claim_number_start",
+        "claim_number_end",
         "number_prefix",
         "number_digits",
         "status",

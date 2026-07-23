@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
+from app.api.v1.auth import router as auth_router
 from app.core.config import settings
 from app.db.database import init_db
 from app.schemas.common import HealthResponse, MessageResponse
@@ -38,6 +39,9 @@ app.add_middleware(
     ],
 )
 app.include_router(api_router, prefix=settings.api_v1_prefix)
+# Authentication is available at the product path as well as the current v1 API
+# prefix, so existing clients can adopt it without a version-path mismatch.
+app.include_router(auth_router, prefix="/api")
 
 
 @app.get("/", response_model=MessageResponse, tags=["System / 系统"])

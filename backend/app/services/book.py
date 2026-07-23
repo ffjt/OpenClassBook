@@ -44,28 +44,11 @@ class BookService:
         current = self.repository.get(book_id)
         if current is None:
             return None
-        if "number_mode" in changes:
-            if changes["number_mode"] == "existing":
-                changes.setdefault(
-                    "existing_number_mode",
-                    current.existing_number_mode
-                    if current.number_mode == "existing"
-                    else "claim",
-                )
-            else:
-                changes.setdefault("existing_number_mode", None)
-                changes.setdefault("number_pool", [])
-        if changes.get("existing_number_mode") == "claim":
-            changes.setdefault("number_pool", [])
         number_mode = changes.get("number_mode", current.number_mode)
-        existing_number_mode = changes.get(
-            "existing_number_mode", current.existing_number_mode
-        )
-        number_pool = changes.get("number_pool", current.number_pool or [])
         validate_numbering_configuration(
             number_mode,
-            existing_number_mode,
-            number_pool,
+            changes.get("claim_number_start", current.claim_number_start),
+            changes.get("claim_number_end", current.claim_number_end),
         )
         class_collection_mode = changes.get(
             "class_collection_mode", current.class_collection_mode

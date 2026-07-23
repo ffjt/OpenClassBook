@@ -61,14 +61,8 @@ class ArticleService:
         ):
             raise ValueError("article_limit_reached")
         if book.number_mode == "existing":
-            number = values["number"]
-            if not number:
-                raise ValueError("article_number_required")
-            if (
-                book.existing_number_mode == "import"
-                and number not in book.number_pool
-            ):
-                raise ValueError("article_number_not_available")
+            number = self._normalize_claim_number(values["number"], book)
+            values["number"] = number
             if self.repository.number_exists(book_id, number):
                 raise ValueError("article_number_already_claimed")
         else:
@@ -154,20 +148,17 @@ class ArticleService:
         if current.status != "draft" and not book.allow_edit_after_submit:
             raise ValueError("article_submission_locked")
         if "number" in changes:
-            number = changes["number"]
             if book.number_mode in {"none", "automatic"}:
                 changes["number"] = ""
-            elif (
-                book.existing_number_mode == "import"
-                and number not in book.number_pool
-            ):
-                raise ValueError("article_number_not_available")
-            elif self.repository.number_exists(
-                current.book_id,
-                number,
-                exclude_article_id=article_id,
-            ):
-                raise ValueError("article_number_already_claimed")
+            else:
+                number = self._normalize_claim_number(changes["number"], book)
+                changes["number"] = number
+                if self.repository.number_exists(
+                    current.book_id,
+                    number,
+                    exclude_article_id=article_id,
+                ):
+                    raise ValueError("article_number_already_claimed")
 
         if changes.get("status") == "pending":
             changes["submitted_at"] = now
@@ -175,6 +166,18 @@ class ArticleService:
             article_id,
             ArticleUpdateData(**changes, updated_at=now),
         )
+
+    @staticmethod
+    def _normalize_claim_number(number: str | None, book: Book) -> str:
+        value = (number or "").strip()
+        if not value:
+            raise ValueError("article_number_required")
+        if not value.isdecimal():
+            raise ValueError("article_number_not_available")
+        claim_number = int(value)
+        if not book.claim_number_start <= claim_number <= book.claim_number_end:
+            raise ValueError("article_number_not_available")
+        return str(claim_number)
 
     @staticmethod
     def _ensure_submission_open(book: Book, now: datetime) -> None:

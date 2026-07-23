@@ -72,13 +72,16 @@ class ArticleRepository(BaseRepository[Article, ArticleCreateData, ArticleUpdate
         *,
         exclude_article_id: int | None = None,
     ) -> bool:
-        statement = select(Article.id).where(
+        statement = select(Article.number).where(
             Article.book_id == book_id,
-            Article.number == number,
         )
         if exclude_article_id is not None:
             statement = statement.where(Article.id != exclude_article_id)
-        return self.session.scalar(statement) is not None
+        normalized_number = str(int(number))
+        return any(
+            existing.isdecimal() and str(int(existing)) == normalized_number
+            for existing in self.session.scalars(statement)
+        )
 
     def list_assigned_numbers(self, book_id: int) -> list[str]:
         statement = select(Article.number).where(

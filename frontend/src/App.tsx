@@ -7,6 +7,7 @@ import {
 } from "react";
 import {
   Navigate,
+  Outlet,
   Route,
   Routes,
   useLocation,
@@ -21,6 +22,7 @@ import {
   type Book,
   type BookCreateInput,
 } from "@/repositories/bookRepository";
+import { authRepository } from "@/repositories/authRepository";
 
 const languageStorageKey = "openclassbook-language";
 
@@ -114,6 +116,21 @@ const LandingPage = lazy(() =>
 const MyBooksPage = lazy(() =>
   import("@/pages/my-books-page").then((module) => ({
     default: module.MyBooksPage,
+  })),
+);
+const LoginPage = lazy(() =>
+  import("@/pages/login-page").then((module) => ({
+    default: module.LoginPage,
+  })),
+);
+const RegisterPage = lazy(() =>
+  import("@/pages/register-page").then((module) => ({
+    default: module.RegisterPage,
+  })),
+);
+const ForgotPasswordPage = lazy(() =>
+  import("@/pages/forgot-password-page").then((module) => ({
+    default: module.ForgotPasswordPage,
   })),
 );
 const NotFoundPage = lazy(() =>
@@ -238,6 +255,12 @@ function AuthorEditorRoute(props: SharedPageProps) {
   return <AuthorEditorPage {...props} authorId={Number(authorId)} />;
 }
 
+function OwnerRoute() {
+  const location = useLocation();
+  if (authRepository.hasSession()) return <Outlet />;
+  return <Navigate replace state={{ from: location.pathname }} to="/login" />;
+}
+
 function App() {
   const location = useLocation();
   const { pathname } = location;
@@ -278,6 +301,10 @@ function App() {
     [navigateTo],
   );
 
+  const handleAuthenticated = useCallback(() => {
+    navigateTo("/book");
+  }, [navigateTo]);
+
   const sharedProps: SharedPageProps = {
     language,
     onNavigate: navigateTo,
@@ -298,7 +325,17 @@ function App() {
         <div className="route-enter min-h-screen" key={pathname}>
       <Routes location={location}>
         <Route path="/" element={<LandingPage {...sharedProps} />} />
-        <Route path="/book" element={<MyBooksPage {...sharedProps} />} />
+        <Route
+          path="/login"
+          element={<LoginPage {...sharedProps} onAuthenticated={handleAuthenticated} />}
+        />
+        <Route
+          path="/register"
+          element={<RegisterPage {...sharedProps} onAuthenticated={handleAuthenticated} />}
+        />
+        <Route path="/forgot-password" element={<ForgotPasswordPage {...sharedProps} />} />
+        <Route element={<OwnerRoute />}>
+          <Route path="/book" element={<MyBooksPage {...sharedProps} />} />
         <Route
           path="/book/create"
           element={
@@ -331,6 +368,7 @@ function App() {
           path="/book/:bookId/setup/template"
           element={<FirstTimeSetupRoute {...sharedProps} step="template" />}
         />
+        </Route>
         <Route path="/join" element={<JoinRoute {...sharedProps} />} />
         <Route path="/join/:inviteCode/select" element={<AuthorSelectRoute {...sharedProps} />} />
         <Route path="/join/:inviteCode" element={<JoinRoute {...sharedProps} />} />
@@ -341,6 +379,7 @@ function App() {
           path="/submit/new"
           element={<Navigate replace to="/join" />}
         />
+        <Route element={<OwnerRoute />}>
         <Route
           path="/book/:bookId/dashboard"
           element={<DashboardRoute {...sharedProps} page="overview" />}
@@ -373,6 +412,7 @@ function App() {
           path="/book/:bookId/dashboard/settings"
           element={<DashboardRoute {...sharedProps} page="settings" />}
         />
+        </Route>
         <Route path="/dashboard/*" element={<Navigate replace to="/book" />} />
         <Route path="/:bookId/dashboard/*" element={<LegacyDashboardRedirect />} />
         <Route path="*" element={<NotFoundPage {...sharedProps} />} />

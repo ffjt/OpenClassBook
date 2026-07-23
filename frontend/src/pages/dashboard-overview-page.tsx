@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Activity,
   AlertCircle,
   ArrowRight,
   CalendarDays,
@@ -90,6 +89,9 @@ const copy = {
     claimProgressLabel: (claimed: number, total: number) =>
       `Number claim progress: ${claimed} claimed out of ${total}`,
     noNumbers: "No claimable numbers yet",
+    currentAuthors: "Current authors",
+    currentAuthorsDescription: "Authors who have joined this book so far",
+    authorCount: (count: number) => `${count} authors`,
     noAuthors: "No authors yet",
     noArticles: "No articles yet",
     setupGuide: {
@@ -132,10 +134,6 @@ const copy = {
         action: "View Submissions",
       },
     },
-    recentActivity: "Recent activity",
-    noActivity: "No activity yet",
-    noActivityDescription:
-      "Recent activity will appear here when authors start submitting.",
     quickActions: "Quick actions",
     quickActionsDescription: "Common tasks for this book",
     actions: {
@@ -182,6 +180,9 @@ const copy = {
     claimProgressLabel: (claimed: number, total: number) =>
       `编号认领进度：${total} 个可认领编号中已认领 ${claimed} 个`,
     noNumbers: "暂无可认领编号",
+    currentAuthors: "当前作者人数",
+    currentAuthorsDescription: "目前已加入本书的作者人数",
+    authorCount: (count: number) => `共 ${count} 位作者`,
     noAuthors: "暂无作者",
     noArticles: "暂无文章",
     setupGuide: {
@@ -223,9 +224,6 @@ const copy = {
         action: "查看投稿",
       },
     },
-    recentActivity: "最近动态",
-    noActivity: "暂无动态",
-    noActivityDescription: "当作者开始投稿后，将在这里显示最近活动。",
     quickActions: "快捷操作",
     quickActionsDescription: "这本书的常用操作",
     actions: {
@@ -396,18 +394,10 @@ export function DashboardOverviewPage({
     ? Math.min(100, Math.round((submitted / authors.length) * 100))
     : 0;
   const submissionRemaining = Math.max(authors.length - submitted, 0);
-  const claimedAuthors = new Set(
-    articles
-      .filter((article) => article.number)
-      .map((article) => article.author_id),
-  ).size;
   const showingClaimProgress = book.number_mode === "existing";
-  const claimTotal = book.existing_number_mode === "import"
-    ? book.number_pool.length
-    : authors.length;
-  const claimed = book.existing_number_mode === "import"
-    ? Math.min(book.claimed_number_count, claimTotal)
-    : Math.min(claimedAuthors, claimTotal);
+  const showingAuthorCount = book.number_mode === "none";
+  const claimTotal = book.claim_number_end - book.claim_number_start + 1;
+  const claimed = Math.min(book.claimed_number_count, claimTotal);
   const progress = showingClaimProgress
     ? claimTotal
       ? Math.round((claimed / claimTotal) * 100)
@@ -416,6 +406,9 @@ export function DashboardOverviewPage({
   const remaining = showingClaimProgress
     ? Math.max(claimTotal - claimed, 0)
     : submissionRemaining;
+  const showProgressEmptyState = showingAuthorCount
+    ? authors.length === 0
+    : authors.length === 0 || articles.length === 0 || (showingClaimProgress && claimTotal === 0);
   const statValues = {
     authors: authors.length,
     submitted,
@@ -544,41 +537,61 @@ export function DashboardOverviewPage({
           <Card className="border-border bg-card shadow-none">
             <CardHeader className="flex-row items-center justify-between space-y-0 p-5 pb-4">
               <div>
-                <CardTitle className="text-foreground">{showingClaimProgress ? pageCopy.claimProgress : pageCopy.submissionProgress}</CardTitle>
+                <CardTitle className="text-foreground">
+                  {showingAuthorCount
+                    ? pageCopy.currentAuthors
+                    : showingClaimProgress
+                      ? pageCopy.claimProgress
+                      : pageCopy.submissionProgress}
+                </CardTitle>
                 <p className="mt-1.5 text-xs text-muted-foreground">
-                  {showingClaimProgress ? pageCopy.claimProgressDescription : pageCopy.submissionProgressDescription}
+                  {showingAuthorCount
+                    ? pageCopy.currentAuthorsDescription
+                    : showingClaimProgress
+                      ? pageCopy.claimProgressDescription
+                      : pageCopy.submissionProgressDescription}
                 </p>
               </div>
-              <span className="text-2xl font-semibold tracking-[-0.03em] text-foreground">
-                {progress}%
-              </span>
+              {!showingAuthorCount ? (
+                <span className="text-2xl font-semibold tracking-[-0.03em] text-foreground">
+                  {progress}%
+                </span>
+              ) : null}
             </CardHeader>
             <CardContent className="p-5 pt-1">
-              <div className="mb-3 flex items-center justify-between gap-4 text-xs">
-                <span className="font-medium text-foreground">
-                  {showingClaimProgress
-                    ? pageCopy.claimCount(claimed, claimTotal)
-                    : pageCopy.progressCount(submitted, authors.length)}
-                </span>
-                <span className="shrink-0 text-muted-foreground">
-                  {showingClaimProgress
-                    ? pageCopy.unclaimed(remaining)
-                    : pageCopy.remaining(remaining)}
-                </span>
-              </div>
-              <Progress
-                aria-label={showingClaimProgress
-                  ? pageCopy.claimProgressLabel(claimed, claimTotal)
-                  : pageCopy.progressLabel(submitted, authors.length)}
-                className="h-2 bg-muted [&>div]:bg-blue-500"
-                value={progress}
-              />
-              {authors.length === 0 || articles.length === 0 || (showingClaimProgress && claimTotal === 0) ? (
+              {showingAuthorCount ? (
+                <p className="text-2xl font-semibold tracking-[-0.03em] text-foreground">
+                  {pageCopy.authorCount(authors.length)}
+                </p>
+              ) : (
+                <>
+                  <div className="mb-3 flex items-center justify-between gap-4 text-xs">
+                    <span className="font-medium text-foreground">
+                      {showingClaimProgress
+                        ? pageCopy.claimCount(claimed, claimTotal)
+                        : pageCopy.progressCount(submitted, authors.length)}
+                    </span>
+                    <span className="shrink-0 text-muted-foreground">
+                      {showingClaimProgress
+                        ? pageCopy.unclaimed(remaining)
+                        : pageCopy.remaining(remaining)}
+                    </span>
+                  </div>
+                  <Progress
+                    aria-label={showingClaimProgress
+                      ? pageCopy.claimProgressLabel(claimed, claimTotal)
+                      : pageCopy.progressLabel(submitted, authors.length)}
+                    className="h-2 bg-muted [&>div]:bg-blue-500"
+                    value={progress}
+                  />
+                </>
+              )}
+              {showProgressEmptyState ? (
                 <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4 text-xs text-muted-foreground">
                   {authors.length === 0 ? (
                     <span className="rounded-md bg-muted/60 px-2.5 py-1.5">{pageCopy.noAuthors}</span>
                   ) : null}
-                  {articles.length === 0 ? (
+                  {!showingAuthorCount && articles.length === 0 ? (
                     <span className="rounded-md bg-muted/60 px-2.5 py-1.5">{pageCopy.noArticles}</span>
                   ) : null}
                   {showingClaimProgress && claimTotal === 0 ? (
@@ -619,18 +632,6 @@ export function DashboardOverviewPage({
             </CardContent>
           </Card>
 
-          <Card className="border-border bg-card shadow-none">
-            <CardHeader className="p-5 pb-4">
-              <CardTitle className="text-foreground">{pageCopy.recentActivity}</CardTitle>
-            </CardHeader>
-            <CardContent className="flex min-h-44 flex-col items-center justify-center border-t border-border px-6 py-10 text-center">
-              <span className="flex size-10 items-center justify-center rounded-full bg-muted/60 text-muted-foreground">
-                <Activity className="size-4" />
-              </span>
-              <p className="mt-4 text-sm font-medium text-foreground">{pageCopy.noActivity}</p>
-              <p className="mt-1.5 max-w-sm text-xs leading-5 text-muted-foreground">{pageCopy.noActivityDescription}</p>
-            </CardContent>
-          </Card>
         </div>
 
         <Card className="h-fit border-border bg-card shadow-none">

@@ -1,22 +1,21 @@
 import type {
   BookCreateInput,
-  ExistingNumberMode,
   NumberMode,
 } from "@/repositories/bookRepository";
 
 export interface NumberingSettingsValue {
-  existingNumberMode: ExistingNumberMode;
+  claimNumberEnd: number;
+  claimNumberStart: number;
   numberDigits: number;
   numberMode: NumberMode;
-  numberPool: string[];
   numberPrefix: string;
 }
 
 export const defaultNumberingSettings: NumberingSettingsValue = {
-  existingNumberMode: "claim",
+  claimNumberEnd: 100,
+  claimNumberStart: 1,
   numberDigits: 3,
   numberMode: "none",
-  numberPool: [],
   numberPrefix: "",
 };
 
@@ -25,20 +24,15 @@ export function numberingSettingsToPayload(
 ): Pick<
   BookCreateInput,
   | "number_mode"
-  | "existing_number_mode"
-  | "number_pool"
+  | "claim_number_start"
+  | "claim_number_end"
   | "number_prefix"
   | "number_digits"
 > {
   return {
     number_mode: value.numberMode,
-    existing_number_mode:
-      value.numberMode === "existing" ? value.existingNumberMode : null,
-    number_pool:
-      value.numberMode === "existing" &&
-      value.existingNumberMode === "import"
-        ? value.numberPool
-        : [],
+    claim_number_start: value.claimNumberStart,
+    claim_number_end: value.claimNumberEnd,
     number_prefix:
       value.numberMode === "automatic" ? value.numberPrefix.trim() : "",
     number_digits:

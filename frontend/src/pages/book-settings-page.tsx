@@ -9,7 +9,6 @@ import {
   Download,
   FileText,
   Hash,
-  Eye,
   Link2,
   LoaderCircle,
   RefreshCw,
@@ -122,13 +121,6 @@ const copy = {
     numberClaim: "Number claiming",
     authorClaim: "Authors can claim numbers",
     managerAssign: "Administrator assigns numbers (Reserved)",
-    currentPool: "Current number pool",
-    poolStats: { total: "Total", claimed: "Claimed", remaining: "Remaining" },
-    viewPool: "View number pool",
-    importPool: "Import new numbers",
-    exportPool: "Export numbers",
-    emptyPool: "No numbers have been imported yet.",
-    poolTitle: "Imported number pool",
     numberNote: "Article numbers are real-world identifiers, not database IDs. They remain consistent through submission, review, layout, and PDF export.",
     numberPrefix: "Number prefix",
     numberDigits: "Number digits",
@@ -213,13 +205,6 @@ const copy = {
     numberClaim: "编号认领",
     authorClaim: "作者可以自行认领编号",
     managerAssign: "管理员指定编号（预留）",
-    currentPool: "当前编号池",
-    poolStats: { total: "编号总数", claimed: "已认领", remaining: "剩余" },
-    viewPool: "查看编号池",
-    importPool: "导入新编号",
-    exportPool: "导出编号",
-    emptyPool: "尚未导入编号。",
-    poolTitle: "已导入编号池",
     numberNote: "编号是现实中的文章编号，而不是数据库 ID。编号将在投稿、审核、排版和 PDF 导出过程中保持一致。",
     numberPrefix: "编号前缀",
     numberDigits: "编号位数",
@@ -317,7 +302,6 @@ export function BookSettingsPage({
   const [reloadKey, setReloadKey] = useState(0);
   const [saving, setSaving] = useState<SaveSection | null>(null);
   const [regenerating, setRegenerating] = useState(false);
-  const [showNumberPool, setShowNumberPool] = useState(false);
   const [dangerAction, setDangerAction] = useState<DangerAction | null>(null);
   const [dangerBusy, setDangerBusy] = useState(false);
   const [bookTitleConfirmation, setBookTitleConfirmation] = useState("");
@@ -341,10 +325,10 @@ export function BookSettingsPage({
         setSubmissionEnabled(loaded.submission_enabled);
         setSubmissionRules(submissionRulesFromBook(loaded));
         setNumbering({
-          existingNumberMode: loaded.existing_number_mode ?? "claim",
+          claimNumberEnd: loaded.claim_number_end,
+          claimNumberStart: loaded.claim_number_start,
           numberDigits: loaded.number_digits,
           numberMode: loaded.number_mode,
-          numberPool: loaded.number_pool,
           numberPrefix: loaded.number_prefix,
         });
         setInviteEnabled(loaded.invite_enabled);
@@ -392,18 +376,6 @@ export function BookSettingsPage({
     } finally {
       setRegenerating(false);
     }
-  };
-
-  const exportNumberPool = () => {
-    const blob = new Blob([numbering.numberPool.join("\n")], {
-      type: "text/plain;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${book?.title ?? "book"}-article-numbers.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
   };
 
   const runDangerAction = async () => {
@@ -542,21 +514,6 @@ export function BookSettingsPage({
                 onChange={setNumbering}
                 value={numbering}
               />
-              {numbering.numberMode === "existing" && numbering.existingNumberMode === "import" ? (
-                <section className="border-t border-border pt-5">
-                  <h4 className="text-sm font-medium">{pageCopy.currentPool}</h4>
-                  <dl className="mt-3 grid grid-cols-3 divide-x divide-border rounded-lg border border-border py-4 text-center">
-                    <div><dt className="text-xs text-muted-foreground">{pageCopy.poolStats.total}</dt><dd className="mt-1 text-lg font-semibold">{numbering.numberPool.length}</dd></div>
-                    <div><dt className="text-xs text-muted-foreground">{pageCopy.poolStats.claimed}</dt><dd className="mt-1 text-lg font-semibold">{Math.min(book.claimed_number_count, numbering.numberPool.length)}</dd></div>
-                    <div><dt className="text-xs text-muted-foreground">{pageCopy.poolStats.remaining}</dt><dd className="mt-1 text-lg font-semibold">{Math.max(numbering.numberPool.length - book.claimed_number_count, 0)}</dd></div>
-                  </dl>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button disabled={!numbering.numberPool.length} onClick={() => setShowNumberPool(true)} variant="outline"><Eye className="mr-2 size-4" />{pageCopy.viewPool}</Button>
-                    <Button disabled={!numbering.numberPool.length} onClick={exportNumberPool} variant="outline"><Download className="mr-2 size-4" />{pageCopy.exportPool}</Button>
-                  </div>
-                </section>
-              ) : null}
-
               <p className="border-t border-border pt-5 text-xs leading-5 text-muted-foreground">{pageCopy.numberNote}</p>
               <div className="flex justify-end"><SaveButton busy={saving === "numbering"} copy={pageCopy} onClick={() => void save("numbering", numberingSettingsToPayload(numbering))} /></div>
             </CardContent>
@@ -596,10 +553,6 @@ export function BookSettingsPage({
           </Card>
         </div>
       </div>
-
-      <AlertDialog.Root onOpenChange={setShowNumberPool} open={showNumberPool}>
-        <AlertDialog.Portal><AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" /><AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[80vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-border bg-card p-6 shadow-2xl focus:outline-none"><AlertDialog.Title className="text-lg font-semibold">{pageCopy.poolTitle}</AlertDialog.Title><AlertDialog.Description className="mt-2 text-sm text-muted-foreground">{numbering.numberPool.length ? `${pageCopy.poolStats.total}: ${numbering.numberPool.length}` : pageCopy.emptyPool}</AlertDialog.Description><div className="mt-5 min-h-0 flex-1 overflow-y-auto rounded-lg border border-border p-3"><div className="flex flex-wrap gap-2">{numbering.numberPool.map((number) => <code className="rounded-md bg-muted px-2 py-1 text-xs" key={number}>{number}</code>)}</div></div><div className="mt-5 flex justify-end"><AlertDialog.Cancel asChild><Button variant="outline">{pageCopy.cancel}</Button></AlertDialog.Cancel></div></AlertDialog.Content></AlertDialog.Portal>
-      </AlertDialog.Root>
 
       <AlertDialog.Root onOpenChange={(open) => { if (!open && !dangerBusy) setDangerAction(null); }} open={dangerAction !== null}>
         <AlertDialog.Portal><AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" /><AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border border-rose-500/35 bg-card p-6 shadow-2xl focus:outline-none"><div className="flex size-10 items-center justify-center rounded-lg bg-rose-500/10 text-rose-500"><ShieldAlert className="size-5" /></div><AlertDialog.Title className="mt-5 text-lg font-semibold">{pageCopy.dangerConfirmTitle}</AlertDialog.Title><AlertDialog.Description className="mt-2 text-sm leading-6 text-muted-foreground">{dangerAction ? `${pageCopy.dangers[dangerAction].description} ${pageCopy.dangerConfirmDescription}` : ""}</AlertDialog.Description>{dangerAction === "book" ? <div className="mt-5 space-y-2"><Label htmlFor="confirm-book-title">{pageCopy.typeBookTitle}</Label><Input autoComplete="off" id="confirm-book-title" onChange={(event) => setBookTitleConfirmation(event.target.value)} value={bookTitleConfirmation} /><p className="text-xs font-medium text-rose-500">{book.title}</p></div> : null}<div className="mt-6 flex justify-end gap-2"><AlertDialog.Cancel asChild><Button disabled={dangerBusy} variant="outline">{pageCopy.cancel}</Button></AlertDialog.Cancel><Button className="bg-rose-600 text-white hover:bg-rose-700" disabled={dangerBusy || (dangerAction === "book" && bookTitleConfirmation !== book.title)} onClick={() => void runDangerAction()}>{dangerBusy ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : <Trash2 className="mr-2 size-4" />}{pageCopy.confirmDelete}</Button></div></AlertDialog.Content></AlertDialog.Portal>

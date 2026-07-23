@@ -19,7 +19,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { useBookTemplate } from "@/hooks/use-book-template";
 import type { Language } from "@/lib/i18n";
 import { isSubmissionDeadlinePassed } from "@/lib/submission-rules";
@@ -58,10 +57,9 @@ const copy = {
     updated: "Updated",
     claimEyebrow: "Book-wide numbering",
     claimTitle: "Claim an article number",
-    claimDescription: "Enter the existing number you already have. It can only be claimed once in this book.",
-    importDescription: "Choose a number from the imported pool. It is shared across all authors and can only be claimed once.",
+    claimDescription: (start: number, end: number) => `Choose a whole number from ${start} to ${end}. Each number can only be claimed once in this book.`,
     claimLabel: "Article number",
-    claimPlaceholder: "Choose a number",
+    claimPlaceholder: "Enter a number",
     claim: "Claim this number",
     cancel: "Cancel",
     claimRequired: "Claim an article number before writing a new article.",
@@ -106,10 +104,9 @@ const copy = {
     updated: "更新于",
     claimEyebrow: "整本书统一编号",
     claimTitle: "认领文章编号",
-    claimDescription: "请输入你已经拥有的文章编号；同一本书内，每个编号只能被认领一次。",
-    importDescription: "请从本书导入的编号池中选择。编号由全部作者共享，每个编号只能被认领一次。",
+    claimDescription: (start: number, end: number) => `请在 ${start} 到 ${end} 的范围内选择整数编号；同一本书内，每个编号只能被认领一次。`,
     claimLabel: "文章编号",
-    claimPlaceholder: "请选择编号",
+    claimPlaceholder: "请输入编号",
     claim: "认领此编号",
     cancel: "取消",
     claimRequired: "新建文章前请先认领编号。",
@@ -282,9 +279,18 @@ export function AuthorEditorPage({
   };
 
   const claimNumber = () => {
-    const number = claimInput.trim();
-    if (!number || selectedId !== "new") return;
-    setDraft((current) => ({ ...current, number }));
+    if (!author || selectedId !== "new") return;
+    const number = Number(claimInput);
+    if (
+      !/^\d+$/.test(claimInput.trim()) ||
+      !Number.isSafeInteger(number) ||
+      number < author.book.claim_number_start ||
+      number > author.book.claim_number_end
+    ) {
+      setFormError(pageCopy.numberUnavailable);
+      return;
+    }
+    setDraft((current) => ({ ...current, number: String(number) }));
     setFormError(null);
     setIsClaimingNumber(false);
   };
@@ -515,9 +521,10 @@ export function AuthorEditorPage({
               {pageCopy.claimTitle}
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              {author.book.existing_number_mode === "import"
-                ? pageCopy.importDescription
-                : pageCopy.claimDescription}
+              {pageCopy.claimDescription(
+                author.book.claim_number_start,
+                author.book.claim_number_end,
+              )}
             </p>
             {formError ? (
               <div
@@ -534,33 +541,22 @@ export function AuthorEditorPage({
             >
               {pageCopy.claimLabel}
             </label>
-            {author.book.existing_number_mode === "import" ? (
-              <Select
-                autoFocus
-                className="mt-2 h-12 rounded-xl font-mono text-base tracking-[0.12em]"
-                id="claim-article-number"
-                onChange={(event) => setClaimInput(event.target.value)}
-                value={claimInput}
-              >
-                <option disabled value="">{pageCopy.claimPlaceholder}</option>
-                {author.book.number_pool.map((number) => (
-                  <option key={number} value={number}>{number}</option>
-                ))}
-              </Select>
-            ) : (
-              <Input
-                autoFocus
-                className="mt-2 h-12 rounded-xl font-mono text-lg tracking-[0.12em]"
-                id="claim-article-number"
-                maxLength={50}
-                onChange={(event) => setClaimInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") claimNumber();
-                }}
-                placeholder="001"
-                value={claimInput}
-              />
-            )}
+            <Input
+              autoFocus
+              className="mt-2 h-12 rounded-xl font-mono text-lg tracking-[0.12em]"
+              id="claim-article-number"
+              inputMode="numeric"
+              max={author.book.claim_number_end}
+              min={author.book.claim_number_start}
+              onChange={(event) => setClaimInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") claimNumber();
+              }}
+              placeholder={pageCopy.claimPlaceholder}
+              step={1}
+              type="number"
+              value={claimInput}
+            />
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button
                 onClick={() => setIsClaimingNumber(false)}

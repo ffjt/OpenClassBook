@@ -188,8 +188,8 @@ def create_article(
         elif error_code == "article_number_not_available":
             detail = {
                 "code": error_code,
-                "message": "Choose a number from this book's available list",
-                "message_zh": "请选择本书编号列表中的可用编号",
+                "message": "Choose a number within this book's configured claim range",
+                "message_zh": "请选择本书已设置认领范围内的编号",
             }
         else:
             detail = {
@@ -276,12 +276,12 @@ def update_article(
             detail = {
                 "code": error_code,
                 "message": (
-                    "Choose an available number from this book"
+                    "Choose a number within this book's configured claim range"
                     if error_code == "article_number_not_available"
                     else "This article number has already been claimed"
                 ),
                 "message_zh": (
-                    "请选择本书编号列表中的可用编号"
+                    "请选择本书已设置认领范围内的编号"
                     if error_code == "article_number_not_available"
                     else "这个文章编号已被认领"
                 ),

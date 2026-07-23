@@ -14,6 +14,7 @@ const landingCopy = {
     description:
       "An open-source publishing platform for collecting essays and generating print-ready books.",
     createBook: "Create a Book",
+    signIn: "Sign in",
     viewMyBooks: "View My Books",
     join: "Join",
     imageAlt:
@@ -26,6 +27,7 @@ const landingCopy = {
     createBook: "创建一本书",
     viewMyBooks: "查看我的书籍",
     join: "\u52a0\u5165",
+    signIn: "\u767b\u5f55",
     imageAlt: "文章汇集并出版成书的抽象编辑插画",
   },
 };
@@ -52,6 +54,14 @@ export function LandingPage({
           OpenClassBook
         </a>
         <div className="flex items-center gap-2 sm:gap-4">
+          <Button
+            className="hidden h-9 px-4 sm:inline-flex"
+            onClick={() => onNavigate("/login")}
+            type="button"
+            variant="outline"
+          >
+            {copy.signIn}
+          </Button>
           <Button
             className="h-9 px-4"
             onClick={() => onNavigate("/join")}
@@ -103,7 +113,7 @@ export function LandingPage({
           <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Button
               className="group bg-blue-600 text-white hover:bg-blue-700"
-              onClick={() => onNavigate("/book/create")}
+              onClick={() => onNavigate("/register")}
               size="lg"
             >
               {copy.createBook}

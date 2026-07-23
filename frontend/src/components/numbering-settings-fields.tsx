@@ -1,15 +1,5 @@
-import { useRef, useState } from "react";
-import {
-  CheckCircle2,
-  FileSpreadsheet,
-  LoaderCircle,
-  Upload,
-} from "lucide-react";
-
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { readArticleNumberFile } from "@/lib/article-numbers";
 import type { Language } from "@/lib/i18n";
 import type { NumberingSettingsValue } from "@/lib/numbering-settings";
 import { cn } from "@/lib/utils";
@@ -27,21 +17,19 @@ const copy = {
         description:
           "Set a prefix and digit count, such as NO-001.",
       },
-      import: {
-        title: "Import number pool",
+      claim: {
+        title: "Claim a number",
         description:
-          "Authors choose from numbers imported by the administrator.",
+          "Authors claim one available number from the range you set.",
       },
     },
-    recommended: "Recommended",
     prefix: "Number prefix",
     digits: "Number digits",
     example: "Example",
-    chooseFile: "Choose number file",
-    replaceFile: "Replace number file",
-    imported: (count: number) => `${count} unique numbers imported`,
-    fileHelp: "One number per row is recommended. Up to 2,000 numbers.",
-    fileError: "This file could not be read. Check its format and duplicate values.",
+    claimRange: "Claimable number range",
+    rangeHelp: "Each number in this inclusive range can be claimed once.",
+    from: "From",
+    to: "To",
   },
   zh: {
     modes: {
@@ -53,22 +41,23 @@ const copy = {
         title: "自动生成编号",
         description: "设置编号前缀和位数，例如 NO-001。",
       },
-      import: {
-        title: "导入编号池",
-        description: "作者只能从管理员导入的编号池中认领。",
+      claim: {
+        title: "认领编号模式",
+        description: "作者从你设定的编号范围内认领一个可用编号。",
       },
     },
-    recommended: "推荐",
     prefix: "编号前缀",
     digits: "编号位数",
     example: "示例",
-    chooseFile: "选择编号文件",
-    replaceFile: "替换编号文件",
-    imported: (count: number) => `已导入 ${count} 个不重复编号`,
-    fileHelp: "建议每行一个编号，最多 2,000 个。",
-    fileError: "无法读取该文件，请检查格式及重复编号。",
+    claimRange: "可认领编号范围",
+    rangeHelp: "范围内的每个编号只能被认领一次。",
+    from: "从",
+    to: "到",
   },
 } as const;
+
+const minClaimNumber = 1;
+const maxClaimNumber = 999_999;
 
 export function NumberingSettingsFields({
   language,
@@ -80,44 +69,40 @@ export function NumberingSettingsFields({
   value: NumberingSettingsValue;
 }) {
   const pageCopy = copy[language];
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [isReading, setIsReading] = useState(false);
-  const [fileError, setFileError] = useState(false);
 
-  const selectMode = (mode: "none" | "automatic" | "import") => {
-    setFileError(false);
+  const selectMode = (mode: "none" | "automatic" | "claim") => {
     onChange({
       ...value,
-      existingNumberMode: mode === "import" ? "import" : value.existingNumberMode,
-      numberMode: mode === "import" ? "existing" : mode,
+      numberMode: mode === "claim" ? "existing" : mode,
     });
   };
-  const importFile = async (file: File | undefined) => {
-    if (!file) return;
-    setIsReading(true);
-    setFileError(false);
-    try {
-      const numberPool = await readArticleNumberFile(file);
+
+  const updateRange = (field: "claimNumberStart" | "claimNumberEnd", raw: string) => {
+    const next = Math.min(
+      maxClaimNumber,
+      Math.max(minClaimNumber, Math.trunc(Number(raw)) || minClaimNumber),
+    );
+    if (field === "claimNumberStart") {
       onChange({
         ...value,
-        existingNumberMode: "import",
-        numberMode: "existing",
-        numberPool,
+        claimNumberStart: next,
+        claimNumberEnd: Math.max(next, value.claimNumberEnd),
       });
-    } catch {
-      setFileError(true);
-    } finally {
-      setIsReading(false);
-      if (inputRef.current) inputRef.current.value = "";
+      return;
     }
+    onChange({
+      ...value,
+      claimNumberStart: Math.min(value.claimNumberStart, next),
+      claimNumberEnd: next,
+    });
   };
 
   return (
     <div>
       <div className="grid gap-3 lg:grid-cols-3">
-        {(["none", "automatic", "import"] as const).map((mode) => {
+        {(["none", "automatic", "claim"] as const).map((mode) => {
           const modeCopy = pageCopy.modes[mode];
-          const checked = mode === "import"
+          const checked = mode === "claim"
             ? value.numberMode === "existing"
             : value.numberMode === mode;
           return (
@@ -138,14 +123,7 @@ export function NumberingSettingsFields({
                 type="radio"
               />
               <span>
-                <span className="flex items-center gap-2 text-sm font-semibold">
-                  {modeCopy.title}
-                  {mode === "import" ? (
-                    <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[9px] text-blue-500">
-                      {pageCopy.recommended}
-                    </span>
-                  ) : null}
-                </span>
+                <span className="text-sm font-semibold">{modeCopy.title}</span>
                 <span className="mt-1.5 block text-xs leading-5 text-muted-foreground">
                   {modeCopy.description}
                 </span>
@@ -199,58 +177,36 @@ export function NumberingSettingsFields({
       ) : null}
 
       {value.numberMode === "existing" ? (
-        <div className="mt-5 flex flex-col gap-3 rounded-lg border border-dashed border-border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-start gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-500">
-                  {value.numberPool.length ? (
-                    <CheckCircle2 className="size-4" />
-                  ) : (
-                    <FileSpreadsheet className="size-4" />
-                  )}
-                </span>
-                <div>
-                  <p className="text-sm font-medium">
-                    {value.numberPool.length
-                      ? pageCopy.imported(value.numberPool.length)
-                      : pageCopy.fileHelp}
-                  </p>
-                  {value.numberPool.length ? (
-                    <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
-                      {value.numberPool.slice(0, 5).join(" · ")}
-                      {value.numberPool.length > 5 ? " …" : ""}
-                    </p>
-                  ) : null}
-                  {fileError ? (
-                    <p className="mt-1 text-xs text-rose-500" role="alert">
-                      {pageCopy.fileError}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-              <input
-                accept=".xlsx,.csv,.txt"
-                className="hidden"
-                onChange={(event) => void importFile(event.target.files?.[0])}
-                ref={inputRef}
-                type="file"
-              />
-              <Button
-                className="shrink-0"
-                disabled={isReading}
-                onClick={() => inputRef.current?.click()}
-                type="button"
-                variant="outline"
-              >
-                {isReading ? (
-                  <LoaderCircle className="mr-2 size-4 animate-spin" />
-                ) : (
-                  <Upload className="mr-2 size-4" />
-                )}
-                {value.numberPool.length
-                  ? pageCopy.replaceFile
-                  : pageCopy.chooseFile}
-              </Button>
-        </div>
+        <fieldset className="mt-5 grid gap-4 rounded-xl border border-border bg-muted/20 p-4 sm:grid-cols-2">
+          <legend className="px-1 text-sm font-medium">{pageCopy.claimRange}</legend>
+          <p className="text-xs leading-5 text-muted-foreground sm:col-span-2">{pageCopy.rangeHelp}</p>
+          <div className="space-y-2">
+            <Label htmlFor="claim-number-start">{pageCopy.from}</Label>
+            <Input
+              id="claim-number-start"
+              inputMode="numeric"
+              max={maxClaimNumber}
+              min={minClaimNumber}
+              onChange={(event) => updateRange("claimNumberStart", event.target.value)}
+              step={1}
+              type="number"
+              value={value.claimNumberStart}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="claim-number-end">{pageCopy.to}</Label>
+            <Input
+              id="claim-number-end"
+              inputMode="numeric"
+              max={maxClaimNumber}
+              min={minClaimNumber}
+              onChange={(event) => updateRange("claimNumberEnd", event.target.value)}
+              step={1}
+              type="number"
+              value={value.claimNumberEnd}
+            />
+          </div>
+        </fieldset>
       ) : null}
     </div>
   );

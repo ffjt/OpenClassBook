@@ -68,26 +68,44 @@ def _upgrade_scaffold_book_table() -> None:
                 "ALTER TABLE books ADD COLUMN number_mode VARCHAR(20) "
                 "NOT NULL DEFAULT 'none'"
             )
-        if "existing_number_mode" not in columns:
+        needs_claim_start = "claim_number_start" not in columns
+        needs_claim_end = "claim_number_end" not in columns
+        if needs_claim_start:
             connection.exec_driver_sql(
-                "ALTER TABLE books ADD COLUMN existing_number_mode VARCHAR(20)"
+                "ALTER TABLE books ADD COLUMN claim_number_start INTEGER "
+                "NOT NULL DEFAULT 1"
             )
+        if needs_claim_end:
             connection.exec_driver_sql(
-                "UPDATE books SET existing_number_mode = CASE "
-                "WHEN number_mode = 'import' THEN 'import' "
-                "WHEN number_mode = 'automatic' THEN 'claim' "
-                "ELSE NULL END"
+                "ALTER TABLE books ADD COLUMN claim_number_end INTEGER "
+                "NOT NULL DEFAULT 100"
             )
-            connection.exec_driver_sql(
-                "UPDATE books SET number_mode = CASE "
-                "WHEN number_mode = 'none' THEN 'automatic' "
-                "WHEN number_mode IN ('automatic', 'import') THEN 'existing' "
-                "ELSE number_mode END"
-            )
-        if "number_pool" not in columns:
-            connection.exec_driver_sql(
-                "ALTER TABLE books ADD COLUMN number_pool JSON NOT NULL DEFAULT '[]'"
-            )
+        if (needs_claim_start or needs_claim_end) and "number_pool" in columns:
+            legacy_pools = connection.exec_driver_sql(
+                "SELECT id, number_pool FROM books WHERE number_mode = 'existing'"
+            ).fetchall()
+            for book_id, pool in legacy_pools:
+                try:
+                    values = json.loads(pool) if isinstance(pool, str) else pool
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                if not isinstance(values, list):
+                    continue
+                numbers = [
+                    int(str(value).strip())
+                    for value in values
+                    if str(value).strip().isdecimal()
+                ]
+                if numbers:
+                    claim_start = max(1, min(numbers))
+                    claim_end = min(999_999, max(numbers))
+                    if claim_start > claim_end:
+                        continue
+                    connection.exec_driver_sql(
+                        "UPDATE books SET claim_number_start = ?, claim_number_end = ? "
+                        "WHERE id = ?",
+                        (claim_start, claim_end, book_id),
+                    )
         if "status" not in columns:
             connection.exec_driver_sql(
                 "ALTER TABLE books ADD COLUMN status VARCHAR(20) "

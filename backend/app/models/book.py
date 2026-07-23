@@ -39,8 +39,12 @@ class Book(Base):
     class_name_template: Mapped[str | None] = mapped_column(String(120), nullable=True)
     class_value_style: Mapped[str | None] = mapped_column(String(20), nullable=True)
     number_mode: Mapped[str] = mapped_column(String(20))
-    existing_number_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    number_pool: Mapped[list[str]] = mapped_column(JSON, default=list)
+    claim_number_start: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1"
+    )
+    claim_number_end: Mapped[int] = mapped_column(
+        Integer, default=100, server_default="100"
+    )
     number_prefix: Mapped[str] = mapped_column(String(20), default="")
     number_digits: Mapped[int] = mapped_column(Integer, default=3)
     status: Mapped[str] = mapped_column(String(20), default="collecting")

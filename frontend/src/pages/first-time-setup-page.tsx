@@ -4,10 +4,16 @@ import { toast } from "sonner";
 
 import { LanguageToggle } from "@/components/language-toggle";
 import { ClassCollectionFields, type ClassCollectionRules } from "@/components/class-collection-fields";
+import { NumberingSettingsFields } from "@/components/numbering-settings-fields";
 import { SubmissionRuleFields } from "@/components/submission-rule-fields";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/i18n";
+import {
+  defaultNumberingSettings,
+  numberingSettingsToPayload,
+  type NumberingSettingsValue,
+} from "@/lib/numbering-settings";
 import {
   submissionRulesFromBook,
   submissionRulesToUpdate,
@@ -32,6 +38,8 @@ const copy = {
     step: (current: number) => `Step ${current} / 2`,
     rulesTitle: "Submission Rules",
     rulesDescription: "These rules affect every author's submissions. You can still change them later in Settings.",
+    numberingTitle: "Article Numbering",
+    numberingDescription: "Choose whether articles use numbers before authors begin submitting.",
     templateTitle: "Body Template",
     templateDescription: "Set the type, spacing, images, title position, and page size authors will use.",
     next: "Next: Body Template",
@@ -48,6 +56,8 @@ const copy = {
     flexible: "You can continue changing these rules later in Settings and Template.",
   },
   zh: {
+    numberingTitle: "文章编号",
+    numberingDescription: "在作者开始投稿前，选择文章是否需要编号。",
     setup: "首次配置",
     step: (current: number) => `步骤 ${current} / 2`,
     rulesTitle: "投稿规则",
@@ -153,6 +163,7 @@ function BookSetupRules({ bookId, language, onContinue }: { bookId: number; lang
   const [book, setBook] = useState<Book | null>(null);
   const [rules, setRules] = useState(defaultRules);
   const [classRules, setClassRules] = useState(defaultClassRules);
+  const [numbering, setNumbering] = useState<NumberingSettingsValue>(defaultNumberingSettings);
   const [reloadKey, setReloadKey] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready" | "saving" | "error" | "load-error">("loading");
 
@@ -165,6 +176,13 @@ function BookSetupRules({ bookId, language, onContinue }: { bookId: number; lang
       setRules(submissionRulesFromBook(loaded));
       const [prefix = "", suffix = ""] = (loaded.class_name_template ?? "").split("{value}");
       setClassRules({ mode: loaded.class_collection_mode, fixedValue: loaded.class_fixed_value ?? "", prefix, suffix, valueStyle: loaded.class_value_style ?? "arabic" });
+      setNumbering({
+        claimNumberEnd: loaded.claim_number_end,
+        claimNumberStart: loaded.claim_number_start,
+        numberDigits: loaded.number_digits,
+        numberMode: loaded.number_mode,
+        numberPrefix: loaded.number_prefix,
+      });
       setStatus("ready");
     }, () => active && setStatus("load-error"));
     return () => { active = false; };
@@ -181,6 +199,7 @@ function BookSetupRules({ bookId, language, onContinue }: { bookId: number; lang
         class_fixed_value: classRules.mode === "fixed" ? classRules.fixedValue.trim() : null,
         class_name_template: classRules.mode === "template" ? `${classRules.prefix}{value}${classRules.suffix}` : null,
         class_value_style: classRules.mode === "template" ? classRules.valueStyle : null,
+        ...numberingSettingsToPayload(numbering),
       });
       onContinue();
     } catch {
@@ -196,6 +215,13 @@ function BookSetupRules({ bookId, language, onContinue }: { bookId: number; lang
       <section className="rounded-lg border border-border bg-card p-5 sm:p-7">
         <SubmissionRuleFields language={language} onChange={setRules} rules={rules} />
         <ClassCollectionFields language={language} onChange={setClassRules} rules={classRules} />
+      </section>
+      <section className="rounded-lg border border-border bg-card p-5 sm:p-7">
+        <h2 className="text-base font-semibold">{pageCopy.numberingTitle}</h2>
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">{pageCopy.numberingDescription}</p>
+        <div className="mt-5">
+          <NumberingSettingsFields language={language} onChange={setNumbering} value={numbering} />
+        </div>
       </section>
 
       <div className="flex flex-col items-end gap-3 border-t border-border pt-5">

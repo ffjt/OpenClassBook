@@ -1,7 +1,6 @@
 import { apiRequest } from "@/repositories/apiClient";
 
 export type NumberMode = "none" | "automatic" | "existing";
-export type ExistingNumberMode = "claim" | "import";
 export type ClassCollectionMode = "none" | "fixed" | "template";
 export type ClassValueStyle = "arabic" | "chinese";
 export type BookStatus = "collecting" | "reviewing" | "published";
@@ -54,8 +53,8 @@ export interface Book {
   class_name_template: string | null;
   class_value_style: ClassValueStyle | null;
   number_mode: NumberMode;
-  existing_number_mode: ExistingNumberMode | null;
-  number_pool: string[];
+  claim_number_start: number;
+  claim_number_end: number;
   number_prefix: string;
   number_digits: number;
   status: BookStatus;
@@ -81,8 +80,8 @@ export interface BookCreateInput {
   description: string | null;
   owner_name: string;
   number_mode?: NumberMode;
-  existing_number_mode?: ExistingNumberMode | null;
-  number_pool?: string[];
+  claim_number_start?: number;
+  claim_number_end?: number;
   number_prefix?: string;
   number_digits?: number;
 }
@@ -110,8 +109,8 @@ export type BookUpdateInput = Partial<
     | "class_value_style"
     | "invite_enabled"
     | "number_mode"
-    | "existing_number_mode"
-    | "number_pool"
+    | "claim_number_start"
+    | "claim_number_end"
     | "number_prefix"
     | "number_digits"
     | "status"

@@ -157,8 +157,8 @@ def test_book_crud_persists_to_sqlite(
             "description": "A class collection",
             "owner_name": "  Alex Chen  ",
             "number_mode": "existing",
-            "existing_number_mode": "import",
-            "number_pool": ["001", "002", "003"],
+            "claim_number_start": 1,
+            "claim_number_end": 3,
         },
     )
 
@@ -179,7 +179,8 @@ def test_book_crud_persists_to_sqlite(
     assert created["allow_delete_article"] is True
     assert created["invite_enabled"] is True
     assert created["number_mode"] == "existing"
-    assert created["existing_number_mode"] == "import"
+    assert created["claim_number_start"] == 1
+    assert created["claim_number_end"] == 3
     assert created["number_prefix"] == ""
     assert created["number_digits"] == 3
     assert created["status"] == "collecting"
@@ -312,32 +313,20 @@ def test_book_create_validation_returns_422(
     response = client.post("/api/v1/books", json=payload)
     assert response.status_code == 422
 
-    missing_pool = client.post(
+    invalid_range = client.post(
         "/api/v1/books",
         json={
             "title": "Numbered book",
             "owner_name": "Editor",
             "number_mode": "existing",
-            "existing_number_mode": "import",
+            "claim_number_start": 20,
+            "claim_number_end": 10,
         },
     )
-    assert missing_pool.status_code == 201
-    assert missing_pool.json()["number_pool"] == []
-
-    duplicate_pool = client.post(
-        "/api/v1/books",
-        json={
-            "title": "Imported numbers",
-            "owner_name": "Editor",
-            "number_mode": "existing",
-            "existing_number_mode": "import",
-            "number_pool": ["001", "001"],
-        },
-    )
-    assert duplicate_pool.status_code == 422
+    assert invalid_range.status_code == 422
 
 
-def test_book_numbering_mode_and_pool_stay_consistent(client: TestClient) -> None:
+def test_book_numbering_mode_and_claim_range_stay_consistent(client: TestClient) -> None:
     book = client.post(
         "/api/v1/books",
         json={
@@ -354,13 +343,18 @@ def test_book_numbering_mode_and_pool_stay_consistent(client: TestClient) -> Non
     assert response.status_code == 200
     assert response.json()["number_mode"] == "automatic"
 
-    imported = client.patch(
+    claim_mode = client.patch(
         f"/api/v1/books/{book['id']}",
-        json={"number_mode": "existing", "existing_number_mode": "import"},
+        json={
+            "number_mode": "existing",
+            "claim_number_start": 10,
+            "claim_number_end": 20,
+        },
     )
-    assert imported.status_code == 200
-    assert imported.json()["number_mode"] == "existing"
-    assert imported.json()["number_pool"] == []
+    assert claim_mode.status_code == 200
+    assert claim_mode.json()["number_mode"] == "existing"
+    assert claim_mode.json()["claim_number_start"] == 10
+    assert claim_mode.json()["claim_number_end"] == 20
 
     author = client.post(
         f"/api/v1/books/{book['id']}/authors",
@@ -370,17 +364,12 @@ def test_book_numbering_mode_and_pool_stay_consistent(client: TestClient) -> Non
         f"/api/v1/books/{book['id']}/articles",
         json={
             "author_id": author["id"],
-            "number": "017",
+            "number": "21",
             "title": "Claimed",
         },
     )
     assert claimed.status_code == 409
 
-    claim_mode = client.patch(
-        f"/api/v1/books/{book['id']}",
-        json={"existing_number_mode": "claim"},
-    )
-    assert claim_mode.status_code == 200
     claimed = client.post(
         f"/api/v1/books/{book['id']}/articles",
         json={
@@ -390,6 +379,7 @@ def test_book_numbering_mode_and_pool_stay_consistent(client: TestClient) -> Non
         },
     )
     assert claimed.status_code == 201
+    assert claimed.json()["number"] == "17"
     assert client.patch(
         f"/api/v1/books/{book['id']}",
         json={"number_mode": "none"},
@@ -551,7 +541,8 @@ def test_existing_number_claim_mode_keeps_known_number_unique(
             "title": "Existing Numbers",
             "owner_name": "Editor",
             "number_mode": "existing",
-            "existing_number_mode": "claim",
+            "claim_number_start": 10,
+            "claim_number_end": 20,
         },
     ).json()
     first_author = client.post(
@@ -567,18 +558,18 @@ def test_existing_number_claim_mode_keeps_known_number_unique(
         f"/api/v1/books/{book['id']}/articles",
         json={
             "author_id": first_author["id"],
-            "number": "CLASS-17",
+            "number": "017",
             "title": "First",
         },
     )
     assert claimed.status_code == 201
-    assert claimed.json()["number"] == "CLASS-17"
+    assert claimed.json()["number"] == "17"
 
     duplicate = client.post(
         f"/api/v1/books/{book['id']}/articles",
         json={
             "author_id": second_author["id"],
-            "number": "CLASS-17",
+            "number": "17",
             "title": "Second",
         },
     )
@@ -606,7 +597,8 @@ def test_submission_rules_limit_editing_and_deadline(client: TestClient) -> None
             "allow_edit_after_submit": False,
             "allow_delete_article": False,
             "number_mode": "existing",
-            "existing_number_mode": "import",
+            "claim_number_start": 10,
+            "claim_number_end": 20,
         },
     )
     assert configured.status_code == 200
@@ -616,7 +608,8 @@ def test_submission_rules_limit_editing_and_deadline(client: TestClient) -> None
     )
     assert rules["max_articles_per_author"] == 2
     assert rules["number_mode"] == "existing"
-    assert rules["number_pool"] == []
+    assert rules["claim_number_start"] == 10
+    assert rules["claim_number_end"] == 20
 
     author = client.post(
         f"/api/v1/books/{book_id}/authors",
@@ -1035,8 +1028,8 @@ def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) ->
             "description": None,
             "owner_name": "Alex",
             "number_mode": "existing",
-            "existing_number_mode": "import",
-            "number_pool": ["001", "002", "003"],
+            "claim_number_start": 1,
+            "claim_number_end": 3,
         },
     ).json()
     author = client.post(
@@ -1050,7 +1043,7 @@ def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) ->
         json={
             "author_id": author["id"],
             "number": "999",
-            "title": "Outside the pool",
+            "title": "Outside the range",
         },
     )
     assert unavailable.status_code == 409
@@ -1077,6 +1070,7 @@ def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) ->
     assert create_response.status_code == 201
     created = create_response.json()
     assert created["book_id"] == book["id"]
+    assert created["number"] == "1"
     assert created["status"] == "draft"
     assert created["subtitle"] == "A persisted subtitle"
     assert created["submitted_at"] is None
@@ -1229,8 +1223,8 @@ def test_author_can_manage_multiple_articles_and_preview_latest(
             "title": "Multiple Articles",
             "owner_name": "Editor",
             "number_mode": "existing",
-            "existing_number_mode": "import",
-            "number_pool": ["003", "017"],
+            "claim_number_start": 3,
+            "claim_number_end": 17,
         },
     ).json()
     author = client.post(
@@ -1260,8 +1254,8 @@ def test_author_can_manage_multiple_articles_and_preview_latest(
 
     articles = client.get(f"/api/v1/authors/{author['id']}/articles").json()
     assert {article["id"] for article in articles} == {first["id"], second["id"]}
-    assert first["number"] == "017"
-    assert second["number"] == "003"
+    assert first["number"] == "17"
+    assert second["number"] == "3"
 
     missing_number = client.post(
         f"/api/v1/books/{book['id']}/articles",
@@ -1377,8 +1371,8 @@ def test_layout_reorders_articles_without_overwriting_claimed_numbers(
             "title": "Custom publication order",
             "owner_name": "Editor",
             "number_mode": "existing",
-            "existing_number_mode": "import",
-            "number_pool": ["010", "020"],
+            "claim_number_start": 10,
+            "claim_number_end": 20,
         },
     ).json()
     author = client.post(
@@ -1413,7 +1407,7 @@ def test_layout_reorders_articles_without_overwriting_claimed_numbers(
         second["id"],
         first["id"],
     ]
-    assert [article["number"] for article in reordered.json()] == ["020", "010"]
+    assert [article["number"] for article in reordered.json()] == ["20", "10"]
     assert client.get(f"/api/v1/books/{book['id']}").json()[
         "layout_article_order"
     ] == [second["id"], first["id"]]
@@ -1545,8 +1539,8 @@ def test_export_generates_and_downloads_printable_pdf(
             "description": "A bilingual class book",
             "owner_name": "陈老师",
             "number_mode": "existing",
-            "existing_number_mode": "import",
-            "number_pool": ["2", "10"],
+            "claim_number_start": 2,
+            "claim_number_end": 10,
         },
     ).json()
     book_id = book["id"]

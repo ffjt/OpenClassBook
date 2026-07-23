@@ -6,12 +6,12 @@ import {
 } from "@/lib/numbering-settings";
 
 describe("numbering settings payload", () => {
-  it("disables every numbering source for books without numbers", () => {
+  it("sends the default claim range when numbering is disabled", () => {
     expect(numberingSettingsToPayload(defaultNumberingSettings)).toEqual({
-      existing_number_mode: null,
+      claim_number_end: 100,
+      claim_number_start: 1,
       number_digits: 3,
       number_mode: "none",
-      number_pool: [],
       number_prefix: "",
     });
   });
@@ -23,24 +23,24 @@ describe("numbering settings payload", () => {
       numberMode: "automatic",
       numberPrefix: "NO- ",
     })).toMatchObject({
-      existing_number_mode: null,
+      claim_number_end: 100,
+      claim_number_start: 1,
       number_digits: 4,
       number_mode: "automatic",
-      number_pool: [],
       number_prefix: "NO-",
     });
   });
 
-  it("keeps an imported pool only for existing-number import mode", () => {
+  it("sends the configured claim range", () => {
     expect(numberingSettingsToPayload({
       ...defaultNumberingSettings,
-      existingNumberMode: "import",
+      claimNumberEnd: 42,
+      claimNumberStart: 17,
       numberMode: "existing",
-      numberPool: ["001", "017"],
     })).toMatchObject({
-      existing_number_mode: "import",
+      claim_number_end: 42,
+      claim_number_start: 17,
       number_mode: "existing",
-      number_pool: ["001", "017"],
     });
   });
 });
