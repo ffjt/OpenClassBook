@@ -6,7 +6,7 @@ services:
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:?Set the public HTTPS API URL before deployment}
     ports:
-      - "5173:80"
+      - "127.0.0.1:5173:80"
     depends_on:
       backend:
         condition: service_healthy
@@ -16,7 +16,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       APP_ENVIRONMENT: production
       DEBUG: "false"
