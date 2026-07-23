@@ -23,12 +23,27 @@ class BookRepository(BaseRepository[Book, BookCreateData, BookUpdateData]):
     def get(self, resource_id: int) -> Book | None:
         return self.session.get(Book, resource_id)
 
+    def get_by_owner(self, resource_id: int, owner_id: int) -> Book | None:
+        statement = select(Book).where(
+            Book.id == resource_id,
+            Book.owner_id == owner_id,
+        )
+        return self.session.scalar(statement)
+
     def get_by_invite_code(self, invite_code: str) -> Book | None:
         statement = select(Book).where(Book.invite_code == invite_code)
         return self.session.scalar(statement)
 
-    def list(self, *, offset: int = 0, limit: int = 100) -> list[Book]:
-        statement = select(Book).order_by(Book.id).offset(offset).limit(limit)
+    def list_by_owner(
+        self, owner_id: int, *, offset: int = 0, limit: int = 100
+    ) -> list[Book]:
+        statement = (
+            select(Book)
+            .where(Book.owner_id == owner_id)
+            .order_by(Book.id)
+            .offset(offset)
+            .limit(limit)
+        )
         return list(self.session.scalars(statement))
 
     def update(self, resource_id: int, data: BookUpdateData) -> Book | None:

@@ -1,4 +1,7 @@
-import { apiRequest } from "@/repositories/apiClient";
+import {
+  authorApiRequest,
+  authenticatedApiRequest,
+} from "@/repositories/authRepository";
 
 export type ArticleStatus = "draft" | "pending" | "approved" | "rejected";
 
@@ -42,17 +45,17 @@ export type ArticleUpdateInput = Partial<ArticleCreateInput>;
 
 export const articleRepository = {
   list(bookId: number) {
-    return apiRequest<Article[]>(`/books/${bookId}/articles`);
+    return authenticatedApiRequest<Article[]>(`/books/${bookId}/articles`);
   },
 
   listSubmitted(bookId: number) {
-    return apiRequest<Article[]>(
+    return authenticatedApiRequest<Article[]>(
       `/books/${bookId}/articles?include_drafts=false`,
     );
   },
 
   listByAuthor(authorId: number) {
-    return apiRequest<Article[]>(`/authors/${authorId}/articles`);
+    return authorApiRequest<Article[]>(`/authors/${authorId}/articles`, authorId);
   },
 
   listByBook(bookId: number) {
@@ -64,59 +67,72 @@ export const articleRepository = {
     );
   },
 
-  get(id: number) {
-    return apiRequest<Article>(`/articles/${id}`);
+  get(id: number, authorId?: number) {
+    return authorId === undefined
+      ? authenticatedApiRequest<Article>(`/articles/${id}`)
+      : authorApiRequest<Article>(`/articles/${id}`, authorId);
   },
 
   create(bookId: number, data: ArticleCreateInput) {
-    return apiRequest<Article>(`/books/${bookId}/articles`, {
+    return authorApiRequest<Article>(`/books/${bookId}/articles`, data.author_id, {
       body: JSON.stringify(data),
       method: "POST",
     });
   },
 
-  update(id: number, data: ArticleUpdateInput) {
-    return apiRequest<Article>(`/articles/${id}`, {
-      body: JSON.stringify(data),
-      method: "PATCH",
-    });
+  update(id: number, data: ArticleUpdateInput, authorId?: number) {
+    return authorId === undefined
+      ? authenticatedApiRequest<Article>(`/articles/${id}`, {
+          body: JSON.stringify(data),
+          method: "PATCH",
+        })
+      : authorApiRequest<Article>(`/articles/${id}`, authorId, {
+          body: JSON.stringify(data),
+          method: "PATCH",
+        });
   },
 
   updateStatus(id: number, status: ArticleStatus) {
-    return apiRequest<Article>(`/articles/${id}/status`, {
+    return authenticatedApiRequest<Article>(`/articles/${id}/status`, {
       body: JSON.stringify({ status }),
       method: "PATCH",
     });
   },
 
-  requestEdit(id: number) {
-    return apiRequest<Article>(`/articles/${id}/edit-request`, {
+  requestEdit(id: number, authorId?: number) {
+    return authorId === undefined
+      ? authenticatedApiRequest<Article>(`/articles/${id}/edit-request`, {
+          method: "POST",
+        })
+      : authorApiRequest<Article>(`/articles/${id}/edit-request`, authorId, {
       method: "POST",
     });
   },
 
   resolveEditRequest(id: number, action: "approve" | "reject") {
-    return apiRequest<Article>(`/articles/${id}/edit-request`, {
+    return authenticatedApiRequest<Article>(`/articles/${id}/edit-request`, {
       body: JSON.stringify({ action }),
       method: "PATCH",
     });
   },
 
   assignNumbers(bookId: number, articleIds: number[]) {
-    return apiRequest<Article[]>(`/books/${bookId}/articles/numbers`, {
+    return authenticatedApiRequest<Article[]>(`/books/${bookId}/articles/numbers`, {
       body: JSON.stringify({ article_ids: articleIds }),
       method: "PATCH",
     });
   },
 
   saveLayoutOrder(bookId: number, articleIds: number[]) {
-    return apiRequest<Article[]>(`/books/${bookId}/articles/order`, {
+    return authenticatedApiRequest<Article[]>(`/books/${bookId}/articles/order`, {
       body: JSON.stringify({ article_ids: articleIds }),
       method: "PATCH",
     });
   },
 
-  delete(id: number) {
-    return apiRequest<void>(`/articles/${id}`, { method: "DELETE" });
+  delete(id: number, authorId?: number) {
+    return authorId === undefined
+      ? authenticatedApiRequest<void>(`/articles/${id}`, { method: "DELETE" })
+      : authorApiRequest<void>(`/articles/${id}`, authorId, { method: "DELETE" });
   },
 };

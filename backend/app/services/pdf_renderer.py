@@ -1308,7 +1308,8 @@ class PdfRenderer:
                     f'<font color="{document.template.accent_color}">'
                     f"{index:02d}</font> "
                     f"{escape(article.title)}"
-                    f'<font color="#667085">{f" · {escape(detail)}" if detail else ""}</font>',
+                    f'<font color="#667085">'
+                    f'{f" · {escape(detail)}" if detail else ""}</font>',
                     styles["contents_item"],
                 )
             )

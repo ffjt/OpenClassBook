@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 
-from app.api.dependencies import UploadServiceDep
+from app.api.dependencies import OwnedBookDep, UploadServiceDep
 from app.schemas.upload import UploadType
 
 router = APIRouter(prefix="/files", tags=["Files / 文件"])
@@ -44,6 +44,7 @@ def get_file(
     book_id: int,
     upload_type: UploadType,
     service: UploadServiceDep,
+    _: OwnedBookDep,
 ) -> FileResponse:
     return _file_response(book_id, upload_type, service)
 
@@ -57,5 +58,6 @@ def get_file_metadata(
     book_id: int,
     upload_type: UploadType,
     service: UploadServiceDep,
+    _: OwnedBookDep,
 ) -> FileResponse:
     return _file_response(book_id, upload_type, service)

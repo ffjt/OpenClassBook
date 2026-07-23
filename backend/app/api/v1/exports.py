@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 
-from app.api.dependencies import BookServiceDep, ExportServiceDep
+from app.api.dependencies import ExportServiceDep, OwnedBookDep
 from app.schemas.export import ExportPreviewResponse, ExportResponse
 from app.services.export import NoPublishableContentError, SourceFileError
 
@@ -26,6 +26,7 @@ def book_not_found() -> HTTPException:
 def get_export_preview(
     book_id: int,
     service: ExportServiceDep,
+    _: OwnedBookDep,
     preflight: bool = True,
 ) -> ExportPreviewResponse:
     preview = service.get_preview(book_id, preflight_assets=preflight)
@@ -39,7 +40,11 @@ def get_export_preview(
     response_model=ExportResponse,
     summary="Generate the book PDF / 生成整本书 PDF",
 )
-def generate_export(book_id: int, service: ExportServiceDep) -> ExportResponse:
+def generate_export(
+    book_id: int,
+    service: ExportServiceDep,
+    _: OwnedBookDep,
+) -> ExportResponse:
     try:
         result = service.generate(book_id, f"/api/v1/books/{book_id}/export")
     except NoPublishableContentError as error:
@@ -73,7 +78,9 @@ def generate_export(book_id: int, service: ExportServiceDep) -> ExportResponse:
     summary="Generate the exterior cover spread PDF / 生成封面展开图 PDF",
 )
 def generate_appearance_export(
-    book_id: int, service: ExportServiceDep
+    book_id: int,
+    service: ExportServiceDep,
+    _: OwnedBookDep,
 ) -> ExportResponse:
     result = service.generate_appearance(
         book_id, f"/api/v1/books/{book_id}/appearance-export"
@@ -89,7 +96,10 @@ def generate_appearance_export(
     summary="Download the exterior cover spread PDF / 下载封面展开图 PDF",
 )
 def download_appearance_export(
-    book_id: int, task_id: str, service: ExportServiceDep
+    book_id: int,
+    task_id: str,
+    service: ExportServiceDep,
+    _: OwnedBookDep,
 ) -> FileResponse:
     artifact = service.get_appearance_artifact(book_id, task_id)
     if artifact is None:
@@ -123,7 +133,7 @@ def download_export(
     book_id: int,
     task_id: str,
     service: ExportServiceDep,
-    book_service: BookServiceDep,
+    book: OwnedBookDep,
     inline: bool = False,
 ) -> FileResponse:
     artifact = service.get_artifact(book_id, task_id)
@@ -135,9 +145,6 @@ def download_export(
                 "message_zh": "未找到已生成的 PDF",
             },
         )
-    book = book_service.get(book_id)
-    if book is None:
-        raise book_not_found()
     generated_title = service.get_artifact_title(artifact)
     response = FileResponse(
         path=Path(artifact),

@@ -58,7 +58,9 @@ def test_owner_registration_login_refresh_and_logout(
         user = session.scalar(select(User).where(User.email == email))
         assert user is not None
         assert user.password_hash != "secure-owner-password"
-        workspace = session.scalar(select(Workspace).where(Workspace.owner_id == user.id))
+        workspace = session.scalar(
+            select(Workspace).where(Workspace.owner_id == user.id)
+        )
         assert workspace is not None
         assert workspace.name == "Avery's Workspace"
         code_record = session.scalar(
@@ -85,13 +87,18 @@ def test_owner_registration_login_refresh_and_logout(
     assert refreshed.status_code == 200
     assert refreshed.json()["refresh_token"] != refresh_token
     assert (
-        client.post("/api/auth/refresh", json={"refresh_token": refresh_token}).status_code
+        client.post(
+            "/api/auth/refresh", json={"refresh_token": refresh_token}
+        ).status_code
         == 401
     )
 
     new_refresh_token = refreshed.json()["refresh_token"]
+    current_access_token = refreshed.json()["access_token"]
     assert (
-        client.post("/api/auth/logout", json={"refresh_token": new_refresh_token}).status_code
+        client.post(
+            "/api/auth/logout", json={"refresh_token": new_refresh_token}
+        ).status_code
         == 204
     )
     assert (
@@ -100,15 +107,27 @@ def test_owner_registration_login_refresh_and_logout(
         ).status_code
         == 401
     )
+    assert (
+        client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {current_access_token}"},
+        ).status_code
+        == 401
+    )
     with test_session_factory() as session:
-        assert session.scalar(select(RefreshToken).where(RefreshToken.revoked_at.is_not(None)))
+        assert session.scalar(
+            select(RefreshToken).where(RefreshToken.revoked_at.is_not(None))
+        )
 
 
 def test_verification_code_is_rate_limited_and_required(
     client: TestClient, verification_provider: CapturingEmailProvider
 ) -> None:
     email = "rate-limit@example.com"
-    assert client.post("/api/auth/verification-code", json={"email": email}).status_code == 202
+    assert (
+        client.post("/api/auth/verification-code", json={"email": email}).status_code
+        == 202
+    )
     throttled = client.post("/api/auth/verification-code", json={"email": email})
     assert throttled.status_code == 429
     assert int(throttled.headers["Retry-After"]) > 0
@@ -123,3 +142,37 @@ def test_verification_code_is_rate_limited_and_required(
         },
     )
     assert invalid.status_code == 400
+
+
+def test_verification_code_locks_after_five_failed_guesses(
+    client: TestClient, verification_provider: CapturingEmailProvider
+) -> None:
+    email = "locked-code@example.com"
+    assert (
+        client.post("/api/auth/verification-code", json={"email": email}).status_code
+        == 202
+    )
+    code = verification_provider.codes[email]
+    for _ in range(5):
+        response = client.post(
+            "/api/auth/register",
+            json={
+                "email": email,
+                "code": "000000" if code != "000000" else "999999",
+                "password": "secure-owner-password",
+                "username": "Locked Code",
+            },
+        )
+        assert response.status_code == 400
+    assert (
+        client.post(
+            "/api/auth/register",
+            json={
+                "email": email,
+                "code": code,
+                "password": "secure-owner-password",
+                "username": "Locked Code",
+            },
+        ).status_code
+        == 400
+    )

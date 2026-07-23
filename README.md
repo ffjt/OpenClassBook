@@ -113,12 +113,15 @@ Configuration examples are in [`.env.example`](.env.example) and [`backend/.env.
 ## Docker / Docker 运行
 
 ```bash
+# Copy .env.production.example to .env, set the required public domains,
+# JWT secret, and one email provider before starting.
+# 先将 .env.production.example 复制为 .env，并填写公网域名、JWT 密钥和一种邮件服务。
 docker compose up --build
 ```
 
-The frontend is served by Nginx on <http://localhost:5173>; the backend listens on <http://localhost:8000>. Docker volumes persist the SQLite database and uploaded files.
+The Compose deployment requires explicit production settings and is intended to sit behind an HTTPS reverse proxy. The frontend is served by Nginx on port 5173; the backend listens on port 8000. Docker volumes persist the SQLite database and uploaded files.
 
-前端由 Nginx 提供并运行在 <http://localhost:5173>，后端运行在 <http://localhost:8000>。Docker 卷会持久化 SQLite 数据库和上传文件。
+Compose 部署必须提供明确的生产配置，并应置于 HTTPS 反向代理之后。前端由 Nginx 提供并运行在 5173 端口，后端运行在 8000 端口。Docker 卷会持久化 SQLite 数据库和上传文件。
 
 ## Quality checks / 质量检查
 

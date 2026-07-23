@@ -1,6 +1,9 @@
-from fastapi import APIRouter, HTTPException, Response, status
+import logging
+
+from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from app.api.dependencies import AuthServiceDep, CurrentUserDep
+from app.core.rate_limit import enforce_rate_limit
 from app.email_provider import EmailProviderError
 from app.repositories.auth import DuplicateEmailError
 from app.schemas.auth import (
@@ -20,6 +23,8 @@ from app.services.verification import VerificationCodeError, VerificationRateLim
 
 router = APIRouter(prefix="/auth", tags=["Authentication / 账号认证"])
 
+logger = logging.getLogger(__name__)
+
 
 @router.post(
     "/verification-code",
@@ -28,8 +33,11 @@ router = APIRouter(prefix="/auth", tags=["Authentication / 账号认证"])
     summary="Send a registration verification code / 发送注册验证码",
 )
 def send_verification_code(
-    data: VerificationCodeRequest, service: AuthServiceDep
+    request: Request,
+    data: VerificationCodeRequest,
+    service: AuthServiceDep,
 ) -> VerificationCodeResponse:
+    enforce_rate_limit(request, "verification-code", maximum=5, window_seconds=900)
     try:
         retry_after_seconds = service.send_verification_code(data.email)
     except VerificationRateLimitError as error:
@@ -64,7 +72,12 @@ def send_verification_code(
     status_code=status.HTTP_201_CREATED,
     summary="Register a book-owner account / 注册书籍管理账号",
 )
-def register(data: RegisterRequest, service: AuthServiceDep) -> AuthenticationResponse:
+def register(
+    request: Request,
+    data: RegisterRequest,
+    service: AuthServiceDep,
+) -> AuthenticationResponse:
+    enforce_rate_limit(request, "register", maximum=20, window_seconds=900)
     try:
         return AuthenticationResponse.model_validate(service.register(data))
     except DuplicateEmailError as error:
@@ -92,10 +105,16 @@ def register(data: RegisterRequest, service: AuthServiceDep) -> AuthenticationRe
     response_model=AuthenticationResponse,
     summary="Sign in with email and password / 使用邮箱和密码登录",
 )
-def login(data: LoginRequest, service: AuthServiceDep) -> AuthenticationResponse:
+def login(
+    request: Request,
+    data: LoginRequest,
+    service: AuthServiceDep,
+) -> AuthenticationResponse:
+    enforce_rate_limit(request, "login", maximum=10, window_seconds=900)
     try:
         return AuthenticationResponse.model_validate(service.login(data))
     except AuthenticationError as error:
+        logger.warning("security_event=login_failed")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -112,7 +131,12 @@ def login(data: LoginRequest, service: AuthServiceDep) -> AuthenticationResponse
     response_model=AuthenticationResponse,
     summary="Refresh an owner session / 刷新登录会话",
 )
-def refresh(data: RefreshRequest, service: AuthServiceDep) -> AuthenticationResponse:
+def refresh(
+    request: Request,
+    data: RefreshRequest,
+    service: AuthServiceDep,
+) -> AuthenticationResponse:
+    enforce_rate_limit(request, "refresh", maximum=30, window_seconds=900)
     try:
         return AuthenticationResponse.model_validate(
             service.refresh(data.refresh_token)

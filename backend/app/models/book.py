@@ -1,6 +1,16 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text, func, select
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+    select,
+)
 from sqlalchemy.orm import Mapped, column_property, mapped_column
 
 from app.db.database import Base
@@ -12,6 +22,9 @@ class Book(Base):
     __tablename__ = "books"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     title: Mapped[str] = mapped_column(String(255))
     subtitle: Mapped[str | None] = mapped_column(String(255), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -21,7 +34,9 @@ class Book(Base):
     appearance_metadata: Mapped[dict[str, str] | None] = mapped_column(
         JSON, nullable=True
     )
-    invite_code: Mapped[str] = mapped_column(String(10), unique=True, index=True)
+    # Retained as the legacy/default invite pointer for existing clients. The
+    # Invitation table is the source of truth for validation and lifecycle.
+    invite_code: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     invite_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     submission_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     submission_deadline: Mapped[datetime | None] = mapped_column(

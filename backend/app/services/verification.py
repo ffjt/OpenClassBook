@@ -57,12 +57,19 @@ class EmailVerificationService:
         verification = self.repository.get_latest_verification_code(email)
         if (
             verification is None
+            or verification.locked_at is not None
             or self._as_utc(verification.expires_at) < now
-            or not hmac.compare_digest(
-                verification.code_hash,
-                self._code_hash(email, code),
-            )
         ):
+            raise VerificationCodeError("The verification code is invalid or expired.")
+        if not hmac.compare_digest(
+            verification.code_hash,
+            self._code_hash(email, code),
+        ):
+            self.repository.record_verification_failure(
+                verification,
+                now,
+                maximum_attempts=5,
+            )
             raise VerificationCodeError("The verification code is invalid or expired.")
         return verification
 

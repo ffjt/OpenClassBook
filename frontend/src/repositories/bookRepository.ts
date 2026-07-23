@@ -1,4 +1,4 @@
-import { apiRequest } from "@/repositories/apiClient";
+import { authenticatedApiRequest } from "@/repositories/authRepository";
 
 export type NumberMode = "none" | "automatic" | "existing";
 export type ClassCollectionMode = "none" | "fixed" | "template";
@@ -75,6 +75,25 @@ export interface Book {
   updated_at: string;
 }
 
+export type InvitationStatus = "active" | "disabled" | "replaced";
+
+export interface Invitation {
+  id: number;
+  book_id: number;
+  code: string;
+  created_by: number;
+  expires_at: string | null;
+  max_uses: number | null;
+  used_count: number;
+  status: InvitationStatus;
+  created_at: string;
+}
+
+export interface InvitationSettingsInput {
+  expires_at?: string | null;
+  max_uses?: number | null;
+}
+
 export interface BookCreateInput {
   title: string;
   description: string | null;
@@ -127,48 +146,80 @@ export type BookUpdateInput = Partial<
 
 export const bookRepository = {
   create(data: BookCreateInput) {
-    return apiRequest<Book>("/books", {
+    return authenticatedApiRequest<Book>("/books", {
       body: JSON.stringify(data),
       method: "POST",
     });
   },
 
   list() {
-    return apiRequest<Book[]>("/books");
+    return authenticatedApiRequest<Book[]>("/books");
   },
 
   get(id: number) {
-    return apiRequest<Book>(`/books/${id}`);
+    return authenticatedApiRequest<Book>(`/books/${id}`);
   },
 
   update(id: number, data: BookUpdateInput) {
-    return apiRequest<Book>(`/books/${id}`, {
+    return authenticatedApiRequest<Book>(`/books/${id}`, {
       body: JSON.stringify(data),
       method: "PATCH",
     });
   },
 
   delete(id: number) {
-    return apiRequest<void>(`/books/${id}`, {
+    return authenticatedApiRequest<void>(`/books/${id}`, {
       method: "DELETE",
     });
   },
 
   regenerateInviteCode(id: number) {
-    return apiRequest<Book>(`/books/${id}/invite-code`, {
+    return authenticatedApiRequest<Book>(`/books/${id}/invite-code`, {
       method: "POST",
     });
   },
 
+  listInvitations(id: number) {
+    return authenticatedApiRequest<Invitation[]>(`/books/${id}/invitations`);
+  },
+
+  createInvitation(id: number, data: InvitationSettingsInput) {
+    return authenticatedApiRequest<Invitation>(`/books/${id}/invitations`, {
+      body: JSON.stringify(data),
+      method: "POST",
+    });
+  },
+
+  updateInvitation(id: number, invitationId: number, data: InvitationSettingsInput) {
+    return authenticatedApiRequest<Invitation>(`/books/${id}/invitations/${invitationId}`, {
+      body: JSON.stringify(data),
+      method: "PATCH",
+    });
+  },
+
+  regenerateInvitation(id: number, invitationId: number) {
+    return authenticatedApiRequest<Invitation>(
+      `/books/${id}/invitations/${invitationId}/regenerate`,
+      { method: "POST" },
+    );
+  },
+
+  disableInvitation(id: number, invitationId: number) {
+    return authenticatedApiRequest<Invitation>(
+      `/books/${id}/invitations/${invitationId}/disable`,
+      { method: "POST" },
+    );
+  },
+
   deleteDrafts(id: number) {
-    return apiRequest<Book>(`/books/${id}/drafts`, { method: "DELETE" });
+    return authenticatedApiRequest<Book>(`/books/${id}/drafts`, { method: "DELETE" });
   },
 
   deleteArticles(id: number) {
-    return apiRequest<Book>(`/books/${id}/articles`, { method: "DELETE" });
+    return authenticatedApiRequest<Book>(`/books/${id}/articles`, { method: "DELETE" });
   },
 
   deleteAuthors(id: number) {
-    return apiRequest<Book>(`/books/${id}/authors`, { method: "DELETE" });
+    return authenticatedApiRequest<Book>(`/books/${id}/authors`, { method: "DELETE" });
   },
 };

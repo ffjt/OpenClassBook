@@ -345,7 +345,7 @@ export function AuthorEditorPage({
               ...articleData,
               number: draft.number || undefined,
             })
-          : await articleRepository.update(selectedId, articleData);
+          : await articleRepository.update(selectedId, articleData, author.id);
       const refreshed = await articleRepository.listByAuthor(author.id);
       setArticles(refreshed);
       setSelectedId(saved.id);
@@ -381,7 +381,7 @@ export function AuthorEditorPage({
     setBusyAction("delete");
     setFormError(null);
     try {
-      await articleRepository.delete(selectedId);
+      await articleRepository.delete(selectedId, authorId);
       const refreshed = await articleRepository.listByAuthor(authorId);
       setArticles(refreshed);
       if (refreshed[0]) selectArticle(refreshed[0]);
@@ -407,7 +407,7 @@ export function AuthorEditorPage({
     setFormError(null);
     setMessage(null);
     try {
-      const updated = await articleRepository.requestEdit(selectedId);
+      const updated = await articleRepository.requestEdit(selectedId, authorId);
       setArticles((current) =>
         current.map((article) => (article.id === updated.id ? updated : article)),
       );

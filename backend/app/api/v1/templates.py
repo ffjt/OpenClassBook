@@ -1,13 +1,17 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.api.dependencies import TemplateServiceDep
+from app.api.dependencies import AuthorizedBookDep, OwnedBookDep, TemplateServiceDep
 from app.schemas.template import TemplateResponse, TemplateUpdate
 
 router = APIRouter(tags=["Templates / 模板"])
 
 
 @router.get("/books/{book_id}/template", response_model=TemplateResponse)
-def get_template(book_id: int, service: TemplateServiceDep) -> TemplateResponse:
+def get_template(
+    book_id: int,
+    service: TemplateServiceDep,
+    _: AuthorizedBookDep,
+) -> TemplateResponse:
     template = service.get_by_book(book_id)
     if template is None:
         raise HTTPException(
@@ -29,6 +33,7 @@ def update_template(
     book_id: int,
     data: TemplateUpdate,
     service: TemplateServiceDep,
+    _: OwnedBookDep,
 ) -> TemplateResponse:
     template = service.save_by_book(book_id, data)
     if template is None:

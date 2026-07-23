@@ -1,5 +1,9 @@
 import axios, { AxiosError } from "axios";
 
+import {
+  authenticatedFetch,
+  getAuthenticationHeaders,
+} from "@/repositories/authRepository";
 import { apiBaseUrl } from "@/repositories/apiClient";
 
 export type UploadType =
@@ -33,6 +37,11 @@ export type UploadErrorCode =
 
 const client = axios.create({
   baseURL: `${apiBaseUrl}/api/v1`,
+});
+
+client.interceptors.request.use((config) => {
+  config.headers.set(getAuthenticationHeaders());
+  return config;
 });
 
 export const uploadRepository = {
@@ -77,8 +86,9 @@ export const uploadRepository = {
     return client.delete<void>(`/books/${bookId}/upload/${type}`);
   },
 
-  getFileUrl(bookId: number, type: UploadType) {
-    return `${apiBaseUrl}/api/v1/files/${bookId}/${type}`;
+  async download(bookId: number, type: UploadType) {
+    const response = await authenticatedFetch(`/files/${bookId}/${type}`);
+    return response.blob();
   },
 };
 

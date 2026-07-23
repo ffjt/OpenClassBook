@@ -20,7 +20,14 @@ ArticleSubtitle = Annotated[
     str,
     StringConstraints(strip_whitespace=True, max_length=255),
 ]
-ArticleImage = Annotated[str, StringConstraints(max_length=14_000_000)]
+ArticleContent = Annotated[str, StringConstraints(max_length=100_000)]
+ArticleImage = Annotated[
+    str,
+    StringConstraints(
+        max_length=14_000_000,
+        pattern=r"^data:image/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$",
+    ),
+]
 ImageWrap = Literal[
     "square",
     "tight",
@@ -53,7 +60,7 @@ class ArticleBase(BaseModel):
     number: ArticleNumber
     title: ArticleTitle
     subtitle: ArticleSubtitle = ""
-    content: str = ""
+    content: ArticleContent = ""
     image: ArticleImage | None = None
     image_settings: ArticleImageSettings | None = None
     status: ArticleStatus = "draft"
@@ -68,7 +75,7 @@ class ArticleUpdate(BaseModel):
     number: AssignedArticleNumber | None = None
     title: ArticleTitle | None = None
     subtitle: ArticleSubtitle | None = None
-    content: str | None = None
+    content: ArticleContent | None = None
     image: ArticleImage | None = None
     image_settings: ArticleImageSettings | None = None
     status: ArticleStatus | None = None

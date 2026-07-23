@@ -6,14 +6,28 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     Response,
     UploadFile,
     status,
 )
 
-from app.api.dependencies import BookServiceDep, UploadServiceDep
+from app.api.dependencies import (
+    BookServiceDep,
+    CurrentUserDep,
+    InvitationServiceDep,
+    OwnedBookDep,
+    UploadServiceDep,
+)
+from app.core.rate_limit import enforce_rate_limit
 from app.schemas.book import BookCreate, BookResponse, BookUpdate
+from app.schemas.invitation import (
+    InvitationCreate,
+    InvitationResponse,
+    InvitationUpdate,
+)
 from app.schemas.upload import UploadResponse, UploadType
+from app.services.invitation import InvitationConfigurationError
 from app.services.upload import (
     FileTooLargeError,
     InvalidFileContentError,
@@ -34,6 +48,45 @@ def book_not_found() -> HTTPException:
     )
 
 
+def invitation_not_found() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail={
+            "code": "invitation_not_found",
+            "message": "Invitation not found.",
+            "message_zh": "未找到该邀请。",
+        },
+    )
+
+
+def invitation_configuration_error(
+    error: InvitationConfigurationError,
+) -> HTTPException:
+    messages = {
+        "empty_update": (
+            "At least one invitation setting is required.",
+            "至少需要修改一项邀请设置。",
+        ),
+        "expiration_in_past": (
+            "The expiration date must be in the future.",
+            "过期时间必须晚于当前时间。",
+        ),
+        "max_uses_below_used_count": (
+            "Maximum uses cannot be lower than the current usage count.",
+            "最大使用次数不能小于当前已使用次数。",
+        ),
+    }
+    message, message_zh = messages[str(error)]
+    return HTTPException(
+        status_code=(
+            status.HTTP_400_BAD_REQUEST
+            if str(error) == "empty_update"
+            else status.HTTP_422_UNPROCESSABLE_CONTENT
+        ),
+        detail={"code": str(error), "message": message, "message_zh": message_zh},
+    )
+
+
 @router.get(
     "",
     response_model=list[BookResponse],
@@ -41,12 +94,13 @@ def book_not_found() -> HTTPException:
 )
 def list_books(
     service: BookServiceDep,
+    user: CurrentUserDep,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 100,
 ) -> list[BookResponse]:
     return [
         BookResponse.model_validate(book)
-        for book in service.list(offset=offset, limit=limit)
+        for book in service.list_for_owner(user.id, offset=offset, limit=limit)
     ]
 
 
@@ -56,8 +110,101 @@ def list_books(
     status_code=status.HTTP_201_CREATED,
     summary="Create a book / 创建书籍",
 )
-def create_book(data: BookCreate, service: BookServiceDep) -> BookResponse:
-    return BookResponse.model_validate(service.create(data))
+def create_book(
+    data: BookCreate,
+    service: BookServiceDep,
+    user: CurrentUserDep,
+) -> BookResponse:
+    return BookResponse.model_validate(service.create(data, user.id))
+
+
+@router.get(
+    "/{book_id}/invitations",
+    response_model=list[InvitationResponse],
+    summary="List invitations / 获取邀请列表",
+)
+def list_invitations(
+    book_id: int,
+    service: InvitationServiceDep,
+    _: OwnedBookDep,
+) -> list[InvitationResponse]:
+    return [
+        InvitationResponse.model_validate(invitation)
+        for invitation in service.list_for_book(book_id)
+    ]
+
+
+@router.post(
+    "/{book_id}/invitations",
+    response_model=InvitationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create an invitation / 创建邀请",
+)
+def create_invitation(
+    data: InvitationCreate,
+    service: InvitationServiceDep,
+    book: OwnedBookDep,
+    user: CurrentUserDep,
+) -> InvitationResponse:
+    try:
+        invitation = service.create(book, user.id, data)
+    except InvitationConfigurationError as error:
+        raise invitation_configuration_error(error) from error
+    return InvitationResponse.model_validate(invitation)
+
+
+@router.patch(
+    "/{book_id}/invitations/{invitation_id}",
+    response_model=InvitationResponse,
+    summary="Update invitation limits / 更新邀请限制",
+)
+def update_invitation(
+    book_id: int,
+    invitation_id: int,
+    data: InvitationUpdate,
+    service: InvitationServiceDep,
+    _: OwnedBookDep,
+) -> InvitationResponse:
+    try:
+        invitation = service.update(book_id, invitation_id, data)
+    except InvitationConfigurationError as error:
+        raise invitation_configuration_error(error) from error
+    if invitation is None:
+        raise invitation_not_found()
+    return InvitationResponse.model_validate(invitation)
+
+
+@router.post(
+    "/{book_id}/invitations/{invitation_id}/regenerate",
+    response_model=InvitationResponse,
+    summary="Regenerate invitation / 重新生成邀请",
+)
+def regenerate_invitation(
+    invitation_id: int,
+    service: InvitationServiceDep,
+    book: OwnedBookDep,
+) -> InvitationResponse:
+    invitation = service.regenerate(book, invitation_id)
+    if invitation is None:
+        raise invitation_not_found()
+    return InvitationResponse.model_validate(invitation)
+
+
+@router.post(
+    "/{book_id}/invitations/{invitation_id}/disable",
+    response_model=InvitationResponse,
+    summary="Disable invitation / 停用邀请",
+)
+def disable_invitation(
+    book_id: int,
+    invitation_id: int,
+    service: InvitationServiceDep,
+    _: OwnedBookDep,
+) -> InvitationResponse:
+    invitation = service.disable(book_id, invitation_id)
+    if invitation is None:
+        raise invitation_not_found()
+    return InvitationResponse.model_validate(invitation)
 
 
 @router.post(
@@ -67,10 +214,13 @@ def create_book(data: BookCreate, service: BookServiceDep) -> BookResponse:
 )
 async def upload_book_file(
     book_id: int,
+    request: Request,
     service: UploadServiceDep,
+    _: OwnedBookDep,
     file: Annotated[UploadFile, File(description="File / 文件")],
     upload_type: Annotated[UploadType, Form(alias="type")],
 ) -> UploadResponse:
+    enforce_rate_limit(request, "upload", maximum=20, window_seconds=900)
     try:
         result = await service.upload(book_id, upload_type, file)
     except FileTooLargeError as error:
@@ -101,6 +251,7 @@ def delete_book_file(
     book_id: int,
     upload_type: UploadType,
     service: UploadServiceDep,
+    _: OwnedBookDep,
 ) -> Response:
     try:
         if not service.delete(book_id, upload_type):
@@ -125,10 +276,7 @@ def delete_book_file(
     response_model=BookResponse,
     summary="Get a book / 获取单本书籍",
 )
-def get_book(book_id: int, service: BookServiceDep) -> BookResponse:
-    book = service.get(book_id)
-    if book is None:
-        raise book_not_found()
+def get_book(book: OwnedBookDep) -> BookResponse:
     return BookResponse.model_validate(book)
 
 
@@ -141,6 +289,7 @@ def update_book(
     book_id: int,
     data: BookUpdate,
     service: BookServiceDep,
+    _: OwnedBookDep,
 ) -> BookResponse:
     try:
         book = service.update(book_id, data)
@@ -173,7 +322,11 @@ def update_book(
     response_model=BookResponse,
     summary="Delete all book drafts / 删除书籍全部草稿",
 )
-def delete_book_drafts(book_id: int, service: BookServiceDep) -> BookResponse:
+def delete_book_drafts(
+    book_id: int,
+    service: BookServiceDep,
+    _: OwnedBookDep,
+) -> BookResponse:
     book = service.delete_drafts(book_id)
     if book is None:
         raise book_not_found()
@@ -185,7 +338,11 @@ def delete_book_drafts(book_id: int, service: BookServiceDep) -> BookResponse:
     response_model=BookResponse,
     summary="Delete all book articles / 删除书籍全部文章",
 )
-def delete_book_articles(book_id: int, service: BookServiceDep) -> BookResponse:
+def delete_book_articles(
+    book_id: int,
+    service: BookServiceDep,
+    _: OwnedBookDep,
+) -> BookResponse:
     book = service.delete_articles(book_id)
     if book is None:
         raise book_not_found()
@@ -197,7 +354,11 @@ def delete_book_articles(book_id: int, service: BookServiceDep) -> BookResponse:
     response_model=BookResponse,
     summary="Delete all book authors / 删除书籍全部作者",
 )
-def delete_book_authors(book_id: int, service: BookServiceDep) -> BookResponse:
+def delete_book_authors(
+    book_id: int,
+    service: BookServiceDep,
+    _: OwnedBookDep,
+) -> BookResponse:
     book = service.delete_authors(book_id)
     if book is None:
         raise book_not_found()
@@ -209,7 +370,11 @@ def delete_book_authors(book_id: int, service: BookServiceDep) -> BookResponse:
     response_model=BookResponse,
     summary="Regenerate invitation code / 重新生成邀请码",
 )
-def regenerate_invite_code(book_id: int, service: BookServiceDep) -> BookResponse:
+def regenerate_invite_code(
+    book_id: int,
+    service: BookServiceDep,
+    _: OwnedBookDep,
+) -> BookResponse:
     book = service.regenerate_invite_code(book_id)
     if book is None:
         raise book_not_found()
@@ -221,7 +386,11 @@ def regenerate_invite_code(book_id: int, service: BookServiceDep) -> BookRespons
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a book / 删除书籍",
 )
-def delete_book(book_id: int, service: BookServiceDep) -> Response:
+def delete_book(
+    book_id: int,
+    service: BookServiceDep,
+    _: OwnedBookDep,
+) -> Response:
     if not service.delete(book_id):
         raise book_not_found()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

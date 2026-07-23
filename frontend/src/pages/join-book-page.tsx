@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Language } from "@/lib/i18n";
 import { ApiError } from "@/repositories/apiClient";
+import { authorSessionRepository } from "@/repositories/authRepository";
 import type { Book, NumberMode } from "@/repositories/bookRepository";
 import { joinRepository } from "@/repositories/joinRepository";
 
@@ -208,6 +209,14 @@ export function JoinBookPage({
       return;
     }
 
+    const existingSession = book
+      ? authorSessionRepository.getByBookAndName(book.id, authorName)
+      : null;
+    if (existingSession) {
+      onNavigate(`/author/${existingSession.authorId}/editor`);
+      return;
+    }
+
     setIsJoining(true);
     setJoinError(false);
     try {
@@ -216,7 +225,13 @@ export function JoinBookPage({
         const query = new URLSearchParams({ name: authorName });
         if (classValue.trim()) query.set("classValue", classValue.trim());
         onNavigate(`/join/${encodeURIComponent(normalizedCode)}/select?${query}`);
-      } else if (response.author_id) {
+      } else if (response.author_id && response.author_token && book) {
+        authorSessionRepository.save({
+          authorId: response.author_id,
+          bookId: book.id,
+          name: authorName,
+          token: response.author_token,
+        });
         onNavigate(`/author/${response.author_id}/editor`);
       }
     } catch (requestError) {

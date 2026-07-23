@@ -43,13 +43,89 @@ def init_db() -> None:
     import app.models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _upgrade_auth_security()
     _upgrade_scaffold_book_table()
+    _upgrade_book_ownership()
+    _upgrade_invitation_lifecycle()
     _repair_legacy_layout_sections()
     _normalize_layout_section_options()
     _upgrade_author_identity_model()
     _upgrade_author_class_field()
     _upgrade_article_content_fields()
     _ensure_article_number_uniqueness()
+
+
+def _upgrade_auth_security() -> None:
+    """Add revocable-session and verification-attempt fields to SQLite safely."""
+    if not settings.database_url.startswith("sqlite"):
+        return
+
+    with engine.begin() as connection:
+        refresh_columns = {
+            column["name"] for column in inspect(engine).get_columns("refresh_tokens")
+        }
+        if "session_id" not in refresh_columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE refresh_tokens ADD COLUMN session_id VARCHAR(64)"
+            )
+            connection.exec_driver_sql(
+                "UPDATE refresh_tokens SET session_id = lower(hex(randomblob(16))) "
+                "WHERE session_id IS NULL"
+            )
+        connection.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_refresh_tokens_session_id "
+            "ON refresh_tokens (session_id)"
+        )
+
+        verification_columns = {
+            column["name"]
+            for column in inspect(engine).get_columns("email_verification_codes")
+        }
+        if "failed_attempts" not in verification_columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE email_verification_codes ADD COLUMN failed_attempts "
+                "INTEGER NOT NULL DEFAULT 0"
+            )
+        if "locked_at" not in verification_columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE email_verification_codes ADD COLUMN locked_at DATETIME"
+            )
+
+
+def _upgrade_invitation_lifecycle() -> None:
+    """Backfill one persistent invitation for every legacy book."""
+    if not settings.database_url.startswith("sqlite"):
+        return
+    if "invitations" not in inspect(engine).get_table_names():
+        return
+
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            """
+            INSERT INTO invitations (
+                book_id, code, created_by, expires_at, max_uses,
+                used_count, status, created_at
+            )
+            SELECT
+                books.id,
+                books.invite_code,
+                books.owner_id,
+                NULL,
+                NULL,
+                0,
+                CASE WHEN books.invite_enabled THEN 'active' ELSE 'disabled' END,
+                COALESCE(books.created_at, CURRENT_TIMESTAMP)
+            FROM books
+            WHERE books.owner_id IS NOT NULL
+              AND books.invite_code IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM invitations
+                  WHERE invitations.book_id = books.id
+                    AND invitations.code = books.invite_code
+              )
+            """
+        )
 
 
 def _upgrade_scaffold_book_table() -> None:
@@ -206,6 +282,47 @@ def _upgrade_scaffold_book_table() -> None:
                 "ALTER TABLE books ADD COLUMN layout_article_page_mode VARCHAR(20) "
                 "NOT NULL DEFAULT 'single'"
             )
+
+
+def _upgrade_book_ownership() -> None:
+    """Attach every book to an account without guessing across multiple users."""
+    if not settings.database_url.startswith("sqlite"):
+        return
+
+    columns = {column["name"] for column in inspect(engine).get_columns("books")}
+    with engine.begin() as connection:
+        if "owner_id" not in columns:
+            connection.exec_driver_sql("ALTER TABLE books ADD COLUMN owner_id INTEGER")
+        connection.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_books_owner_id ON books (owner_id)"
+        )
+
+        users = connection.exec_driver_sql("SELECT id, username FROM users").fetchall()
+        if not users:
+            return
+        users_by_name: dict[str, list[int]] = {}
+        for user_id, username in users:
+            normalized_username = str(username).strip().casefold()
+            users_by_name.setdefault(normalized_username, []).append(user_id)
+
+        legacy_books = connection.exec_driver_sql(
+            "SELECT id, owner_name FROM books WHERE owner_id IS NULL"
+        ).fetchall()
+        fallback_owner_id = users[0][0] if len(users) == 1 else None
+        for book_id, owner_name in legacy_books:
+            matching_owner_ids = users_by_name.get(
+                str(owner_name).strip().casefold(), []
+            )
+            owner_id = (
+                matching_owner_ids[0]
+                if len(matching_owner_ids) == 1
+                else fallback_owner_id
+            )
+            if owner_id is not None:
+                connection.exec_driver_sql(
+                    "UPDATE books SET owner_id = ? WHERE id = ?",
+                    (owner_id, book_id),
+                )
 
 
 def _repair_legacy_layout_sections() -> None:

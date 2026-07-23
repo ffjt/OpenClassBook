@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 
-from app.api.dependencies import JoinServiceDep
+from app.api.dependencies import AuthServiceDep, JoinServiceDep
+from app.core.rate_limit import enforce_rate_limit
 from app.schemas.book import BookResponse
 from app.schemas.invitation import JoinBookResponse, JoinCreate, JoinResponse
 from app.services.join import JoinUnavailableError
@@ -28,6 +29,15 @@ def join_unavailable(error: JoinUnavailableError) -> HTTPException:
                 "message_zh": "当前书籍暂不接受新的作者加入。",
             },
         )
+    if error.code in {"invitation_expired", "invitation_max_uses_reached"}:
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": error.code,
+                "message": "Invitation not found or expired.",
+                "message_zh": "邀请已失效或不存在。",
+            },
+        )
     return HTTPException(
         status_code=status.HTTP_409_CONFLICT,
         detail={
@@ -43,7 +53,12 @@ def join_unavailable(error: JoinUnavailableError) -> HTTPException:
     response_model=JoinBookResponse,
     summary="Read an invitation / 读取邀请信息",
 )
-def get_join(invite_code: str, service: JoinServiceDep) -> JoinBookResponse:
+def get_join(
+    invite_code: str,
+    request: Request,
+    service: JoinServiceDep,
+) -> JoinBookResponse:
+    enforce_rate_limit(request, "invite-read", maximum=10, window_seconds=900)
     try:
         book = service.get_book(invite_code)
     except JoinUnavailableError as error:
@@ -60,9 +75,12 @@ def get_join(invite_code: str, service: JoinServiceDep) -> JoinBookResponse:
 )
 def join_book(
     invite_code: str,
+    request: Request,
     data: JoinCreate,
     service: JoinServiceDep,
+    auth_service: AuthServiceDep,
 ) -> JoinResponse:
+    enforce_rate_limit(request, "invite-join", maximum=5, window_seconds=900)
     try:
         result = service.join(invite_code, data)
     except JoinUnavailableError as error:
@@ -79,4 +97,8 @@ def join_book(
     if result is None:
         raise invitation_not_found()
     mode, author = result
-    return JoinResponse(mode=mode, author_id=author.id if author else None)
+    return JoinResponse(
+        mode=mode,
+        author_id=author.id if author else None,
+        author_token=auth_service.create_author_token(author) if author else None,
+    )

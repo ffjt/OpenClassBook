@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -88,6 +88,7 @@ class AuthRepository:
         self,
         *,
         user_id: int,
+        session_id: str,
         token_hash: str,
         expires_at: datetime,
         created_at: datetime,
@@ -95,6 +96,7 @@ class AuthRepository:
         self.session.add(
             RefreshToken(
                 user_id=user_id,
+                session_id=session_id,
                 token_hash=token_hash,
                 expires_at=expires_at,
                 created_at=created_at,
@@ -110,3 +112,57 @@ class AuthRepository:
     def revoke_refresh_token(self, token: RefreshToken, now: datetime) -> None:
         token.revoked_at = now
         self.session.commit()
+
+    def revoke_refresh_token_if_active(
+        self,
+        *,
+        token_hash: str,
+        user_id: int,
+        session_id: str,
+        now: datetime,
+    ) -> bool:
+        statement = (
+            update(RefreshToken)
+            .where(
+                RefreshToken.token_hash == token_hash,
+                RefreshToken.user_id == user_id,
+                RefreshToken.session_id == session_id,
+                RefreshToken.revoked_at.is_(None),
+                RefreshToken.expires_at >= now,
+            )
+            .values(revoked_at=now)
+        )
+        result = self.session.execute(
+            statement.execution_options(synchronize_session=False)
+        )
+        self.session.commit()
+        return bool(result.rowcount)
+
+    def has_active_session(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        now: datetime,
+    ) -> bool:
+        statement = select(RefreshToken.id).where(
+            RefreshToken.user_id == user_id,
+            RefreshToken.session_id == session_id,
+            RefreshToken.revoked_at.is_(None),
+            RefreshToken.expires_at >= now,
+        )
+        return self.session.scalar(statement) is not None
+
+    def record_verification_failure(
+        self,
+        verification: EmailVerificationCode,
+        now: datetime,
+        *,
+        maximum_attempts: int,
+    ) -> bool:
+        verification.failed_attempts += 1
+        locked = verification.failed_attempts >= maximum_attempts
+        if locked:
+            verification.locked_at = now
+        self.session.commit()
+        return locked

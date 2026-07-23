@@ -1,4 +1,8 @@
-import { ApiError, apiBaseUrl, apiRequest } from "@/repositories/apiClient";
+import { ApiError, apiBaseUrl } from "@/repositories/apiClient";
+import {
+  authenticatedApiRequest,
+  authenticatedFetch,
+} from "@/repositories/authRepository";
 
 export interface ExportTemplateInfo {
   font: string;
@@ -98,14 +102,14 @@ export const exportRepository = {
     options: { preflight?: boolean; signal?: AbortSignal } = {},
   ) {
     const preflight = options.preflight ?? true;
-    return apiRequest<ExportPreview>(
+    return authenticatedApiRequest<ExportPreview>(
       `/books/${bookId}/export?preflight=${preflight}`,
       { signal: options.signal },
     );
   },
 
   generate(bookId: number) {
-    return apiRequest<ExportResult>(`/books/${bookId}/export`, {
+    return authenticatedApiRequest<ExportResult>(`/books/${bookId}/export`, {
       method: "POST",
     });
   },
@@ -123,18 +127,31 @@ export const exportRepository = {
     options: { inline?: boolean; signal?: AbortSignal } = {},
   ) {
     const url = this.fileUrl(downloadUrl, { inline: options.inline });
-    const response = await fetch(url, {
+    const response = await authenticatedFetch(url, {
       cache: "no-store",
       method: "HEAD",
       signal: options.signal,
     });
-    if (!response.ok) {
-      throw new ApiError(`PDF is unavailable (${response.status})`, response.status);
-    }
     const contentType = response.headers.get("content-type");
     if (contentType && !contentType.toLowerCase().includes("application/pdf")) {
       throw new ApiError("Export response is not a PDF", 502);
     }
     return url;
+  },
+
+  async getFileObjectUrl(
+    downloadUrl: string,
+    options: { inline?: boolean; signal?: AbortSignal } = {},
+  ) {
+    const url = this.fileUrl(downloadUrl, { inline: options.inline });
+    const response = await authenticatedFetch(url, {
+      cache: "no-store",
+      signal: options.signal,
+    });
+    const contentType = response.headers.get("content-type");
+    if (contentType && !contentType.toLowerCase().includes("application/pdf")) {
+      throw new ApiError("Export response is not a PDF", 502);
+    }
+    return URL.createObjectURL(await response.blob());
   },
 };

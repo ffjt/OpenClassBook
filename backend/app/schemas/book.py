@@ -31,7 +31,10 @@ NumberPrefix = Annotated[
     str,
     StringConstraints(strip_whitespace=True, max_length=20),
 ]
-InviteCode = Annotated[str, StringConstraints(pattern=r"^OCB-[A-Z0-9]{6}$")]
+InviteCode = Annotated[
+    str,
+    StringConstraints(pattern=r"^OCB-[A-Z2-9]{26}$|^OCB-[A-Z0-9]{6}$"),
+]
 NumberMode = Literal["none", "automatic", "existing"]
 ArticlePageMode = Literal["single", "flow"]
 ClassCollectionMode = Literal["none", "fixed", "template"]
@@ -486,6 +489,7 @@ class BookResponse(BookBase):
 class BookCreateData(BookCreate):
     """Service-enriched data passed from the service to the repository."""
 
+    owner_id: int
     invite_code: InviteCode
     created_at: datetime
     updated_at: datetime

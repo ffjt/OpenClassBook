@@ -50,7 +50,9 @@ export function submissionRulesToUpdate(rules: SubmissionRules): BookUpdateInput
   };
 }
 
-export function isSubmissionDeadlinePassed(book: Book) {
+export function isSubmissionDeadlinePassed(
+  book: Pick<Book, "submission_deadline">,
+) {
   return Boolean(
     book.submission_deadline && Date.now() > Date.parse(book.submission_deadline),
   );

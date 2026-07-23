@@ -4,9 +4,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1.router import api_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.router import api_router
 from app.core.config import settings
+from app.core.rate_limit import rate_limiter
 from app.db.database import init_db
 from app.schemas.common import HealthResponse, MessageResponse
 
@@ -14,6 +15,7 @@ from app.schemas.common import HealthResponse, MessageResponse
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_db()
+    rate_limiter.reset()
     settings.storage_dir.mkdir(parents=True, exist_ok=True)
     yield
 
@@ -23,6 +25,10 @@ app = FastAPI(
     description=settings.app_description,
     version=settings.app_version,
     lifespan=lifespan,
+    debug=settings.debug,
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
 )
 app.add_middleware(
     CORSMiddleware,

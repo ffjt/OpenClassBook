@@ -1,7 +1,15 @@
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from app.api.dependencies import AuthorServiceDep, JoinServiceDep
+from app.api.dependencies import (
+    AuthorizedAuthorDep,
+    AuthorServiceDep,
+    CurrentActorDep,
+    JoinServiceDep,
+    OwnedAuthorDep,
+    OwnedBookDep,
+)
 from app.schemas.author import (
+    AuthorBookResponse,
     AuthorCreate,
     AuthorDetailResponse,
     AuthorResponse,
@@ -10,6 +18,7 @@ from app.schemas.author import (
     LatestArticlePreview,
 )
 from app.schemas.book import BookResponse
+from app.services.auth import AuthorPrincipal
 
 router = APIRouter(tags=["Authors / 作者"])
 
@@ -36,10 +45,9 @@ def book_not_found() -> HTTPException:
 def search_authors(
     book_id: int,
     service: AuthorServiceDep,
+    _: OwnedBookDep,
     name: str = Query(min_length=1, max_length=120),
 ) -> list[AuthorSummaryResponse]:
-    if not service.book_exists(book_id):
-        raise book_not_found()
     if not name.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -60,10 +68,10 @@ def search_authors(
     summary="List book authors / 获取书籍作者列表",
 )
 def list_authors(
-    book_id: int, service: AuthorServiceDep
+    book_id: int,
+    service: AuthorServiceDep,
+    _: OwnedBookDep,
 ) -> list[AuthorSummaryResponse]:
-    if not service.book_exists(book_id):
-        raise book_not_found()
     return [_author_summary(*result) for result in service.list_by_book(book_id)]
 
 
@@ -94,9 +102,8 @@ def create_author(
     book_id: int,
     data: AuthorCreate,
     service: AuthorServiceDep,
+    _: OwnedBookDep,
 ) -> AuthorResponse:
-    if not service.book_exists(book_id):
-        raise book_not_found()
     try:
         author = service.create(book_id, data)
     except ValueError as error:
@@ -119,14 +126,22 @@ def create_author(
 def get_author(
     author_id: int,
     service: JoinServiceDep,
+    actor: CurrentActorDep,
+    _: AuthorizedAuthorDep,
 ) -> AuthorDetailResponse:
     result = service.get_author(author_id)
     if result is None:
         raise author_not_found()
-    author, book = result
+    author, book, author_count = result
     return AuthorDetailResponse(
         **AuthorResponse.model_validate(author).model_dump(),
-        book=BookResponse.model_validate(book),
+        book=(
+            AuthorBookResponse.model_validate(book).model_copy(
+                update={"author_count": author_count}
+            )
+            if isinstance(actor, AuthorPrincipal)
+            else BookResponse.model_validate(book)
+        ),
     )
 
 
@@ -139,6 +154,7 @@ def update_author(
     author_id: int,
     data: AuthorUpdate,
     service: AuthorServiceDep,
+    _: OwnedAuthorDep,
 ) -> AuthorResponse:
     try:
         author = service.update(author_id, data)
@@ -161,7 +177,11 @@ def update_author(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete an author / 删除作者",
 )
-def delete_author(author_id: int, service: AuthorServiceDep) -> Response:
+def delete_author(
+    author_id: int,
+    service: AuthorServiceDep,
+    _: OwnedAuthorDep,
+) -> Response:
     if not service.delete(author_id):
         raise author_not_found()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

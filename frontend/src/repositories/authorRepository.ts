@@ -1,5 +1,8 @@
-import { apiRequest } from "@/repositories/apiClient";
-import type { Book } from "@/repositories/bookRepository";
+import {
+  authorApiRequest,
+  authenticatedApiRequest,
+} from "@/repositories/authRepository";
+import type { NumberMode } from "@/repositories/bookRepository";
 
 export interface Author {
   id: number;
@@ -11,7 +14,27 @@ export interface Author {
 }
 
 export interface AuthorDetail extends Author {
-  book: Book;
+  book: AuthorBook;
+}
+
+export interface AuthorBook {
+  id: number;
+  title: string;
+  description: string | null;
+  owner_name: string;
+  author_count: number;
+  submission_enabled: boolean;
+  submission_deadline: string | null;
+  allow_multiple_articles: boolean;
+  limit_articles_per_author: boolean;
+  max_articles_per_author: number;
+  allow_edit_after_submit: boolean;
+  allow_delete_article: boolean;
+  number_mode: NumberMode;
+  claim_number_start: number;
+  claim_number_end: number;
+  number_prefix: string;
+  number_digits: number;
 }
 
 export interface AuthorCreateInput {
@@ -35,12 +58,12 @@ export type AuthorUpdateInput = Partial<AuthorCreateInput>;
 
 export const authorRepository = {
   list(bookId: number) {
-    return apiRequest<AuthorSummary[]>(`/books/${bookId}/authors`);
+    return authenticatedApiRequest<AuthorSummary[]>(`/books/${bookId}/authors`);
   },
 
   search(bookId: number, name: string) {
     const query = new URLSearchParams({ name });
-    return apiRequest<AuthorSummary[]>(`/books/${bookId}/authors/search?${query}`);
+    return authenticatedApiRequest<AuthorSummary[]>(`/books/${bookId}/authors/search?${query}`);
   },
 
   listByBook(bookId: number) {
@@ -48,24 +71,24 @@ export const authorRepository = {
   },
 
   get(id: number) {
-    return apiRequest<AuthorDetail>(`/authors/${id}`);
+    return authorApiRequest<AuthorDetail>(`/authors/${id}`, id);
   },
 
   create(bookId: number, data: AuthorCreateInput) {
-    return apiRequest<Author>(`/books/${bookId}/authors`, {
+    return authenticatedApiRequest<Author>(`/books/${bookId}/authors`, {
       body: JSON.stringify(data),
       method: "POST",
     });
   },
 
   update(id: number, data: AuthorUpdateInput) {
-    return apiRequest<Author>(`/authors/${id}`, {
+    return authenticatedApiRequest<Author>(`/authors/${id}`, {
       body: JSON.stringify(data),
       method: "PATCH",
     });
   },
 
   delete(id: number) {
-    return apiRequest<void>(`/authors/${id}`, { method: "DELETE" });
+    return authenticatedApiRequest<void>(`/authors/${id}`, { method: "DELETE" });
   },
 };

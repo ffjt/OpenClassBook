@@ -1,6 +1,14 @@
 from fastapi import APIRouter, HTTPException, Response, status
 
-from app.api.dependencies import ArticleServiceDep
+from app.api.dependencies import (
+    ArticleServiceDep,
+    AuthorizedArticleDep,
+    AuthorizedAuthorDep,
+    AuthorizedBookDep,
+    CurrentActorDep,
+    OwnedArticleDep,
+    OwnedBookDep,
+)
 from app.schemas.article import (
     ArticleCreate,
     ArticleEditRequestDecision,
@@ -10,6 +18,7 @@ from app.schemas.article import (
     ArticleStatusUpdate,
     ArticleUpdate,
 )
+from app.services.auth import AuthorPrincipal
 
 router = APIRouter(tags=["Articles / 文章"])
 
@@ -46,12 +55,8 @@ def author_not_in_book() -> HTTPException:
 def list_author_articles(
     author_id: int,
     service: ArticleServiceDep,
+    _: AuthorizedAuthorDep,
 ) -> list[ArticleResponse]:
-    if not service.author_exists(author_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"message": "Author not found", "message_zh": "未找到作者"},
-        )
     return [
         ArticleResponse.model_validate(article)
         for article in service.list_by_author(author_id)
@@ -66,10 +71,9 @@ def list_author_articles(
 def list_articles(
     book_id: int,
     service: ArticleServiceDep,
+    _: OwnedBookDep,
     include_drafts: bool = True,
 ) -> list[ArticleResponse]:
-    if not service.book_exists(book_id):
-        raise book_not_found()
     return [
         ArticleResponse.model_validate(article)
         for article in service.list_by_book(
@@ -88,6 +92,7 @@ def assign_article_numbers(
     book_id: int,
     data: ArticleNumberAssignment,
     service: ArticleServiceDep,
+    _: OwnedBookDep,
 ) -> list[ArticleResponse]:
     try:
         articles = service.assign_numbers(book_id, data)
@@ -123,6 +128,7 @@ def arrange_articles(
     book_id: int,
     data: ArticleOrderAssignment,
     service: ArticleServiceDep,
+    _: OwnedBookDep,
 ) -> list[ArticleResponse]:
     try:
         articles = service.arrange_layout(book_id, data)
@@ -149,9 +155,14 @@ def create_article(
     book_id: int,
     data: ArticleCreate,
     service: ArticleServiceDep,
+    actor: CurrentActorDep,
+    _: AuthorizedBookDep,
 ) -> ArticleResponse:
-    if not service.book_exists(book_id):
-        raise book_not_found()
+    if isinstance(actor, AuthorPrincipal) and actor.author_id != data.author_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"message": "Author not found", "message_zh": "未找到作者"},
+        )
     if not service.author_belongs_to_book(data.author_id, book_id):
         raise author_not_in_book()
     try:
@@ -209,10 +220,7 @@ def create_article(
     response_model=ArticleResponse,
     summary="Get an article / 获取文章",
 )
-def get_article(article_id: int, service: ArticleServiceDep) -> ArticleResponse:
-    article = service.get(article_id)
-    if article is None:
-        raise article_not_found()
+def get_article(article: AuthorizedArticleDep) -> ArticleResponse:
     return ArticleResponse.model_validate(article)
 
 
@@ -225,10 +233,18 @@ def update_article(
     article_id: int,
     data: ArticleUpdate,
     service: ArticleServiceDep,
+    actor: CurrentActorDep,
+    current: AuthorizedArticleDep,
 ) -> ArticleResponse:
-    current = service.get(article_id)
-    if current is None:
-        raise article_not_found()
+    if (
+        isinstance(actor, AuthorPrincipal)
+        and data.author_id is not None
+        and data.author_id != current.author_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"message": "Article not found", "message_zh": "未找到文章"},
+        )
     if data.author_id is not None and not service.author_belongs_to_book(
         data.author_id,
         current.book_id,
@@ -306,7 +322,11 @@ def update_article(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete an article / 删除文章",
 )
-def delete_article(article_id: int, service: ArticleServiceDep) -> Response:
+def delete_article(
+    article_id: int,
+    service: ArticleServiceDep,
+    _: AuthorizedArticleDep,
+) -> Response:
     if not service.delete(article_id):
         raise article_not_found()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -321,6 +341,7 @@ def update_article_status(
     article_id: int,
     data: ArticleStatusUpdate,
     service: ArticleServiceDep,
+    _: OwnedArticleDep,
 ) -> ArticleResponse:
     article = service.update_status(article_id, data)
     if article is None:
@@ -336,6 +357,7 @@ def update_article_status(
 def request_article_edit(
     article_id: int,
     service: ArticleServiceDep,
+    _: AuthorizedArticleDep,
 ) -> ArticleResponse:
     try:
         article = service.request_edit(article_id)
@@ -374,6 +396,7 @@ def resolve_article_edit_request(
     article_id: int,
     data: ArticleEditRequestDecision,
     service: ArticleServiceDep,
+    _: OwnedArticleDep,
 ) -> ArticleResponse:
     try:
         article = service.resolve_edit_request(article_id, data)

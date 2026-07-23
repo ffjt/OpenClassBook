@@ -235,6 +235,13 @@ export function ExportPage({
   const currentBookIdRef = useRef(bookId);
   currentBookIdRef.current = bookId;
 
+  useEffect(
+    () => () => {
+      if (renderedPreview?.url) URL.revokeObjectURL(renderedPreview.url);
+    },
+    [renderedPreview?.url],
+  );
+
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
@@ -318,10 +325,13 @@ export function ExportPage({
     try {
       const generated = renderedPreview ? await createExport() : result ?? await createExport();
       if (!generated) return;
-      const url = await exportRepository.ensureFileAvailable(generated.download_url, {
+      const url = await exportRepository.getFileObjectUrl(generated.download_url, {
         inline: true,
       });
-      if (previewRequestIdRef.current !== requestId) return;
+      if (previewRequestIdRef.current !== requestId) {
+        URL.revokeObjectURL(url);
+        return;
+      }
       setRenderedPreview({
         requestId,
         url,
@@ -375,12 +385,13 @@ export function ExportPage({
     if (!result) return;
     setIsDownloading(true);
     try {
-      const url = await exportRepository.ensureFileAvailable(result.download_url);
+      const url = await exportRepository.getFileObjectUrl(result.download_url);
       const anchor = document.createElement("a");
       anchor.href = url;
       document.body.append(anchor);
       anchor.click();
       anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
     } catch (error) {
       setGenerationError(
         localizedApiError(error, language) || copy[language].downloadFailed,

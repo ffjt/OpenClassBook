@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import jwt
@@ -7,6 +8,7 @@ from jwt import InvalidTokenError
 from pwdlib import PasswordHash
 
 from app.core.config import Settings
+from app.models.author import Author
 from app.models.user import User
 from app.repositories.auth import AuthRepository, DuplicateEmailError
 from app.schemas.auth import LoginRequest, RegisterRequest
@@ -15,6 +17,12 @@ from app.services.verification import EmailVerificationService
 
 class AuthenticationError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class AuthorPrincipal:
+    author_id: int
+    author_uuid: str
 
 
 class AuthService:
@@ -65,45 +73,94 @@ class AuthService:
             or stored_token.revoked_at is not None
             or self._as_utc(stored_token.expires_at) < now
             or stored_token.user_id != int(claims["sub"])
+            or stored_token.session_id != str(claims["sid"])
         ):
             raise AuthenticationError("Refresh token is invalid.")
         user = self.repository.get_user(stored_token.user_id)
         if user is None:
             raise AuthenticationError("Refresh token is invalid.")
-        self.repository.revoke_refresh_token(stored_token, now)
+        if not self.repository.revoke_refresh_token_if_active(
+            token_hash=self._token_hash(refresh_token),
+            user_id=stored_token.user_id,
+            session_id=stored_token.session_id,
+            now=now,
+        ):
+            raise AuthenticationError("Refresh token is invalid.")
         return self._authentication_response(user)
 
     def logout(self, refresh_token: str) -> None:
-        self._decode_token(refresh_token, expected_type="refresh")
+        claims = self._decode_token(refresh_token, expected_type="refresh")
         stored_token = self.repository.get_refresh_token(
             self._token_hash(refresh_token)
         )
-        if stored_token is not None and stored_token.revoked_at is None:
-            self.repository.revoke_refresh_token(stored_token, datetime.now(UTC))
+        if (
+            stored_token is not None
+            and stored_token.user_id == int(claims["sub"])
+            and stored_token.session_id == str(claims["sid"])
+        ):
+            self.repository.revoke_refresh_token_if_active(
+                token_hash=self._token_hash(refresh_token),
+                user_id=stored_token.user_id,
+                session_id=stored_token.session_id,
+                now=datetime.now(UTC),
+            )
 
     def current_user(self, access_token: str) -> User:
         claims = self._decode_token(access_token, expected_type="access")
         user = self.repository.get_user(int(claims["sub"]))
-        if user is None:
+        if user is None or not self.repository.has_active_session(
+            user_id=user.id,
+            session_id=str(claims["sid"]),
+            now=datetime.now(UTC),
+        ):
             raise AuthenticationError("Authentication is invalid.")
         return user
 
+    def create_author_token(self, author: Author) -> str:
+        now = datetime.now(UTC)
+        return jwt.encode(
+            {
+                "sub": str(author.id),
+                "author_uuid": str(author.uuid),
+                "type": "author",
+                "jti": secrets.token_urlsafe(18),
+                "iat": now,
+                "exp": now + timedelta(days=self.config.auth_author_token_days),
+            },
+            self.config.auth_jwt_secret,
+            algorithm="HS256",
+        )
+
+    def current_author(self, author_token: str) -> AuthorPrincipal:
+        claims = self._decode_token(author_token, expected_type="author")
+        try:
+            return AuthorPrincipal(
+                author_id=int(claims["sub"]),
+                author_uuid=str(claims["author_uuid"]),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise AuthenticationError("Authentication token is invalid.") from error
+
     def _authentication_response(self, user: User) -> dict[str, object]:
         now = datetime.now(UTC)
+        session_id = secrets.token_urlsafe(24)
         access_token = self._create_token(
             user.id,
             "access",
             now,
             self.config.auth_access_token_minutes,
+            session_id=session_id,
         )
         refresh_token = self._create_token(
             user.id,
             "refresh",
             now,
             self.config.auth_refresh_token_days * 24 * 60,
+            session_id=session_id,
         )
         self.repository.create_refresh_token(
             user_id=user.id,
+            session_id=session_id,
             token_hash=self._token_hash(refresh_token),
             expires_at=now + timedelta(days=self.config.auth_refresh_token_days),
             created_at=now,
@@ -115,13 +172,20 @@ class AuthService:
         }
 
     def _create_token(
-        self, user_id: int, token_type: str, now: datetime, lifetime_minutes: int
+        self,
+        user_id: int,
+        token_type: str,
+        now: datetime,
+        lifetime_minutes: int,
+        *,
+        session_id: str,
     ) -> str:
         return jwt.encode(
             {
                 "sub": str(user_id),
                 "type": token_type,
                 "jti": secrets.token_urlsafe(18),
+                "sid": session_id,
                 "iat": now,
                 "exp": now + timedelta(minutes=lifetime_minutes),
             },
@@ -135,7 +199,13 @@ class AuthService:
                 token,
                 self.config.auth_jwt_secret,
                 algorithms=["HS256"],
-                options={"require": ["sub", "type", "jti", "exp"]},
+                options={
+                    "require": (
+                        ["sub", "type", "jti", "author_uuid", "exp"]
+                        if expected_type == "author"
+                        else ["sub", "type", "jti", "sid", "exp"]
+                    )
+                },
             )
         except InvalidTokenError as error:
             raise AuthenticationError("Authentication token is invalid.") from error

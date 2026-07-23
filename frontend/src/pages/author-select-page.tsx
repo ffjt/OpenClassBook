@@ -14,11 +14,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/i18n";
-import {
-  authorRepository,
-  type AuthorSummary,
-} from "@/repositories/authorRepository";
-import { joinRepository } from "@/repositories/joinRepository";
+import type { AuthorSummary } from "@/repositories/authorRepository";
 
 interface AuthorSelectPageProps {
   inviteCode: string;
@@ -92,14 +88,12 @@ function formatDate(value: string, language: Language) {
 export function AuthorSelectPage({
   inviteCode,
   name,
-  classValue,
   language,
   onNavigate,
   onToggleLanguage,
 }: AuthorSelectPageProps) {
   const pageCopy = copy[language];
   const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [bookId, setBookId] = useState<number>();
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -111,38 +105,24 @@ export function AuthorSelectPage({
     setIsLoading(true);
     setHasError(false);
 
-    async function loadCandidates() {
-      try {
-        const invitation = await joinRepository.get(inviteCode);
-        const authors = await authorRepository.search(invitation.book.id, name);
-        if (!active) return;
-        setBookId(invitation.book.id);
-        setCandidates(authors.map((author) => ({ author })));
-      } catch {
-        if (active) setHasError(true);
-      } finally {
-        if (active) setIsLoading(false);
-      }
+    // A name is not proof of identity. Existing author profiles can only be
+    // resumed from the browser session that received their author token.
+    if (active) {
+      setCandidates([]);
+      setHasError(true);
+      setIsLoading(false);
     }
-
-    void loadCandidates();
     return () => {
       active = false;
     };
   }, [inviteCode, name, reloadKey]);
 
   const createIdentity = async () => {
-    if (!bookId || isCreating) return;
+    if (isCreating) return;
     setIsCreating(true);
     setCreateError(false);
-    try {
-      const author = await authorRepository.create(bookId, { name, class_value: classValue });
-      onNavigate(`/author/${author.id}/editor`);
-    } catch {
-      setCreateError(true);
-    } finally {
-      setIsCreating(false);
-    }
+    setCreateError(true);
+    setIsCreating(false);
   };
 
   return (
@@ -161,7 +141,7 @@ export function AuthorSelectPage({
 
         {isLoading ? (
           <div aria-label={pageCopy.loading} className="mt-14 flex justify-center" role="status"><LoaderCircle className="size-7 animate-spin text-blue-500" /></div>
-        ) : hasError || !bookId || candidates.length === 0 ? (
+        ) : hasError || candidates.length === 0 ? (
           <div className="mx-auto mt-14 flex max-w-lg flex-col items-center rounded-2xl border border-border bg-card p-10 text-center">
             <AlertCircle className="size-7 text-rose-400" /><p className="mt-4 text-sm text-muted-foreground">{pageCopy.error}</p><Button className="mt-5" onClick={() => setReloadKey((value) => value + 1)}><RefreshCw className="mr-2 size-4" />{pageCopy.retry}</Button>
           </div>

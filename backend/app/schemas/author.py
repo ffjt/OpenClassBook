@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from app.schemas.article import ArticleStatus
-from app.schemas.book import BookResponse
+from app.schemas.book import BookResponse, NumberMode
 
 AuthorName = Annotated[
     str,
@@ -46,8 +46,32 @@ class AuthorResponse(AuthorBase):
     updated_at: datetime
 
 
+class AuthorBookResponse(BaseModel):
+    """Book settings an author needs to submit, without owner-only data."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    description: str | None = None
+    owner_name: str
+    author_count: int = Field(ge=0, description="Author count / 作者数量")
+    submission_enabled: bool
+    submission_deadline: datetime | None
+    allow_multiple_articles: bool
+    limit_articles_per_author: bool
+    max_articles_per_author: int
+    allow_edit_after_submit: bool
+    allow_delete_article: bool
+    number_mode: NumberMode
+    claim_number_start: int
+    claim_number_end: int
+    number_prefix: str
+    number_digits: int
+
+
 class AuthorDetailResponse(AuthorResponse):
-    book: BookResponse
+    book: BookResponse | AuthorBookResponse
 
 
 class LatestArticlePreview(BaseModel):

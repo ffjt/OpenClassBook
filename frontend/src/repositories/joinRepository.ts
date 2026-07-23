@@ -1,14 +1,16 @@
 import type { AuthorDetail } from "@/repositories/authorRepository";
 import type { Book } from "@/repositories/bookRepository";
+import { authorApiRequest } from "@/repositories/authRepository";
 import { apiRequest } from "@/repositories/apiClient";
 
 interface JoinBookResponse {
   book: Book;
 }
 
-interface JoinResponse {
+export interface JoinResponse {
   mode: "created" | "selection_required";
   author_id: number | null;
+  author_token: string | null;
 }
 
 export const joinRepository = {
@@ -24,6 +26,6 @@ export const joinRepository = {
   },
 
   getAuthor(authorId: number) {
-    return apiRequest<AuthorDetail>(`/authors/${authorId}`);
+    return authorApiRequest<AuthorDetail>(`/authors/${authorId}`, authorId);
   },
 };

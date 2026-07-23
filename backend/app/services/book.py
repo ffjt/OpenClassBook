@@ -1,9 +1,8 @@
-import secrets
-import string
 from datetime import UTC, datetime
 
 from app.models.book import Book
 from app.repositories.book import BookRepository
+from app.repositories.invitation import InvitationRepository
 from app.schemas.book import (
     BookCreate,
     BookCreateData,
@@ -12,29 +11,48 @@ from app.schemas.book import (
     validate_class_collection_configuration,
     validate_numbering_configuration,
 )
-
-INVITE_CODE_ALPHABET = string.ascii_uppercase + string.digits
+from app.schemas.invitation import InvitationCreate
+from app.services.invitation import InvitationService
 
 
 class BookService:
-    def __init__(self, repository: BookRepository) -> None:
+    def __init__(
+        self,
+        repository: BookRepository,
+        invitation_repository: InvitationRepository,
+    ) -> None:
         self.repository = repository
+        self.invitations = InvitationService(invitation_repository)
 
-    def create(self, data: BookCreate) -> Book:
+    def create(self, data: BookCreate, owner_id: int) -> Book:
         now = datetime.now(UTC)
+        invite_code = self.invitations.create_code()
         create_data = BookCreateData(
             **data.model_dump(),
-            invite_code=self._create_invite_code(),
+            owner_id=owner_id,
+            invite_code=invite_code,
             created_at=now,
             updated_at=now,
         )
-        return self.repository.create(create_data)
+        book = self.repository.create(create_data)
+        self.invitations.create(
+            book,
+            owner_id,
+            InvitationCreate(),
+            code=invite_code,
+        )
+        return book
 
     def get(self, book_id: int) -> Book | None:
         return self.repository.get(book_id)
 
-    def list(self, *, offset: int = 0, limit: int = 100) -> list[Book]:
-        return self.repository.list(offset=offset, limit=limit)
+    def get_for_owner(self, book_id: int, owner_id: int) -> Book | None:
+        return self.repository.get_by_owner(book_id, owner_id)
+
+    def list_for_owner(
+        self, owner_id: int, *, offset: int = 0, limit: int = 100
+    ) -> list[Book]:
+        return self.repository.list_by_owner(owner_id, offset=offset, limit=limit)
 
     def update(self, book_id: int, data: BookUpdate) -> Book | None:
         changes = data.model_dump(exclude_unset=True)
@@ -83,13 +101,11 @@ class BookService:
         return self.repository.delete(book_id)
 
     def regenerate_invite_code(self, book_id: int) -> Book | None:
-        if self.repository.get(book_id) is None:
+        book = self.repository.get(book_id)
+        if book is None:
             return None
-        return self.repository.regenerate_invite_code(
-            book_id,
-            self._create_invite_code(),
-            datetime.now(UTC),
-        )
+        self.invitations.regenerate_default(book)
+        return book
 
     def delete_drafts(self, book_id: int) -> Book | None:
         return self.repository.delete_drafts(book_id, datetime.now(UTC))
@@ -99,10 +115,3 @@ class BookService:
 
     def delete_authors(self, book_id: int) -> Book | None:
         return self.repository.delete_authors(book_id, datetime.now(UTC))
-
-    def _create_invite_code(self) -> str:
-        while True:
-            suffix = "".join(secrets.choice(INVITE_CODE_ALPHABET) for _ in range(6))
-            invite_code = f"OCB-{suffix}"
-            if self.repository.get_by_invite_code(invite_code) is None:
-                return invite_code

@@ -1,4 +1,9 @@
-import { ApiError, apiRequest } from "@/repositories/apiClient";
+import { ApiError } from "@/repositories/apiClient";
+import {
+  authorBookApiRequest,
+  authenticatedApiRequest,
+  authRepository,
+} from "@/repositories/authRepository";
 import { getTemplateCatalogEntry, isLegacyDefaultSpineTextColor } from "@/mock/template-catalog";
 import { defaultTemplate } from "@/mock/template";
 import {
@@ -333,7 +338,9 @@ export function deserializeTemplate(stored: BookTemplate): Template {
 export const templateRepository = {
   async getByBook(bookId: number) {
     try {
-      return await apiRequest<BookTemplate>(`/books/${bookId}/template`);
+      return await (authRepository.hasSession()
+        ? authenticatedApiRequest<BookTemplate>(`/books/${bookId}/template`)
+        : authorBookApiRequest<BookTemplate>(`/books/${bookId}/template`, bookId));
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null;
       throw error;
@@ -346,7 +353,7 @@ export const templateRepository = {
   },
 
   async save(bookId: number, template: Template) {
-    const stored = await apiRequest<BookTemplate>(`/books/${bookId}/template`, {
+    const stored = await authenticatedApiRequest<BookTemplate>(`/books/${bookId}/template`, {
       body: JSON.stringify({
         title_format: {
           font: template.titleFont,

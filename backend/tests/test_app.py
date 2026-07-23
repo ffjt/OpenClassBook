@@ -197,7 +197,7 @@ def test_book_crud_persists_to_sqlite(
     assert created["article_count"] == 0
     assert created["approved_article_count"] == 0
     assert created["claimed_number_count"] == 0
-    assert re.fullmatch(r"OCB-[A-Z0-9]{6}", created["invite_code"])
+    assert re.fullmatch(r"OCB-[A-Z2-9]{26}", created["invite_code"])
     assert created["created_at"]
     assert created["updated_at"]
 
@@ -326,7 +326,9 @@ def test_book_create_validation_returns_422(
     assert invalid_range.status_code == 422
 
 
-def test_book_numbering_mode_and_claim_range_stay_consistent(client: TestClient) -> None:
+def test_book_numbering_mode_and_claim_range_stay_consistent(
+    client: TestClient,
+) -> None:
     book = client.post(
         "/api/v1/books",
         json={
@@ -727,13 +729,13 @@ def test_book_layout_requires_one_fixed_main_content_section(
 
 def test_book_errors_use_correct_status_codes(client: TestClient) -> None:
     assert client.get("/api/v1/books/999").status_code == 404
-    assert client.patch("/api/v1/books/999", json={}).status_code == 400
+    assert client.patch("/api/v1/books/999", json={}).status_code == 404
     assert (
         client.patch(
             "/api/v1/books/999",
             json={"title": None},
         ).status_code
-        == 422
+        == 404
     )
     assert client.delete("/api/v1/books/999").status_code == 404
 
@@ -750,6 +752,7 @@ def test_dashboard_collections_are_read_from_sqlite(
     now = datetime.now(UTC)
     with test_session_factory() as session:
         book = Book(
+            owner_id=1,
             title="Database Book",
             description="Real dashboard data",
             owner_name="Taylor",
@@ -759,6 +762,7 @@ def test_dashboard_collections_are_read_from_sqlite(
             updated_at=now,
         )
         other_book = Book(
+            owner_id=1,
             title="Other Book",
             description=None,
             owner_name="Morgan",
@@ -848,6 +852,7 @@ def test_empty_dashboard_collections_return_empty_lists(
     now = datetime.now(UTC)
     with test_session_factory() as session:
         book = Book(
+            owner_id=1,
             title="Empty Book",
             description=None,
             owner_name="Casey",
@@ -1057,7 +1062,7 @@ def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) ->
             "title": "A real draft",
             "subtitle": "A persisted subtitle",
             "content": "Stored in SQLite",
-            "image": "https://example.com/image.jpg",
+            "image": "data:image/png;base64,aGVsbG8=",
             "image_settings": {
                 "page": 0,
                 "wrap": "square",
@@ -1074,7 +1079,7 @@ def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) ->
     assert created["status"] == "draft"
     assert created["subtitle"] == "A persisted subtitle"
     assert created["submitted_at"] is None
-    assert created["image"] == "https://example.com/image.jpg"
+    assert created["image"] == "data:image/png;base64,aGVsbG8="
     assert created["image_settings"]["wrap"] == "square"
     assert (
         client.get(
@@ -1178,7 +1183,7 @@ def test_article_crud_and_review_status_persist_to_sqlite(client: TestClient) ->
     assert author_summary["latest_article"] is None
 
 
-def test_join_requires_identity_confirmation_for_every_existing_name(
+def test_join_creates_an_independent_identity_for_reused_names(
     client: TestClient,
 ) -> None:
     book = client.post(
@@ -1194,14 +1199,17 @@ def test_join_requires_identity_confirmation_for_every_existing_name(
     first = client.post(join_path, json={"name": "张三"}).json()
     assert first["mode"] == "created"
     confirmation = client.post(join_path, json={"name": "张三"}).json()
-    assert confirmation == {"mode": "selection_required", "author_id": None}
+    assert confirmation["mode"] == "created"
+    assert confirmation["author_id"] != first["author_id"]
+    assert isinstance(confirmation["author_token"], str)
 
     duplicate = client.post(
         f"/api/v1/books/{book['id']}/authors",
         json={"name": "张三"},
     ).json()
     selection = client.post(join_path, json={"name": "张三"}).json()
-    assert selection == {"mode": "selection_required", "author_id": None}
+    assert selection["mode"] == "created"
+    assert isinstance(selection["author_token"], str)
 
     matches = client.get(
         f"/api/v1/books/{book['id']}/authors/search",
@@ -1209,7 +1217,9 @@ def test_join_requires_identity_confirmation_for_every_existing_name(
     ).json()
     assert {author["id"] for author in matches} == {
         first["author_id"],
+        confirmation["author_id"],
         duplicate["id"],
+        selection["author_id"],
     }
     assert all("uuid" not in author for author in matches)
 

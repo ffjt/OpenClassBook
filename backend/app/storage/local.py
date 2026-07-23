@@ -11,6 +11,10 @@ from PIL import Image as PillowImage
 from pypdf import PdfReader
 
 CHUNK_SIZE = 1024 * 1024
+MAX_IMAGE_PIXELS = 40_000_000
+MAX_DOCX_ENTRIES = 10_000
+MAX_DOCX_UNCOMPRESSED_SIZE = 200 * 1024 * 1024
+MAX_DOCX_COMPRESSION_RATIO = 100
 
 
 class FileTooLargeError(Exception):
@@ -117,13 +121,32 @@ def _content_matches_extension(path: Path, extension: str) -> bool:
             }[extension]
             with PillowImage.open(path) as image:
                 detected = image.format
+                width, height = image.size
+                if width * height > MAX_IMAGE_PIXELS:
+                    return False
                 image.verify()
             return detected == expected
         if extension != ".docx":
             return False
         try:
             with ZipFile(path) as archive:
-                names = set(archive.namelist())
+                entries = archive.infolist()
+                if len(entries) > MAX_DOCX_ENTRIES:
+                    return False
+                total_uncompressed = sum(entry.file_size for entry in entries)
+                if total_uncompressed > MAX_DOCX_UNCOMPRESSED_SIZE:
+                    return False
+                if any(
+                    (entry.file_size > 0 and entry.compress_size == 0)
+                    or (
+                        entry.compress_size > 0
+                        and entry.file_size / entry.compress_size
+                        > MAX_DOCX_COMPRESSION_RATIO
+                    )
+                    for entry in entries
+                ):
+                    return False
+                names = {entry.filename for entry in entries}
         except BadZipFile:
             return False
         if "[Content_Types].xml" not in names or "word/document.xml" not in names:
